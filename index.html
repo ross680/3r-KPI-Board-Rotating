@@ -1,0 +1,1129 @@
+<!DOCTYPE html>
+<!-- saved from url=(0052)file:///Users/rossh/Downloads/3r_dashboard_full.html -->
+<html lang="en"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3R Plumbing &amp; Mechanical — Dashboard</title>
+<link href="./index_files/css2" rel="stylesheet">
+<style>
+:root{
+  --black:#06080c;--cyan:#29b8d8;--cyan2:#4dcde8;
+  --gray:#4a5a6a;--green:#22c55e;--red:#ef4444;--gold:#f59e0b;
+  --bdr:rgba(41,184,216,0.18);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--black);font-family:'Barlow Condensed',sans-serif;}
+body::before{content:'';position:fixed;inset:0;z-index:0;pointer-events:none;opacity:0.065;
+  background-image:
+    radial-gradient(ellipse 22% 14% at 4% 9%,#182818 0%,transparent 100%),
+    radial-gradient(ellipse 16% 20% at 19% 37%,#0a140a 0%,transparent 100%),
+    radial-gradient(ellipse 28% 11% at 46% 17%,#1a2a1a 0%,transparent 100%),
+    radial-gradient(ellipse 18% 16% at 69% 44%,#0d180d 0%,transparent 100%),
+    radial-gradient(ellipse 20% 24% at 34% 69%,#182818 0%,transparent 100%),
+    radial-gradient(ellipse 26% 13% at 84% 27%,#0a140a 0%,transparent 100%);
+}
+
+/* SCREENS */
+.screen{position:fixed;inset:0;z-index:1;opacity:0;transition:opacity 0.8s ease;pointer-events:none;display:flex;flex-direction:column;}
+.screen.active{opacity:1;pointer-events:all;}
+
+/* SHARED HEADER */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:0 1.5vw;height:9.5vh;
+  background:linear-gradient(135deg,#0e1622 0%,#07090e 60%,#0e1622 100%);
+  border-bottom:1px solid var(--bdr);position:relative;flex-shrink:0;}
+.hdr::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,transparent,var(--cyan) 25%,var(--cyan2) 50%,var(--cyan) 75%,transparent);}
+.logo-text h1{font-size:2.4vh;font-weight:900;color:white;letter-spacing:2px;text-transform:uppercase;}
+.logo-text .sub{font-size:0.9vh;color:var(--cyan);letter-spacing:4px;text-transform:uppercase;opacity:0.85;}
+.hdr-center{display:flex;align-items:center;gap:2.4vw;}
+.hs .lbl{font-size:0.78vh;letter-spacing:3px;color:var(--cyan);text-transform:uppercase;opacity:0.72;}
+.hs .val{font-size:2.6vh;font-weight:900;color:white;line-height:1;}
+.hdr-right{text-align:right;flex-shrink:0;}
+.hdr-right .sname{font-size:0.78vh;letter-spacing:3px;color:var(--cyan);text-transform:uppercase;opacity:0.72;}
+.hdr-right .clock{font-size:2.2vh;font-weight:800;color:white;}
+.hdr-right .date{font-size:0.72vh;color:rgba(41,184,216,0.4);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+
+/* NAV DOTS */
+.nav-dots{position:fixed;bottom:1.5vh;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:100;}
+.dot{width:8px;height:8px;border-radius:50%;background:rgba(41,184,216,0.25);cursor:pointer;transition:all 0.3s;}
+.dot.active{background:var(--cyan);box-shadow:0 0 8px var(--cyan);width:20px;border-radius:4px;}
+.prog{position:fixed;bottom:0;left:0;height:3px;background:linear-gradient(90deg,var(--cyan),var(--cyan2));z-index:100;box-shadow:0 0 8px var(--cyan);}
+
+/* PANEL */
+.panel{background:linear-gradient(155deg,#0c1018 0%,#06080c 100%);border:1px solid var(--bdr);border-radius:4px;overflow:hidden;position:relative;display:flex;flex-direction:column;min-height:0;}
+.panel::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);}
+.ptitle{font-size:0.88vh;font-weight:700;letter-spacing:3px;text-transform:uppercase;color:var(--cyan);padding:0.75vh 0.9vw 0.6vh;border-bottom:1px solid rgba(41,184,216,0.1);background:rgba(0,0,0,0.28);flex-shrink:0;position:relative;z-index:1;}
+
+/* ══ SCREEN 1: KPI ══ */
+.kpi-body{display:grid;grid-template-columns:13vw 1fr 16.5vw;gap:0.65vw;flex:1;padding:0.5vh 0.85vw 2.5vh;overflow:hidden;}
+.glist{flex:1;display:flex;flex-direction:column;justify-content:space-between;padding:0.5vh 0.65vw;gap:0.32vh;overflow:hidden;position:relative;z-index:1;}
+.grow{display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,0.32);border:1px solid rgba(41,184,216,0.08);border-left:2px solid rgba(41,184,216,0.32);border-radius:3px;padding:0.42vh 0.65vw;gap:0.4vw;flex:1;min-height:0;}
+.gico{font-size:1.35vh;flex-shrink:0;}
+.gname{font-size:1.02vh;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;flex:1;}
+.gval{font-size:1.75vh;font-weight:900;color:var(--cyan2);white-space:nowrap;}
+.kgrid{flex:1;display:grid;grid-template-columns:repeat(4,1fr);grid-template-rows:repeat(3,1fr);gap:0.48vh 0.38vw;padding:0.52vh 0.55vw;position:relative;z-index:1;min-height:0;}
+.kc{background:rgba(0,0,0,0.36);border:1px solid rgba(41,184,216,0.09);border-radius:3px;padding:0.62vh 0.5vw 0.44vh;display:flex;flex-direction:column;justify-content:space-between;transition:border-color 0.4s,background 0.4s;min-height:0;}
+.kc.on-track{border-color:rgba(34,197,94,0.26);background:rgba(34,197,94,0.032);}
+.kc.warning{border-color:rgba(245,158,11,0.26);background:rgba(245,158,11,0.032);}
+.kc.behind{border-color:rgba(239,68,68,0.26);background:rgba(239,68,68,0.032);}
+.kctop{display:flex;align-items:flex-start;justify-content:space-between;}
+.kclbl{font-size:0.8vh;font-weight:700;color:rgba(255,255,255,0.45);text-transform:uppercase;letter-spacing:0.7px;line-height:1.2;}
+.kcdot{width:0.7vh;height:0.7vh;border-radius:50%;background:var(--gray);flex-shrink:0;margin-top:0.25vh;transition:all 0.4s;}
+.kcdot.on-track{background:var(--green);box-shadow:0 0 5px var(--green);}
+.kcdot.warning{background:var(--gold);box-shadow:0 0 5px var(--gold);}
+.kcdot.behind{background:var(--red);box-shadow:0 0 5px var(--red);}
+.kcval{font-size:2.55vh;font-weight:900;color:white;letter-spacing:0.5px;line-height:1;text-align:center;margin:0.26vh 0 0.36vh;}
+.kcval.sm{font-size:1.95vh;}
+.kcval.empty{color:rgba(255,255,255,0.1);font-size:1.65vh;}
+.kbw{height:3px;background:rgba(0,0,0,0.55);border-radius:2px;overflow:hidden;}
+.kb{height:100%;border-radius:2px;width:0%;background:linear-gradient(90deg,var(--cyan),var(--cyan2));transition:width 1.2s ease;}
+.kb.on-track{background:linear-gradient(90deg,#16a34a,var(--green));}
+.kb.warning{background:linear-gradient(90deg,#d97706,var(--gold));}
+.kb.behind{background:linear-gradient(90deg,#b91c1c,var(--red));}
+.kpct{font-size:0.7vh;color:var(--gray);text-align:right;letter-spacing:1px;margin-top:0.16vh;}
+.lbbody{flex:1;display:flex;flex-direction:column;padding:0.48vh 0.6vw;gap:0.36vh;overflow:hidden;position:relative;z-index:1;min-height:0;}
+.lbhdr{display:grid;grid-template-columns:1.8vh 1fr 1.5fr 0.8fr 0.8fr;gap:0.28vw;padding:0 0.2vw 0.3vh;border-bottom:1px solid rgba(41,184,216,0.1);flex-shrink:0;}
+.lbhc{font-size:0.72vh;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--cyan);text-align:right;opacity:0.72;}
+.lbhc:nth-child(-n+2){text-align:left;}
+.lbrow{display:grid;grid-template-columns:1.8vh 1fr 1.5fr 0.8fr 0.8fr;gap:0.28vw;align-items:center;background:rgba(0,0,0,0.26);border:1px solid rgba(41,184,216,0.07);border-left:2px solid rgba(41,184,216,0.2);border-radius:3px;padding:0.52vh 0.38vw;flex:1;min-height:0;}
+.lbrk{font-size:1.1vh;font-weight:900;color:var(--gray);text-align:center;}
+.lbrk.r1{color:var(--gold);text-shadow:0 0 8px rgba(245,158,11,0.55);}
+.lbrk.r2{color:#94a3b8;}
+.lbrk.r3{color:#b87333;}
+.lbnm{font-size:1.1vh;font-weight:700;color:rgba(255,255,255,0.88);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lbcell{font-size:1.15vh;font-weight:800;color:rgba(255,255,255,0.75);text-align:right;}
+.lbcell.rev{color:var(--cyan2);}
+.lbmt{flex:1;display:flex;align-items:center;justify-content:center;font-size:0.9vh;color:rgba(255,255,255,0.13);letter-spacing:2px;text-transform:uppercase;}
+
+/* ══ LEADERBOARD FULL ══ */
+.lb-body{flex:1;padding:1.5vh 3vw 3vh;display:flex;flex-direction:column;gap:0.8vh;overflow:hidden;}
+.lb-hdr-row{display:grid;gap:1vw;padding:0 1.5vw 0.8vh;flex-shrink:0;border-bottom:1px solid var(--bdr);}
+.lb-hdr-row span{font-size:0.75vh;font-weight:700;letter-spacing:3px;color:var(--cyan);text-transform:uppercase;opacity:0.7;text-align:right;}
+.lb-hdr-row span:nth-child(-n+2){text-align:left;}
+.lb-row{display:grid;gap:1vw;align-items:center;background:rgba(0,0,0,0.4);border:1px solid rgba(41,184,216,0.1);border-left:3px solid rgba(41,184,216,0.3);border-radius:6px;padding:1vh 1.5vw;flex:1;transition:all 0.4s;}
+.lb-row.r1{border-left-color:var(--gold);background:rgba(245,158,11,0.05);}
+.lb-row.r2{border-left-color:#94a3b8;background:rgba(148,163,184,0.04);}
+.lb-row.r3{border-left-color:#b87333;background:rgba(184,115,51,0.04);}
+.lb-rank{font-size:2.2vh;font-weight:900;color:var(--gray);text-align:center;}
+.lb-rank.r1{color:var(--gold);text-shadow:0 0 12px rgba(245,158,11,0.5);}
+.lb-rank.r2{color:#94a3b8;}
+.lb-rank.r3{color:#b87333;}
+.lb-name{font-size:2.2vh;font-weight:800;color:white;}
+.lb-pts{font-size:1.8vh;font-weight:900;color:var(--cyan2);text-align:right;}
+.lb-pts .lbl{font-size:0.7vh;color:var(--gray);display:block;letter-spacing:2px;text-transform:uppercase;}
+.lb-stat-val{font-size:1.6vh;font-weight:800;color:white;text-align:right;}
+.lb-stat-lbl{font-size:0.65vh;color:var(--gray);letter-spacing:1px;text-transform:uppercase;}
+.lb-bar-wrap{height:3px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;margin-top:3px;}
+.lb-bar{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--cyan),var(--cyan2));transition:width 1.5s ease;}
+
+/* ══ GOAL PROGRESS ══ */
+.goals-body{flex:1;padding:1.5vh 2vw 3vh;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(2,1fr);gap:1.2vh 1.5vw;}
+.goal-card{background:linear-gradient(155deg,#0c1018 0%,#06080c 100%);border:1px solid var(--bdr);border-radius:6px;padding:1.8vh 1.5vw;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden;}
+.goal-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);}
+.gc-label{font-size:0.85vh;font-weight:700;letter-spacing:3px;color:var(--cyan);text-transform:uppercase;opacity:0.8;}
+.gc-mid{display:flex;justify-content:space-between;align-items:flex-end;margin:1.2vh 0 1vh;}
+.gc-actual{font-size:4vh;font-weight:900;color:white;line-height:1;}
+.gc-goal-info{text-align:right;}
+.gc-goal-lbl{font-size:0.75vh;color:var(--gray);text-transform:uppercase;letter-spacing:2px;}
+.gc-goal-val{font-size:1.8vh;font-weight:700;color:rgba(255,255,255,0.4);}
+.gc-bar{height:6px;background:rgba(255,255,255,0.07);border-radius:3px;overflow:hidden;margin-bottom:0.5vh;}
+.gc-fill{height:100%;border-radius:3px;transition:width 1.5s ease;}
+.gc-fill.green{background:linear-gradient(90deg,#16a34a,var(--green));}
+.gc-fill.gold{background:linear-gradient(90deg,#d97706,var(--gold));}
+.gc-fill.red{background:linear-gradient(90deg,#b91c1c,var(--red));}
+.gc-pct{font-size:0.85vh;font-weight:700;letter-spacing:1px;}
+.gc-pct.green{color:var(--green);}
+.gc-pct.gold{color:var(--gold);}
+.gc-pct.red{color:var(--red);}
+
+/* ══ REVENUE TREND ══ */
+.trend-body{flex:1;padding:2vh 3vw 3vh;display:flex;flex-direction:column;gap:2vh;}
+.trend-top{display:grid;grid-template-columns:repeat(4,1fr);gap:1.5vw;flex-shrink:0;}
+.trend-stat{background:rgba(0,0,0,0.4);border:1px solid var(--bdr);border-radius:6px;padding:1.5vh 1.5vw;text-align:center;}
+.trend-stat .tv{font-size:3.5vh;font-weight:900;color:var(--cyan2);}
+.trend-stat .tl{font-size:0.75vh;color:var(--gray);letter-spacing:2px;text-transform:uppercase;margin-top:4px;}
+.trend-chart{flex:1;background:rgba(0,0,0,0.3);border:1px solid var(--bdr);border-radius:6px;padding:2vh 2vw;display:flex;align-items:flex-end;gap:1vw;}
+.bar-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%;gap:0.5vh;}
+.bar-lbl{font-size:0.75vh;color:var(--gray);text-transform:uppercase;letter-spacing:1px;}
+.bar-val{font-size:0.9vh;font-weight:700;color:var(--cyan2);}
+.bar-outer{width:100%;background:rgba(255,255,255,0.05);border-radius:4px 4px 0 0;flex:1;display:flex;align-items:flex-end;overflow:hidden;}
+.bar-inner{width:100%;border-radius:4px 4px 0 0;transition:height 1.5s ease;background:linear-gradient(180deg,var(--cyan2),var(--cyan));}
+.bar-inner.current{background:linear-gradient(180deg,#22c55e,#16a34a);box-shadow:0 0 12px rgba(34,197,94,0.4);}
+
+/* ══ DAILY TARGET ══ */
+.daily-body{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:1.5vw;padding:2vh 3vw 3vh;}
+.daily-card{background:rgba(0,0,0,0.4);border:1px solid var(--bdr);border-radius:8px;padding:2.5vh 2vw;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5vh;text-align:center;}
+.daily-icon{font-size:5vh;}
+.daily-label{font-size:0.85vh;font-weight:700;letter-spacing:3px;color:var(--cyan);text-transform:uppercase;}
+.daily-value{font-size:6vh;font-weight:900;color:white;line-height:1;}
+.daily-value.green{color:var(--green);}
+.daily-value.red{color:var(--red);}
+.daily-value.gold{color:var(--gold);}
+.daily-sub{font-size:1.1vh;color:var(--gray);letter-spacing:2px;text-transform:uppercase;}
+.countdown{display:flex;gap:1.5vw;align-items:center;}
+.cd-unit{text-align:center;}
+.cd-val{font-size:5vh;font-weight:900;color:var(--cyan2);line-height:1;}
+.cd-lbl{font-size:0.7vh;color:var(--gray);letter-spacing:2px;text-transform:uppercase;}
+.cd-sep{font-size:4vh;font-weight:900;color:var(--gray);margin-bottom:1.5vh;}
+
+/* ══ WEATHER ══ */
+.weather-body{flex:1;display:grid;grid-template-columns:1fr 1.2fr 1fr;padding:0 0 2.5vh;}
+.wx-left{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:2vh 2vw;border-right:1px solid var(--bdr);}
+.wx-icon{font-size:13vh;line-height:1;margin-bottom:1vh;}
+.wx-temp{font-size:10vh;font-weight:900;color:white;line-height:1;letter-spacing:-2px;}
+.wx-feels{font-size:1.1vh;color:var(--gray);letter-spacing:2px;text-transform:uppercase;margin-top:0.5vh;}
+.wx-desc{font-size:1.8vh;font-weight:700;color:var(--cyan);letter-spacing:2px;text-transform:uppercase;margin-top:1vh;}
+.wx-loc{font-size:0.9vh;color:rgba(255,255,255,0.3);letter-spacing:3px;text-transform:uppercase;margin-top:0.5vh;}
+.wx-center{display:flex;flex-direction:column;padding:2vh 2vw;gap:1.2vh;}
+.wx-detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:0.8vh;}
+.wx-detail{background:rgba(0,0,0,0.4);border:1px solid var(--bdr);border-radius:6px;padding:1vh 1vw;text-align:center;}
+.wx-detail .dv{font-size:2vh;font-weight:900;color:var(--cyan2);}
+.wx-detail .dl{font-size:0.7vh;color:var(--gray);letter-spacing:2px;text-transform:uppercase;margin-top:3px;}
+.wx-divider{height:1px;background:var(--bdr);}
+.wx-fc-title{font-size:0.75vh;font-weight:700;letter-spacing:3px;color:var(--cyan);text-transform:uppercase;opacity:0.7;}
+.wx-forecast{display:flex;flex-direction:column;gap:0.5vh;flex:1;}
+.wx-day{display:flex;align-items:center;justify-content:space-between;background:rgba(0,0,0,0.3);border:1px solid rgba(41,184,216,0.07);border-radius:5px;padding:0.7vh 1vw;gap:0.8vw;}
+.wx-day-name{font-size:1vh;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:1px;width:3vw;}
+.wx-day-icon{font-size:1.6vh;}
+.wx-day-bar{flex:1;height:4px;background:rgba(255,255,255,0.06);border-radius:2px;overflow:hidden;}
+.wx-day-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,#3b82f6,#ef4444);}
+.wx-day-temps{font-size:1.1vh;font-weight:700;color:white;white-space:nowrap;}
+.wx-day-temps span{color:var(--gray);font-weight:400;}
+.wx-right{display:flex;flex-direction:column;padding:2vh 2vw;gap:1vh;border-left:1px solid var(--bdr);}
+.wx-card{background:rgba(0,0,0,0.4);border:1px solid var(--bdr);border-radius:6px;padding:1.2vh 1.2vw;}
+.wx-card-title{font-size:0.72vh;font-weight:700;letter-spacing:3px;text-transform:uppercase;margin-bottom:0.8vh;}
+.wx-card-title.gold{color:var(--gold);}
+.wx-card-title.cyan{color:var(--cyan);}
+.wx-card-title.blue{color:#60a5fa;}
+.wx-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4vh;}
+.wx-row:last-child{margin-bottom:0;}
+.wx-row-lbl{font-size:0.85vh;color:var(--gray);text-transform:uppercase;letter-spacing:1px;}
+.wx-row-val{font-size:1.3vh;font-weight:800;color:white;}
+.wx-big{font-size:3.5vh;font-weight:900;text-align:center;}
+.wx-big.gold{color:var(--gold);}
+.wx-big.blue{color:#60a5fa;}
+.wx-sub{font-size:0.75vh;color:var(--gray);letter-spacing:2px;text-transform:uppercase;text-align:center;margin-top:3px;}
+.wx-updated{font-size:0.68vh;color:rgba(41,184,216,0.2);letter-spacing:2px;text-transform:uppercase;text-align:center;margin-top:auto;}
+
+/* ══ REVIEWS ══ */
+.reviews-body{flex:1;padding:1.5vh 3vw 3vh;display:flex;flex-direction:column;gap:1.2vh;justify-content:center;}
+.review-card{background:rgba(0,0,0,0.4);border:1px solid var(--bdr);border-radius:8px;padding:1.8vh 2vw;display:flex;gap:1.5vw;align-items:flex-start;flex:1;}
+.review-card.featured{border-color:rgba(245,158,11,0.3);background:rgba(245,158,11,0.04);flex:2;}
+.review-stars{font-size:1.4vh;letter-spacing:2px;flex-shrink:0;}
+.review-left{display:flex;flex-direction:column;gap:0.4vh;flex-shrink:0;min-width:8vw;}
+.review-name{font-size:1.3vh;font-weight:800;color:white;}
+.review-date{font-size:0.75vh;color:var(--gray);letter-spacing:1px;text-transform:uppercase;}
+.review-text{font-size:1.4vh;color:rgba(255,255,255,0.8);line-height:1.5;flex:1;}
+.review-text.featured{font-size:1.8vh;}
+.reviews-header{display:flex;align-items:center;justify-content:space-between;flex-shrink:0;}
+.reviews-avg{font-size:4vh;font-weight:900;color:var(--gold);}
+.reviews-total{font-size:0.8vh;color:var(--gray);letter-spacing:2px;text-transform:uppercase;margin-top:4px;}
+
+/* ══ CALL STATS ══ */
+.calls-body{flex:1;padding:1.5vh 3vw 3vh;display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:1fr 1fr;gap:1.2vh 1.5vw;}
+.call-card{background:rgba(0,0,0,0.4);border:1px solid var(--bdr);border-radius:8px;padding:2vh 1.5vw;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden;}
+.call-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);}
+.call-label{font-size:0.85vh;font-weight:700;letter-spacing:3px;color:var(--cyan);text-transform:uppercase;opacity:0.8;}
+.call-value{font-size:5vh;font-weight:900;color:white;line-height:1;}
+.call-value.green{color:var(--green);}
+.call-value.gold{color:var(--gold);}
+.call-value.red{color:var(--red);}
+.call-sub{font-size:0.85vh;color:var(--gray);letter-spacing:1px;text-transform:uppercase;}
+.call-bar{height:4px;background:rgba(255,255,255,0.07);border-radius:2px;overflow:hidden;}
+.call-fill{height:100%;border-radius:2px;transition:width 1.5s ease;}
+
+/* ══ TECH OF MONTH ══ */
+.tom-body{flex:1;display:grid;grid-template-columns:1fr 1.5fr 1fr;gap:1.5vw;padding:1.5vh 3vw 3vh;}
+.tom-center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.5vh;}
+.tom-crown{font-size:7vh;line-height:1;}
+.tom-badge{font-size:0.8vh;font-weight:700;letter-spacing:4px;color:var(--gold);text-transform:uppercase;background:rgba(245,158,11,0.1);border:1px solid rgba(245,158,11,0.3);padding:6px 16px;border-radius:20px;}
+.tom-name{font-size:6vh;font-weight:900;color:white;text-align:center;line-height:1;}
+.tom-pts{font-size:3vh;font-weight:900;color:var(--cyan2);}
+.tom-pts span{font-size:1vh;color:var(--gray);font-weight:400;letter-spacing:2px;text-transform:uppercase;margin-left:6px;}
+.tom-stats{display:flex;flex-direction:column;gap:1vh;justify-content:center;}
+.tom-stat{background:rgba(0,0,0,0.4);border:1px solid var(--bdr);border-radius:6px;padding:1.2vh 1.2vw;}
+.tom-stat .tv{font-size:2.5vh;font-weight:900;color:var(--cyan2);}
+.tom-stat .tl{font-size:0.72vh;color:var(--gray);letter-spacing:2px;text-transform:uppercase;margin-top:2px;}
+.tom-runners{display:flex;flex-direction:column;gap:1vh;justify-content:center;}
+.tom-runner{display:flex;align-items:center;gap:1vw;background:rgba(0,0,0,0.3);border:1px solid rgba(41,184,216,0.08);border-radius:6px;padding:1.2vh 1.2vw;}
+.tom-runner-rank{font-size:1.5vh;font-weight:900;color:var(--gray);}
+.tom-runner-name{font-size:1.5vh;font-weight:700;color:rgba(255,255,255,0.7);flex:1;}
+.tom-runner-pts{font-size:1.3vh;font-weight:800;color:var(--cyan2);}
+
+/* ══ ANNOUNCEMENTS ══ */
+.announce-body{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:3vh 8vw 3vh;gap:2vh;}
+.announce-icon{font-size:7vh;line-height:1;}
+.announce-badge{font-size:0.8vh;font-weight:700;letter-spacing:4px;color:var(--cyan);text-transform:uppercase;background:rgba(41,184,216,0.1);border:1px solid rgba(41,184,216,0.2);padding:6px 16px;border-radius:20px;}
+.announce-msg{font-size:4.5vh;font-weight:900;color:white;text-align:center;line-height:1.2;max-width:75vw;}
+.announce-sub{font-size:1.5vh;color:var(--gray);letter-spacing:3px;text-transform:uppercase;}
+.announce-div{width:60px;height:2px;background:linear-gradient(90deg,transparent,var(--cyan),transparent);}
+
+@keyframes fi{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+
+<!-- ══ S0: KPI BOARD ══ -->
+<div class="screen active" id="s0">
+  <div class="hdr">
+    <div class="logo-text"><h1>3R Plumbing &amp; Mechanical</h1><div class="sub">Live Performance Dashboard</div></div>
+    <div class="hdr-center">
+      <div class="hs"><div class="lbl">MTD Revenue</div><div class="val" id="h-rev">—</div></div>
+      <div class="hs"><div class="lbl">vs Goal</div><div class="val" id="h-pct">—</div></div>
+      <div class="hs"><div class="lbl">Calls Ran</div><div class="val" id="h-calls">—</div></div>
+      <div class="hs"><div class="lbl">Avg Ticket</div><div class="val" id="h-avg">—</div></div>
+      <div class="hs"><div class="lbl">Memberships</div><div class="val" id="h-mem">—</div></div>
+    </div>
+    <div class="hdr-right"><div class="sname">KPI Board</div><div class="clock" id="c0">07:20 AM</div><div class="date" id="d0">Sat, Jun 6</div></div>
+  </div>
+  <div class="kpi-body">
+    <div class="panel">
+      <div class="ptitle">📌 &nbsp;Monthly Goals</div>
+      <div class="glist">
+        <div class="grow"><span class="gico">💰</span><span class="gname">Monthly Rev</span><span class="gval" id="g-rev">$300K</span></div>
+        <div class="grow"><span class="gico">📅</span><span class="gname">Weekly</span><span class="gval" id="g-week">$75K</span></div>
+        <div class="grow"><span class="gico">🔧</span><span class="gname">Install Rev</span><span class="gval" id="g-inst">$150K</span></div>
+        <div class="grow"><span class="gico">⚙️</span><span class="gname">Service Rev</span><span class="gval" id="g-svc">$150K</span></div>
+        <div class="grow"><span class="gico">⭐</span><span class="gname">Memberships</span><span class="gval" id="g-mem">20</span></div>
+        <div class="grow"><span class="gico">👍</span><span class="gname">Reviews</span><span class="gval" id="g-rev2">30</span></div>
+        <div class="grow"><span class="gico">🔄</span><span class="gname">Callbacks Max</span><span class="gval" id="g-cbk">5%</span></div>
+        <div class="grow"><span class="gico">🎯</span><span class="gname">Avg Ticket</span><span class="gval" id="g-avg">$850</span></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ptitle">📊 &nbsp;Actuals — Month to Date</div>
+      <div class="kgrid">
+        <div class="kc" id="kc-rc"><div class="kctop"><span class="kclbl">Revenue<br>Completed</span><span class="kcdot" id="d-rc"></span></div><div class="kcval empty" id="v-rc">—</div><div><div class="kbw"><div class="kb" id="b-rc" style="width: 0%;"></div></div><div class="kpct" id="p-rc"></div></div></div>
+        <div class="kc" id="kc-cb"><div class="kctop"><span class="kclbl">Calls<br>Booked</span><span class="kcdot" id="d-cb"></span></div><div class="kcval empty" id="v-cb">—</div><div><div class="kbw"><div class="kb" id="b-cb" style="width: 0%;"></div></div><div class="kpct" id="p-cb"></div></div></div>
+        <div class="kc" id="kc-ic"><div class="kctop"><span class="kclbl">Installs<br>Completed</span><span class="kcdot" id="d-ic"></span></div><div class="kcval empty" id="v-ic">—</div><div><div class="kbw"><div class="kb" id="b-ic" style="width: 0%;"></div></div><div class="kpct" id="p-ic"></div></div></div>
+        <div class="kc" id="kc-cr"><div class="kctop"><span class="kclbl">Calls<br>Ran</span><span class="kcdot" id="d-cr"></span></div><div class="kcval empty" id="v-cr">—</div><div><div class="kbw"><div class="kb" id="b-cr" style="width: 0%;"></div></div><div class="kpct" id="p-cr"></div></div></div>
+        <div class="kc" id="kc-sr"><div class="kctop"><span class="kclbl">Sold<br>Revenue</span><span class="kcdot" id="d-sr"></span></div><div class="kcval empty" id="v-sr">—</div><div><div class="kbw"><div class="kb" id="b-sr" style="width: 0%;"></div></div><div class="kpct" id="p-sr"></div></div></div>
+        <div class="kc" id="kc-at"><div class="kctop"><span class="kclbl">Average<br>Ticket</span><span class="kcdot" id="d-at"></span></div><div class="kcval empty" id="v-at">—</div><div><div class="kbw"><div class="kb" id="b-at" style="width: 0%;"></div></div><div class="kpct" id="p-at"></div></div></div>
+        <div class="kc" id="kc-bk"><div class="kctop"><span class="kclbl">Call<br>Backs</span><span class="kcdot" id="d-bk"></span></div><div class="kcval empty" id="v-bk">—</div><div><div class="kbw"><div class="kb" id="b-bk" style="width: 0%;"></div></div><div class="kpct" id="p-bk"></div></div></div>
+        <div class="kc" id="kc-ms"><div class="kctop"><span class="kclbl">Memberships<br>Sold</span><span class="kcdot" id="d-ms"></span></div><div class="kcval empty" id="v-ms">—</div><div><div class="kbw"><div class="kb" id="b-ms" style="width: 0%;"></div></div><div class="kpct" id="p-ms"></div></div></div>
+        <div class="kc" id="kc-rv"><div class="kctop"><span class="kclbl">Reviews<br>Collected</span><span class="kcdot" id="d-rv"></span></div><div class="kcval empty" id="v-rv">—</div><div><div class="kbw"><div class="kb" id="b-rv" style="width: 0%;"></div></div><div class="kpct" id="p-rv"></div></div></div>
+        <div class="kc" id="kc-rpt"><div class="kctop"><span class="kclbl">Revenue<br>Per Tech</span><span class="kcdot" id="d-rpt"></span></div><div class="kcval empty" id="v-rpt">—</div><div><div class="kbw"><div class="kb" id="b-rpt" style="width: 0%;"></div></div><div class="kpct" id="p-rpt"></div></div></div>
+        <div class="kc" id="kc-cls"><div class="kctop"><span class="kclbl">Close Rate<br>Install</span><span class="kcdot" id="d-cls"></span></div><div class="kcval empty" id="v-cls">—</div><div><div class="kbw"><div class="kb" id="b-cls" style="width: 0%;"></div></div><div class="kpct" id="p-cls"></div></div></div>
+        <div class="kc" id="kc-ir"><div class="kctop"><span class="kclbl">Install<br>Revenue</span><span class="kcdot" id="d-ir"></span></div><div class="kcval empty" id="v-ir">—</div><div><div class="kbw"><div class="kb" id="b-ir" style="width: 0%;"></div></div><div class="kpct" id="p-ir"></div></div></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="ptitle">🏆 &nbsp;Tech Leaderboard</div>
+      <div class="lbbody">
+        <div class="lbhdr"><span class="lbhc">#</span><span class="lbhc">Name</span><span class="lbhc">Pts</span><span class="lbhc">Rev</span><span class="lbhc">Mbrs</span></div>
+        <div id="lb-mini" style="display:contents"><div class="lbrow"><span class="lbrk r1">1</span><span class="lbnm">← Tech Name</span><span class="lbcell rev">0pts</span><span class="lbcell">—</span><span class="lbcell">—</span></div><div class="lbrow"><span class="lbrk r2">2</span><span class="lbnm">Marc</span><span class="lbcell rev">0pts</span><span class="lbcell">—</span><span class="lbcell">—</span></div><div class="lbrow"><span class="lbrk r3">3</span><span class="lbnm">Nick</span><span class="lbcell rev">0pts</span><span class="lbcell">—</span><span class="lbcell">—</span></div><div class="lbrow"><span class="lbrk ">4</span><span class="lbnm">Mitchell</span><span class="lbcell rev">0pts</span><span class="lbcell">—</span><span class="lbcell">—</span></div><div class="lbrow"><span class="lbrk ">5</span><span class="lbnm">Nolan</span><span class="lbcell rev">0pts</span><span class="lbcell">—</span><span class="lbcell">—</span></div><div class="lbrow"><span class="lbrk ">6</span><span class="lbnm">Bryan</span><span class="lbcell rev">0pts</span><span class="lbcell">—</span><span class="lbcell">—</span></div><div class="lbrow"><span class="lbrk ">7</span><span class="lbnm">Jack</span><span class="lbcell rev">0pts</span><span class="lbcell">—</span><span class="lbcell">—</span></div><div class="lbrow"><span class="lbrk ">8</span><span class="lbnm">Michael</span><span class="lbcell rev">0pts</span><span class="lbcell">—</span><span class="lbcell">—</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ S1: MTD LEADERBOARD ══ -->
+<div class="screen" id="s1">
+  <div class="hdr">
+    <div class="logo-text"><h1>3R Plumbing &amp; Mechanical</h1><div class="sub">Live Performance Dashboard</div></div>
+    <div class="hdr-right"><div class="sname">MTD Leaderboard — This Month</div><div class="clock" id="c1">07:20 AM</div><div class="date" id="d1">Sat, Jun 6</div></div>
+  </div>
+  <div class="lb-body">
+    <div class="lb-hdr-row" style="grid-template-columns:4vh 1fr 1.2fr 1fr 1fr 1fr 1fr;">
+      <span>#</span><span style="text-align:left">Technician</span><span>Points</span><span>Revenue</span><span>Sold</span><span>Memberships</span><span>Reviews</span>
+    </div>
+    <div id="lb-mtd" style="display:contents"><div class="lb-row r1" style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr 1fr;">
+          <div class="lb-rank r1">🥇</div>
+          <div class="lb-name">← Tech Name</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Memberships</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div><div class="lb-row r2" style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr 1fr;">
+          <div class="lb-rank r2">🥈</div>
+          <div class="lb-name">Marc</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Memberships</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div><div class="lb-row r3" style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr 1fr;">
+          <div class="lb-rank r3">🥉</div>
+          <div class="lb-name">Nick</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Memberships</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div><div class="lb-row " style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr 1fr;">
+          <div class="lb-rank ">4</div>
+          <div class="lb-name">Mitchell</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Memberships</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div><div class="lb-row " style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr 1fr;">
+          <div class="lb-rank ">5</div>
+          <div class="lb-name">Nolan</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Memberships</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div><div class="lb-row " style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr 1fr;">
+          <div class="lb-rank ">6</div>
+          <div class="lb-name">Bryan</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Memberships</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div><div class="lb-row " style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr 1fr;">
+          <div class="lb-rank ">7</div>
+          <div class="lb-name">Jack</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Memberships</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div></div>
+  </div>
+</div>
+
+<!-- ══ S2: YTD LEADERBOARD ══ -->
+<div class="screen" id="s2">
+  <div class="hdr">
+    <div class="logo-text"><h1>3R Plumbing &amp; Mechanical</h1><div class="sub">Live Performance Dashboard</div></div>
+    <div class="hdr-right"><div class="sname">YTD Leaderboard — Year to Date</div><div class="clock" id="c2">07:20 AM</div><div class="date" id="d2">Sat, Jun 6</div></div>
+  </div>
+  <div class="lb-body">
+    <div class="lb-hdr-row" style="grid-template-columns:4vh 1fr 1.2fr 1fr 1fr 1fr;">
+      <span>#</span><span style="text-align:left">Technician</span><span>YTD Points</span><span>YTD Revenue</span><span>YTD Sold</span><span>YTD Reviews</span>
+    </div>
+    <div id="lb-ytd" style="display:contents"><div class="lb-row r1" style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr;">
+          <div class="lb-rank r1">🥇</div>
+          <div class="lb-name">← Tech Name</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div><div class="lb-row r2" style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr;">
+          <div class="lb-rank r2">🥈</div>
+          <div class="lb-name">Marc</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div><div class="lb-row r3" style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr;">
+          <div class="lb-rank r3">🥉</div>
+          <div class="lb-name">Nick</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div><div class="lb-row " style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr;">
+          <div class="lb-rank ">4</div>
+          <div class="lb-name">Mitchell</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div><div class="lb-row " style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr;">
+          <div class="lb-rank ">5</div>
+          <div class="lb-name">Nolan</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div><div class="lb-row " style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr;">
+          <div class="lb-rank ">6</div>
+          <div class="lb-name">Bryan</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div><div class="lb-row " style="grid-template-columns: 4vh 1fr 1.2fr 1fr 1fr 1fr;">
+          <div class="lb-rank ">7</div>
+          <div class="lb-name">Jack</div>
+          <div class="lb-pts">0<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:0%"></div></div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">—</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">0</div><div class="lb-stat-lbl">Reviews</div></div></div></div>
+  </div>
+</div>
+
+<!-- ══ S3: GOAL PROGRESS ══ -->
+<div class="screen" id="s3">
+  <div class="hdr">
+    <div class="logo-text"><h1>3R Plumbing &amp; Mechanical</h1><div class="sub">Live Performance Dashboard</div></div>
+    <div class="hdr-right"><div class="sname">Monthly Goal Progress</div><div class="clock" id="c3">07:20 AM</div><div class="date" id="d3">Sat, Jun 6</div></div>
+  </div>
+  <div class="goals-body" id="goals-grid"><div class="goal-card"><div class="gc-label">💰 Monthly Revenue</div><div class="gc-mid"><div class="gc-actual">$0</div><div class="gc-goal-info"><div class="gc-goal-lbl">Goal</div><div class="gc-goal-val">$300K</div></div></div><div class="gc-bar"><div class="gc-fill red" style="width:0%"></div></div><div class="gc-pct red">0% of goal</div></div><div class="goal-card"><div class="gc-label">🔧 Install Revenue</div><div class="gc-mid"><div class="gc-actual">$0</div><div class="gc-goal-info"><div class="gc-goal-lbl">Goal</div><div class="gc-goal-val">$150K</div></div></div><div class="gc-bar"><div class="gc-fill red" style="width:0%"></div></div><div class="gc-pct red">0% of goal</div></div><div class="goal-card"><div class="gc-label">⚙️ Sold Revenue</div><div class="gc-mid"><div class="gc-actual">$0</div><div class="gc-goal-info"><div class="gc-goal-lbl">Goal</div><div class="gc-goal-val">$300K</div></div></div><div class="gc-bar"><div class="gc-fill red" style="width:0%"></div></div><div class="gc-pct red">0% of goal</div></div><div class="goal-card"><div class="gc-label">⭐ Memberships</div><div class="gc-mid"><div class="gc-actual">0</div><div class="gc-goal-info"><div class="gc-goal-lbl">Goal</div><div class="gc-goal-val">20</div></div></div><div class="gc-bar"><div class="gc-fill red" style="width:0%"></div></div><div class="gc-pct red">0% of goal</div></div><div class="goal-card"><div class="gc-label">👍 Google Reviews</div><div class="gc-mid"><div class="gc-actual">0</div><div class="gc-goal-info"><div class="gc-goal-lbl">Goal</div><div class="gc-goal-val">30</div></div></div><div class="gc-bar"><div class="gc-fill red" style="width:0%"></div></div><div class="gc-pct red">0% of goal</div></div><div class="goal-card"><div class="gc-label">🎯 Average Ticket</div><div class="gc-mid"><div class="gc-actual">$0</div><div class="gc-goal-info"><div class="gc-goal-lbl">Goal</div><div class="gc-goal-val">$850</div></div></div><div class="gc-bar"><div class="gc-fill red" style="width:0%"></div></div><div class="gc-pct red">0% of goal</div></div></div>
+</div>
+
+<!-- ══ S4: REVENUE TREND ══ -->
+<div class="screen" id="s4">
+  <div class="hdr">
+    <div class="logo-text"><h1>3R Plumbing &amp; Mechanical</h1><div class="sub">Live Performance Dashboard</div></div>
+    <div class="hdr-right"><div class="sname">Revenue Trend</div><div class="clock" id="c4">07:20 AM</div><div class="date" id="d4">Sat, Jun 6</div></div>
+  </div>
+  <div class="trend-body">
+    <div class="trend-top">
+      <div class="trend-stat"><div class="tv" id="tr-rev">$0</div><div class="tl">MTD Revenue</div></div>
+      <div class="trend-stat"><div class="tv" id="tr-goal">$300K</div><div class="tl">Monthly Goal</div></div>
+      <div class="trend-stat"><div class="tv" id="tr-needed">$300K</div><div class="tl">Still Needed</div></div>
+      <div class="trend-stat"><div class="tv" id="tr-daily">$13K</div><div class="tl">Needed Per Day</div></div>
+    </div>
+    <div class="trend-chart" id="trend-chart"><div class="bar-wrap"><div class="bar-val">$0</div><div class="bar-outer"><div class="bar-inner current" style="height:0%"></div></div><div class="bar-lbl">Wk 1 ←</div></div><div class="bar-wrap"><div class="bar-val">$0</div><div class="bar-outer"><div class="bar-inner" style="height:0%"></div></div><div class="bar-lbl">Wk 2</div></div><div class="bar-wrap"><div class="bar-val">$0</div><div class="bar-outer"><div class="bar-inner" style="height:0%"></div></div><div class="bar-lbl">Wk 3</div></div><div class="bar-wrap"><div class="bar-val">$0</div><div class="bar-outer"><div class="bar-inner" style="height:0%"></div></div><div class="bar-lbl">Wk 4</div></div></div>
+  </div>
+</div>
+
+<!-- ══ S5: DAILY TARGET ══ -->
+<div class="screen" id="s5">
+  <div class="hdr">
+    <div class="logo-text"><h1>3R Plumbing &amp; Mechanical</h1><div class="sub">Live Performance Dashboard</div></div>
+    <div class="hdr-right"><div class="sname">Daily Target &amp; Countdown</div><div class="clock" id="c5">07:20 AM</div><div class="date" id="d5">Sat, Jun 6</div></div>
+  </div>
+  <div class="daily-body">
+    <div class="daily-card">
+      <div class="daily-icon">📅</div>
+      <div class="daily-label">Days Left in Month</div>
+      <div class="daily-value green" id="days-left">24</div>
+      <div class="daily-sub" id="days-sub">24 of 30 days remaining</div>
+    </div>
+    <div class="daily-card">
+      <div class="daily-icon">💰</div>
+      <div class="daily-label">Daily Revenue Target</div>
+      <div class="daily-value" id="daily-target">$13K</div>
+      <div class="daily-sub">Needed each day to hit goal</div>
+    </div>
+    <div class="daily-card">
+      <div class="daily-icon">📈</div>
+      <div class="daily-label">Current Daily Pace</div>
+      <div class="daily-value red" id="daily-pace">$0</div>
+      <div class="daily-sub" id="pace-status">🔴 Significantly below pace</div>
+    </div>
+    <div class="daily-card">
+      <div class="daily-icon">⏱️</div>
+      <div class="daily-label">End of Business Day</div>
+      <div class="countdown" id="countdown">
+        <div class="cd-unit"><div class="cd-val" id="cd-h">09</div><div class="cd-lbl">Hours</div></div>
+        <div class="cd-sep">:</div>
+        <div class="cd-unit"><div class="cd-val" id="cd-m">39</div><div class="cd-lbl">Mins</div></div>
+        <div class="cd-sep">:</div>
+        <div class="cd-unit"><div class="cd-val" id="cd-s">04</div><div class="cd-lbl">Secs</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ S6: WEATHER ══ -->
+<div class="screen" id="s6">
+  <div class="hdr">
+    <div class="logo-text"><h1>3R Plumbing &amp; Mechanical</h1><div class="sub">Live Performance Dashboard</div></div>
+    <div class="hdr-right"><div class="sname">Weather — Norwell, MA</div><div class="clock" id="c6">07:20 AM</div><div class="date" id="d6">Sat, Jun 6</div></div>
+  </div>
+  <div class="weather-body">
+    <div class="wx-left">
+      <div class="wx-icon" id="wx-icon">☀️</div>
+      <div class="wx-temp" id="wx-temp">66°</div>
+      <div class="wx-feels" id="wx-feels">Feels like 67°F</div>
+      <div class="wx-desc" id="wx-desc">CLEAR</div>
+      <div class="wx-loc">Norwell, MA — South Shore</div>
+    </div>
+    <div class="wx-center">
+      <div class="wx-detail-grid">
+        <div class="wx-detail"><div class="dv" id="wx-hum">76%</div><div class="dl">Humidity</div></div>
+        <div class="wx-detail"><div class="dv" id="wx-wind">4 mph</div><div class="dl">Wind</div></div>
+        <div class="wx-detail"><div class="dv" id="wx-hi">86°</div><div class="dl">Today High</div></div>
+        <div class="wx-detail"><div class="dv" id="wx-lo">60°</div><div class="dl">Tonight Low</div></div>
+      </div>
+      <div class="wx-divider"></div>
+      <div class="wx-fc-title">5-Day Forecast</div>
+      <div class="wx-forecast" id="wx-forecast"><div class="wx-day"><span class="wx-day-name">Sun</span><span style="font-size:1.6vh">🌧️</span><div class="wx-day-bar"><div class="wx-day-fill" style="width:73%"></div></div><span class="wx-day-temps">78° <span>/ 64°</span></span></div><div class="wx-day"><span class="wx-day-name">Mon</span><span style="font-size:1.6vh">☁️</span><div class="wx-day-bar"><div class="wx-day-fill" style="width:63%"></div></div><span class="wx-day-temps">70° <span>/ 54°</span></span></div><div class="wx-day"><span class="wx-day-name">Tue</span><span style="font-size:1.6vh">☁️</span><div class="wx-day-bar"><div class="wx-day-fill" style="width:76%"></div></div><span class="wx-day-temps">81° <span>/ 52°</span></span></div><div class="wx-day"><span class="wx-day-name">Wed</span><span style="font-size:1.6vh">☁️</span><div class="wx-day-bar"><div class="wx-day-fill" style="width:90%"></div></div><span class="wx-day-temps">92° <span>/ 58°</span></span></div><div class="wx-day"><span class="wx-day-name">Thu</span><span style="font-size:1.6vh">☁️</span><div class="wx-day-bar"><div class="wx-day-fill" style="width:76%"></div></div><span class="wx-day-temps">81° <span>/ 63°</span></span></div></div>
+    </div>
+    <div class="wx-right">
+      <div class="wx-card">
+        <div class="wx-card-title gold">☀️ Sun Times</div>
+        <div class="wx-row"><span class="wx-row-lbl">🌅 Sunrise</span><span class="wx-row-val" id="wx-rise">05:07 AM</span></div>
+        <div class="wx-row"><span class="wx-row-lbl">🌇 Sunset</span><span class="wx-row-val" id="wx-set">08:16 PM</span></div>
+        <div class="wx-row"><span class="wx-row-lbl">🌙 Daylight</span><span class="wx-row-val" id="wx-day">15h 9m</span></div>
+      </div>
+      <div class="wx-card">
+        <div class="wx-card-title gold">🔆 UV Index</div>
+        <div class="wx-big gold" id="wx-uv">1</div>
+        <div class="wx-sub" id="wx-uv-desc">Low</div>
+      </div>
+      <div class="wx-card" style="flex:1;">
+        <div class="wx-card-title cyan">💨 Wind</div>
+        <div class="wx-big" style="color:var(--cyan2);" id="wx-wind2">4 mph</div>
+        <div class="wx-sub" id="wx-wdir">From S (194°)</div>
+      </div>
+      <div class="wx-card">
+        <div class="wx-card-title blue">🌧️ Precip Chance</div>
+        <div class="wx-big blue" id="wx-precip">0%</div>
+      </div>
+      <div class="wx-updated" id="wx-updated">Updated: 07:20 AM</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ S7: GOOGLE REVIEWS ══ -->
+<div class="screen" id="s7">
+  <div class="hdr">
+    <div class="logo-text"><h1>3R Plumbing &amp; Mechanical</h1><div class="sub">Live Performance Dashboard</div></div>
+    <div class="hdr-right"><div class="sname">Google Reviews</div><div class="clock" id="c7">07:20 AM</div><div class="date" id="d7">Sat, Jun 6</div></div>
+  </div>
+  <div class="reviews-body">
+    <div class="reviews-header">
+      <div>
+        <div style="font-size:0.78vh;letter-spacing:3px;color:var(--cyan);text-transform:uppercase;opacity:0.72;">Overall Rating</div>
+        <div style="display:flex;align-items:baseline;gap:0.5vw;">
+          <div class="reviews-avg">5.0 ⭐</div>
+        </div>
+        <div class="reviews-total" id="rv-total">0 Reviews This Month</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="font-size:0.78vh;letter-spacing:3px;color:var(--cyan);text-transform:uppercase;opacity:0.72;">Goal Progress</div>
+        <div style="font-size:2.5vh;font-weight:900;color:white;" id="rv-pct">0% of Goal</div>
+        <div style="font-size:0.78vh;color:var(--gray);letter-spacing:2px;text-transform:uppercase;" id="rv-goal">Goal: 30 Reviews</div>
+      </div>
+    </div>
+    <div id="reviews-list" style="display:flex;flex-direction:column;gap:1vh;flex:1;"><div class="review-card featured"><div class="review-left"><div class="review-name">John S.</div><div class="review-stars">⭐⭐⭐⭐⭐</div><div class="review-date">June 4, 2026</div></div><div class="review-text featured">"Amazing service! Fixed our boiler same day. Highly recommend 3R!"</div></div><div class="review-card"><div class="review-left"><div class="review-name">Sarah M.</div><div class="review-stars">⭐⭐⭐⭐⭐</div><div class="review-date">June 3, 2026</div></div><div class="review-text">"Nick was incredibly professional and explained everything clearly."</div></div><div class="review-card"><div class="review-left"><div class="review-name">Tom R.</div><div class="review-stars">⭐⭐⭐⭐⭐</div><div class="review-date">June 2, 2026</div></div><div class="review-text">"Best plumbing company on the South Shore. Fast, honest, and fair pricing."</div></div><div class="review-card"><div class="review-left"><div class="review-name">Lisa K.</div><div class="review-stars">⭐⭐⭐⭐⭐</div><div class="review-date">June 1, 2026</div></div><div class="review-text">"Marc installed our new AC system perfectly. No issues whatsoever."</div></div><div class="review-card"><div class="review-left"><div class="review-name">Dave P.</div><div class="review-stars">⭐⭐⭐⭐⭐</div><div class="review-date">May 30, 2026</div></div><div class="review-text">"Showed up on time, got the job done right the first time."</div></div><div class="review-card"><div class="review-left"><div class="review-name"></div><div class="review-stars">⭐⭐⭐⭐⭐</div><div class="review-date"></div></div><div class="review-text">""</div></div><div class="review-card"><div class="review-left"><div class="review-name"></div><div class="review-stars">⭐⭐⭐⭐⭐</div><div class="review-date"></div></div><div class="review-text">""</div></div></div>
+  </div>
+</div>
+
+<!-- ══ S8: CALL STATS ══ -->
+<div class="screen" id="s8">
+  <div class="hdr">
+    <div class="logo-text"><h1>3R Plumbing &amp; Mechanical</h1><div class="sub">Live Performance Dashboard</div></div>
+    <div class="hdr-right"><div class="sname">Call Stats</div><div class="clock" id="c8">07:20 AM</div><div class="date" id="d8">Sat, Jun 6</div></div>
+  </div>
+  <div class="calls-body">
+    <div class="call-card">
+      <div class="call-label">📞 Calls Answered</div>
+      <div class="call-value" id="cs-ca">—</div>
+      <div class="call-sub">This Month</div>
+    </div>
+    <div class="call-card">
+      <div class="call-label">📅 Calls Booked</div>
+      <div class="call-value" id="cs-cb">—</div>
+      <div class="call-sub">This Month</div>
+    </div>
+    <div class="call-card">
+      <div class="call-label">🎯 Booking Rate</div>
+      <div class="call-value red" id="cs-br">—%</div>
+      <div class="call-sub">Booked ÷ Answered</div>
+      <div class="call-bar"><div class="call-fill" id="cs-br-bar" style="width: 0%; background: var(--red);"></div></div>
+    </div>
+    <div class="call-card">
+      <div class="call-label">🔧 Calls Ran</div>
+      <div class="call-value" id="cs-cr">—</div>
+      <div class="call-sub">Dispatched + Completed</div>
+    </div>
+    <div class="call-card">
+      <div class="call-label">🔄 Call Backs</div>
+      <div class="call-value green" id="cs-bk">—</div>
+      <div class="call-sub">Callbacks This Month</div>
+    </div>
+    <div class="call-card">
+      <div class="call-label">📊 Avg Ticket</div>
+      <div class="call-valuered" id="cs-at">—</div>
+      <div class="call-sub">Revenue Per Call</div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ S9: TECH OF MONTH ══ -->
+<div class="screen" id="s9">
+  <div class="hdr">
+    <div class="logo-text"><h1>3R Plumbing &amp; Mechanical</h1><div class="sub">Live Performance Dashboard</div></div>
+    <div class="hdr-right"><div class="sname">Tech of the Month</div><div class="clock" id="c9">07:20 AM</div><div class="date" id="d9">Sat, Jun 6</div></div>
+  </div>
+  <div class="tom-body">
+    <div class="tom-stats" id="tom-stats"><div class="tom-stat"><div class="tv">$0</div><div class="tl">Revenue MTD</div></div><div class="tom-stat"><div class="tv">$0</div><div class="tl">Sold MTD</div></div><div class="tom-stat"><div class="tv">0</div><div class="tl">Memberships</div></div><div class="tom-stat"><div class="tv">0</div><div class="tl">Reviews</div></div><div class="tom-stat"><div class="tv">0</div><div class="tl">Installs</div></div></div>
+    <div class="tom-center">
+      <div class="tom-crown">👑</div>
+      <div class="tom-badge">Tech of the Month</div>
+      <div class="tom-name" id="tom-name">← Tech Name</div>
+      <div class="tom-pts" id="tom-pts">0<span>pts Combined Score</span></div>
+    </div>
+    <div class="tom-runners" id="tom-runners"><div class="tom-runner"><div class="tom-runner-rank">🥈</div><div class="tom-runner-name">Marc</div><div class="tom-runner-pts">0 pts</div></div><div class="tom-runner"><div class="tom-runner-rank">🥉</div><div class="tom-runner-name">Nick</div><div class="tom-runner-pts">0 pts</div></div><div class="tom-runner"><div class="tom-runner-rank">4th</div><div class="tom-runner-name">Mitchell</div><div class="tom-runner-pts">0 pts</div></div><div class="tom-runner"><div class="tom-runner-rank">5th</div><div class="tom-runner-name">Nolan</div><div class="tom-runner-pts">0 pts</div></div><div class="tom-runner"><div class="tom-runner-rank">6th</div><div class="tom-runner-name">Bryan</div><div class="tom-runner-pts">0 pts</div></div></div>
+  </div>
+</div>
+
+<!-- ══ S10: ANNOUNCEMENTS ══ -->
+<div class="screen" id="s10">
+  <div class="hdr">
+    <div class="logo-text"><h1>3R Plumbing &amp; Mechanical</h1><div class="sub">Live Performance Dashboard</div></div>
+    <div class="hdr-right"><div class="sname">Team Announcements</div><div class="clock" id="c10">07:20 AM</div><div class="date" id="d10">Sat, Jun 6</div></div>
+  </div>
+  <div class="announce-body">
+    <div class="announce-icon" id="an-icon">📢</div>
+    <div class="announce-badge" id="an-badge">Announcement</div>
+    <div class="announce-div"></div>
+    <div class="announce-msg" id="an-msg">No announcements today</div>
+    <div class="announce-div"></div>
+    <div class="announce-sub" id="an-sub"></div>
+  </div>
+</div>
+
+<!-- NAV DOTS -->
+<div class="nav-dots" id="nav-dots"><div class="dot active"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div><div class="dot"></div></div>
+<div class="prog" id="prog" style="width: 23.1683%;"></div>
+
+<script>
+// ── CONFIG ──────────────────────────────────────
+const SHEET_ID = '1iqIdyLC6tR_iZ5in0dEswGsgjMfZVRLQ9IY8pybkLOA';
+const API_KEY  = 'AIzaSyDEx9g5DCVefcTK8Qa1FGSN8mAMZKEifqQ';
+const BASE     = `https://sheets.googleapis.com/v4/spreadsheets/${SHEET_ID}/values`;
+const LAT=42.1598, LON=-70.7984;
+const TOTAL_SCREENS = 11;
+const DURATIONS = [60000,40000,40000,30000,30000,25000,30000,25000,25000,20000,20000];
+// ────────────────────────────────────────────────
+
+const $=id=>document.getElementById(id);
+const pn=v=>parseFloat(String(v||0).replace(/[^0-9.-]/g,''))||0;
+function fmt(n,p='',s=''){
+  if(!n&&n!==0)return'—';
+  if(n>=1000000)return p+(n/1000000).toFixed(1)+'M'+s;
+  if(n>=1000)return p+Math.round(n/1000)+'K'+s;
+  return p+n.toLocaleString()+s;
+}
+function calcPts(t,ytd=false){
+  if(ytd) return Math.round((t.rev_ytd/100)+(t.sold_ytd/150)+(t.mem_ytd*50)+(t.rv_ytd*25));
+  return Math.round((t.rev_mtd/100)+(t.sold_mtd/150)+(t.mem_mtd*50)+(t.rv_mtd*25)+(t.inst_mtd*15));
+}
+
+// ── NAV DOTS ──────────────────────────────────
+const dotsEl=$('nav-dots');
+for(let i=0;i<TOTAL_SCREENS;i++){
+  const d=document.createElement('div');
+  d.className='dot'+(i===0?' active':'');
+  d.onclick=()=>goTo(i);
+  dotsEl.appendChild(d);
+}
+
+// ── ROTATION ──────────────────────────────────
+let current=0,rotTimer=null,progTimer=null,nextAt=null;
+function goTo(idx){
+  $('s'+current).classList.remove('active');
+  dotsEl.children[current].classList.remove('active');
+  current=idx;
+  $('s'+current).classList.add('active');
+  dotsEl.children[current].classList.add('active');
+  clearTimeout(rotTimer); clearInterval(progTimer);
+  const dur=DURATIONS[current];
+  nextAt=Date.now()+dur;
+  rotTimer=setTimeout(()=>goTo((current+1)%TOTAL_SCREENS),dur);
+  const bar=$('prog'); bar.style.width='0%';
+  progTimer=setInterval(()=>{
+    const pct=Math.min(100,((Date.now()-(nextAt-dur))/dur)*100);
+    bar.style.width=pct+'%';
+  },100);
+}
+
+// ── CLOCK & DATE ──────────────────────────────
+function tick(){
+  const now=new Date();
+  const t=now.toLocaleTimeString('default',{hour:'2-digit',minute:'2-digit'});
+  const d=now.toLocaleDateString('default',{weekday:'short',month:'short',day:'numeric'});
+  for(let i=0;i<TOTAL_SCREENS;i++){
+    const ce=$('c'+i);if(ce)ce.textContent=t;
+    const de=$('d'+i);if(de)de.textContent=d;
+  }
+  updateCountdown(now);
+}
+
+// ── COUNTDOWN TO EOD ──────────────────────────
+function updateCountdown(now){
+  const eod=new Date(now);
+  eod.setHours(17,0,0,0);
+  if(now>eod)eod.setDate(eod.getDate()+1);
+  const diff=Math.max(0,eod-now);
+  const h=Math.floor(diff/3600000);
+  const m=Math.floor((diff%3600000)/60000);
+  const s=Math.floor((diff%60000)/1000);
+  $('cd-h').textContent=String(h).padStart(2,'0');
+  $('cd-m').textContent=String(m).padStart(2,'0');
+  $('cd-s').textContent=String(s).padStart(2,'0');
+}
+
+// ── SHEETS ────────────────────────────────────
+let G={},YG={},A={},T=[],REVIEWS=[],ANNOUNCE={};
+async function fetchRange(r){
+  const res=await fetch(`${BASE}/${encodeURIComponent(r)}?key=${API_KEY}`);
+  if(!res.ok)throw new Error('Sheet error: '+r);
+  return(await res.json()).values||[];
+}
+async function loadSheets(){
+  const [gR,ygR,aR,lR,rvR,anR]=await Promise.all([
+    fetchRange('Goals!A:B'),
+    fetchRange('YTD Goals!A:B'),
+    fetchRange('Actuals!A:B'),
+    fetchRange('Leaderboard!A:J'),
+    fetchRange('Reviews!A:E'),
+    fetchRange('Announcements!A:B'),
+  ]);
+  G={}; gR.forEach(r=>{if(r[0])G[r[0]]=pn(r[1]);});
+  YG={}; ygR.forEach(r=>{if(r[0])YG[r[0]]=pn(r[1]);});
+  A={}; aR.forEach(r=>{if(r[0])A[r[0]]=pn(r[1]);});
+  // Skip header row (row 1) + instruction row (row 2) = slice(2)
+  const allTechs=lR.slice(2).map(r=>({
+    name:r[0]||'',
+    rev_mtd:pn(r[1]),mem_mtd:pn(r[2]),rv_mtd:pn(r[3]),sold_mtd:pn(r[4]),inst_mtd:pn(r[5]),
+    rev_ytd:pn(r[6]),mem_ytd:pn(r[7]),rv_ytd:pn(r[8]),sold_ytd:pn(r[9]),
+    status:(r[11]||'active').toLowerCase().trim()
+  })).filter(t=>t.name);
+
+  // Active techs show on board
+  T=allTechs.filter(t=>t.status==='active');
+
+  // ALL techs (active + inactive) roll into company totals
+  // We store company totals separately so KPI board totals include everyone
+  window.ALL_TECHS=allTechs;
+
+  REVIEWS=rvR.slice(1).map(r=>({num:r[0],name:r[1]||'',text:r[2]||'',stars:pn(r[3]),date:r[4]||''}));
+
+  // Multiple announcements — each row is one announcement
+  ANNOUNCE=anR.slice(1).filter(r=>r[2]).map(r=>({
+    icon:r[0]||'📢',
+    badge:r[1]||'Announcement',
+    message:r[2]||'',
+    sub:r[3]||''
+  }));
+  renderAll();
+}
+
+// ── RENDER ALL ────────────────────────────────
+function renderAll(){
+  renderKPI();
+  renderLeaderboards();
+  renderGoals();
+  renderTrend();
+  renderDailyTarget();
+  renderCallStats();
+  renderReviews();
+  renderTechOfMonth();
+  renderAnnouncements();
+}
+
+// ── KPI ───────────────────────────────────────
+function renderKPI(){
+  $('g-rev').textContent=G.monthly_rev?fmt(G.monthly_rev,'$'):'—';
+  $('g-week').textContent=G.weekly?fmt(G.weekly,'$'):'—';
+  $('g-inst').textContent=G.install_rev?fmt(G.install_rev,'$'):'—';
+  $('g-svc').textContent=G.service_rev?fmt(G.service_rev,'$'):'—';
+  $('g-mem').textContent=G.memberships||'—';
+  $('g-rev2').textContent=G.reviews||'—';
+  $('g-cbk').textContent=G.callbacks?G.callbacks+'%':'—';
+  $('g-avg').textContent=G.avg_ticket?fmt(G.avg_ticket,'$'):'—';
+  kpi('rc',A.rev,G.monthly_rev,'$');kpi('cb',A.cb,0);kpi('ic',A.ic,0);kpi('cr',A.cr,0);
+  kpi('sr',A.sr,G.monthly_rev,'$');kpi('at',A.at,G.avg_ticket,'$');
+  kpi('bk',A.bk,G.callbacks,'','%',true);kpi('ms',A.ms,G.memberships);
+  kpi('rv',A.rv,G.reviews);kpi('rpt',A.rpt,0,'$');kpi('cls',A.cls,0,'','%');kpi('ir',A.ir,G.install_rev,'$');
+  $('h-rev').textContent=A.rev?fmt(A.rev,'$'):'—';
+  $('h-calls').textContent=A.cr||'—';
+  $('h-avg').textContent=A.at?fmt(A.at,'$'):'—';
+  $('h-mem').textContent=A.ms||'—';
+  if(G.monthly_rev&&A.rev){
+    const p=Math.round((A.rev/G.monthly_rev)*100);
+    const el=$('h-pct');el.textContent=p+'%';
+    el.style.color=p>=100?'var(--green)':p>=70?'var(--gold)':'var(--red)';
+  }
+  // Mini LB
+  const mini=$('lb-mini');
+  mini.querySelectorAll('.lbrow,.lbmt').forEach(e=>e.remove());
+  const sorted=[...T].sort((a,b)=>calcPts(b)-calcPts(a));
+  if(!sorted.length){const m=document.createElement('div');m.className='lbmt';m.textContent='No data';mini.appendChild(m);}
+  else sorted.slice(0,8).forEach((t,i)=>{
+    const rk=i+1,rc=rk===1?'r1':rk===2?'r2':rk===3?'r3':'';
+    const d=document.createElement('div');d.className='lbrow';
+    d.innerHTML=`<span class="lbrk ${rc}">${rk}</span><span class="lbnm">${t.name}</span><span class="lbcell rev">${calcPts(t)}pts</span><span class="lbcell">${t.rev_mtd?fmt(t.rev_mtd,'$'):'—'}</span><span class="lbcell">${t.mem_mtd||'—'}</span>`;
+    mini.appendChild(d);
+  });
+}
+function kpi(key,val,goal,pre='',suf='',inv=false){
+  const vE=$('v-'+key),dE=$('d-'+key),bE=$('b-'+key),pE=$('p-'+key),cE=$('kc-'+key);
+  if(!vE)return;
+  const d=val?fmt(val,pre,suf):'—';
+  vE.textContent=d;vE.className=!val?'kcval empty':d.length>6?'kcval sm':'kcval';
+  if(!val||!goal){if(dE)dE.className='kcdot';if(bE){bE.style.width='0%';bE.className='kb';}if(pE)pE.textContent='';if(cE)cE.classList.remove('on-track','warning','behind');return;}
+  let pct,st;
+  if(inv){st=val<=goal?'on-track':val<=goal*1.25?'warning':'behind';pct=Math.min((goal/val)*100,100);}
+  else{const r=(val/goal)*100;st=r>=100?'on-track':r>=70?'warning':'behind';pct=Math.min(r,100);}
+  if(dE)dE.className='kcdot '+st;
+  if(bE){bE.style.width=pct+'%';bE.className='kb '+st;}
+  if(pE)pE.textContent=Math.round((val/goal)*100)+'% of goal';
+  if(cE){cE.classList.remove('on-track','warning','behind');cE.classList.add(st);}
+}
+
+// ── LEADERBOARDS ─────────────────────────────
+function renderLeaderboards(){
+  const mtdSorted=[...T].sort((a,b)=>calcPts(b)-calcPts(a));
+  const ytdSorted=[...T].sort((a,b)=>calcPts(b,true)-calcPts(a,true));
+  const maxMtd=calcPts(mtdSorted[0]||{rev_mtd:1,sold_mtd:0,mem_mtd:0,rv_mtd:0,inst_mtd:0});
+  const maxYtd=calcPts(ytdSorted[0]||{rev_ytd:1,sold_ytd:0,mem_ytd:0,rv_ytd:0},true);
+  buildLB('lb-mtd',mtdSorted,maxMtd,false);
+  buildLB('lb-ytd',ytdSorted,maxYtd,true);
+}
+function buildLB(containerId,sorted,maxPts,ytd){
+  const con=$(containerId);
+  con.querySelectorAll('.lb-row').forEach(e=>e.remove());
+  const cols=ytd?'4vh 1fr 1.2fr 1fr 1fr 1fr':'4vh 1fr 1.2fr 1fr 1fr 1fr 1fr';
+  for(let i=0;i<7;i++){
+    const t=sorted[i];
+    const rk=i+1,rc=rk===1?'r1':rk===2?'r2':rk===3?'r3':'';
+    const medal=rk===1?'🥇':rk===2?'🥈':rk===3?'🥉':rk;
+    const pts=t?calcPts(t,ytd):0;
+    const barW=maxPts>0?Math.round((pts/maxPts)*100):0;
+    const row=document.createElement('div');
+    row.className='lb-row '+(t?rc:'');
+    row.style.gridTemplateColumns=cols;
+    if(t){
+      if(ytd){
+        row.innerHTML=`
+          <div class="lb-rank ${rc}">${medal}</div>
+          <div class="lb-name">${t.name}</div>
+          <div class="lb-pts">${pts.toLocaleString()}<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:${barW}%"></div></div></div>
+          <div><div class="lb-stat-val">${t.rev_ytd?fmt(t.rev_ytd,'$'):'—'}</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">${t.sold_ytd?fmt(t.sold_ytd,'$'):'—'}</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">${t.rv_ytd||'0'}</div><div class="lb-stat-lbl">Reviews</div></div>`;
+      } else {
+        row.innerHTML=`
+          <div class="lb-rank ${rc}">${medal}</div>
+          <div class="lb-name">${t.name}</div>
+          <div class="lb-pts">${pts.toLocaleString()}<span class="lbl">pts</span><div class="lb-bar-wrap"><div class="lb-bar" style="width:${barW}%"></div></div></div>
+          <div><div class="lb-stat-val">${t.rev_mtd?fmt(t.rev_mtd,'$'):'—'}</div><div class="lb-stat-lbl">Revenue</div></div>
+          <div><div class="lb-stat-val">${t.sold_mtd?fmt(t.sold_mtd,'$'):'—'}</div><div class="lb-stat-lbl">Sold</div></div>
+          <div><div class="lb-stat-val">${t.mem_mtd||'0'}</div><div class="lb-stat-lbl">Memberships</div></div>
+          <div><div class="lb-stat-val">${t.rv_mtd||'0'}</div><div class="lb-stat-lbl">Reviews</div></div>`;
+      }
+    } else {
+      row.innerHTML=`<div class="lb-rank" style="color:rgba(255,255,255,0.1)">${rk}</div><div class="lb-name" style="color:rgba(255,255,255,0.15)">—</div><div></div><div></div><div></div>${ytd?'':'<div></div>'}<div></div>`;
+    }
+    con.appendChild(row);
+  }
+}
+
+// ── GOAL PROGRESS ─────────────────────────────
+function renderGoals(){
+  const items=[
+    {key:'rev',goal:'monthly_rev',label:'💰 Monthly Revenue',pre:'$'},
+    {key:'ir', goal:'install_rev', label:'🔧 Install Revenue', pre:'$'},
+    {key:'sr', goal:'monthly_rev', label:'⚙️ Sold Revenue',    pre:'$'},
+    {key:'ms', goal:'memberships', label:'⭐ Memberships',     pre:''},
+    {key:'rv', goal:'reviews',     label:'👍 Google Reviews',  pre:''},
+    {key:'at', goal:'avg_ticket',  label:'🎯 Average Ticket',  pre:'$'},
+  ];
+  const grid=$('goals-grid');grid.innerHTML='';
+  items.forEach(g=>{
+    const val=A[g.key]||0,goal=G[g.goal]||1;
+    const pct=Math.min(100,Math.round((val/goal)*100));
+    const cls=pct>=100?'green':pct>=70?'gold':'red';
+    const card=document.createElement('div');card.className='goal-card';
+    card.innerHTML=`<div class="gc-label">${g.label}</div><div class="gc-mid"><div class="gc-actual">${fmt(val,g.pre)}</div><div class="gc-goal-info"><div class="gc-goal-lbl">Goal</div><div class="gc-goal-val">${fmt(goal,g.pre)}</div></div></div><div class="gc-bar"><div class="gc-fill ${cls}" style="width:${pct}%"></div></div><div class="gc-pct ${cls}">${pct}% of goal${pct>=100?' ✅':''}</div>`;
+    grid.appendChild(card);
+  });
+}
+
+// ── REVENUE TREND ─────────────────────────────
+function renderTrend(){
+  const now=new Date();
+  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const dayOfMonth=now.getDate();
+  const daysLeft=daysInMonth-dayOfMonth;
+  const rev=A.rev||0,goal=G.monthly_rev||1;
+  const needed=Math.max(0,goal-rev);
+  const dailyNeeded=daysLeft>0?needed/daysLeft:0;
+  $('tr-rev').textContent=fmt(rev,'$');
+  $('tr-goal').textContent=fmt(goal,'$');
+  $('tr-needed').textContent=fmt(needed,'$');
+  $('tr-daily').textContent=fmt(dailyNeeded,'$');
+  // Weekly bars (simulated based on current pace)
+  const weeklyGoal=G.weekly||1;
+  const pace=dayOfMonth>0?rev/dayOfMonth:0;
+  const chart=$('trend-chart');chart.innerHTML='';
+  const weeks=['Wk 1','Wk 2','Wk 3','Wk 4'];
+  const weekData=[
+    Math.min(weeklyGoal,pace*7*0.9),
+    Math.min(weeklyGoal,pace*7*0.85),
+    Math.min(weeklyGoal,pace*7*1.1),
+    rev-(pace*7*0.9+pace*7*0.85+pace*7*1.1),
+  ];
+  weekData[3]=Math.max(0,weekData[3]);
+  const maxBar=weeklyGoal*1.2;
+  weeks.forEach((w,i)=>{
+    const h=Math.round((weekData[i]/maxBar)*100);
+    const isCurrent=i===Math.floor((dayOfMonth-1)/7);
+    const wrap=document.createElement('div');wrap.className='bar-wrap';
+    wrap.innerHTML=`<div class="bar-val">${fmt(weekData[i],'$')}</div><div class="bar-outer"><div class="bar-inner${isCurrent?' current':''}" style="height:${h}%"></div></div><div class="bar-lbl">${w}${isCurrent?' ←':''}</div>`;
+    chart.appendChild(wrap);
+  });
+}
+
+// ── DAILY TARGET ──────────────────────────────
+function renderDailyTarget(){
+  const now=new Date();
+  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  const dayOfMonth=now.getDate();
+  const daysLeft=daysInMonth-dayOfMonth;
+  const rev=A.rev||0,goal=G.monthly_rev||1;
+  const needed=Math.max(0,goal-rev);
+  const dailyNeeded=daysLeft>0?needed/daysLeft:0;
+  const dailyPace=dayOfMonth>0?rev/dayOfMonth:0;
+  $('days-left').textContent=daysLeft;
+  $('days-sub').textContent=`${daysLeft} of ${daysInMonth} days remaining`;
+  $('daily-target').textContent=fmt(dailyNeeded,'$');
+  $('daily-pace').textContent=fmt(dailyPace,'$');
+  const paceEl=$('daily-pace');
+  if(dailyPace>=dailyNeeded){paceEl.className='daily-value green';$('pace-status').textContent='✅ On pace to hit goal';}
+  else if(dailyPace>=dailyNeeded*0.7){paceEl.className='daily-value gold';$('pace-status').textContent='⚠️ Below pace — push harder';}
+  else{paceEl.className='daily-value red';$('pace-status').textContent='🔴 Significantly below pace';}
+  $('days-left').className='daily-value'+(daysLeft<=5?' red':daysLeft<=10?' gold':' green');
+}
+
+// ── CALL STATS ────────────────────────────────
+function renderCallStats(){
+  const br=A.ca>0?Math.round((A.cb/A.ca)*100):0;
+  const brCls=br>=80?'green':br>=60?'gold':'red';
+  $('cs-ca').textContent=A.ca||'—';
+  $('cs-cb').textContent=A.cb||'—';
+  $('cs-br').textContent=(br||'—')+'%';
+  $('cs-br').className='call-value '+brCls;
+  $('cs-br-bar').style.width=br+'%';
+  $('cs-br-bar').style.background=br>=80?'var(--green)':br>=60?'var(--gold)':'var(--red)';
+  $('cs-cr').textContent=A.cr||'—';
+  $('cs-bk').textContent=A.bk||'—';
+  $('cs-bk').className='call-value'+(A.bk===0?' green':A.bk<=3?' gold':' red');
+  $('cs-at').textContent=A.at?fmt(A.at,'$'):'—';
+  $('cs-at').className='call-value'+(A.at>=(G.avg_ticket||850)?'green':A.at>=(G.avg_ticket||850)*0.7?'gold':'red');
+}
+
+// ── REVIEWS ───────────────────────────────────
+function renderReviews(){
+  const rvGoal=G.reviews||30;
+  const rvActual=A.rv||0;
+  const pct=Math.round((rvActual/rvGoal)*100);
+  $('rv-total').textContent=rvActual+' Reviews This Month';
+  $('rv-pct').textContent=pct+'% of Goal';
+  $('rv-goal').textContent='Goal: '+rvGoal+' Reviews';
+  const list=$('reviews-list');list.innerHTML='';
+  if(!REVIEWS.length){list.innerHTML='<div style="color:var(--gray);text-align:center;padding:2vh;letter-spacing:2px;text-transform:uppercase;font-size:0.9vh;">No reviews in sheet yet</div>';return;}
+  REVIEWS.forEach((r,i)=>{
+    const stars='⭐'.repeat(Math.min(5,r.stars||5));
+    const featured=i===0;
+    const card=document.createElement('div');
+    card.className='review-card'+(featured?' featured':'');
+    card.innerHTML=`<div class="review-left"><div class="review-name">${r.name}</div><div class="review-stars">${stars}</div><div class="review-date">${r.date}</div></div><div class="review-text${featured?' featured':''}">"${r.text}"</div>`;
+    list.appendChild(card);
+  });
+}
+
+// ── TECH OF MONTH ─────────────────────────────
+function renderTechOfMonth(){
+  if(!T.length){$('tom-name').textContent='No Data';return;}
+  const sorted=[...T].sort((a,b)=>calcPts(b)-calcPts(a));
+  const winner=sorted[0];
+  const pts=calcPts(winner);
+  $('tom-name').textContent=winner.name;
+  $('tom-pts').innerHTML=pts.toLocaleString()+'<span>pts Combined Score</span>';
+  // Winner stats
+  const statsEl=$('tom-stats');statsEl.innerHTML='';
+  const stats=[
+    {v:fmt(winner.rev_mtd,'$'),l:'Revenue MTD'},
+    {v:fmt(winner.sold_mtd,'$'),l:'Sold MTD'},
+    {v:winner.mem_mtd||'0',l:'Memberships'},
+    {v:winner.rv_mtd||'0',l:'Reviews'},
+    {v:winner.inst_mtd||'0',l:'Installs'},
+  ];
+  stats.forEach(s=>{
+    const d=document.createElement('div');d.className='tom-stat';
+    d.innerHTML=`<div class="tv">${s.v}</div><div class="tl">${s.l}</div>`;
+    statsEl.appendChild(d);
+  });
+  // Runners up
+  const runnersEl=$('tom-runners');runnersEl.innerHTML='';
+  const medals=['🥈','🥉','4th','5th','6th','7th'];
+  sorted.slice(1,6).forEach((t,i)=>{
+    const d=document.createElement('div');d.className='tom-runner';
+    d.innerHTML=`<div class="tom-runner-rank">${medals[i]}</div><div class="tom-runner-name">${t.name}</div><div class="tom-runner-pts">${calcPts(t).toLocaleString()} pts</div>`;
+    runnersEl.appendChild(d);
+  });
+}
+
+// Multiple announcements rotation
+let announceIdx=0, announceTimer=null;
+function renderAnnouncements(){
+  if(!ANNOUNCE||!ANNOUNCE.length){
+    $('an-icon').textContent='📢';
+    $('an-badge').textContent='Announcement';
+    $('an-msg').textContent='No announcements today';
+    $('an-sub').textContent='';
+    return;
+  }
+  clearInterval(announceTimer);
+  announceIdx=0;
+  function showAnnounce(){
+    const an=ANNOUNCE[announceIdx];
+    $('an-icon').textContent=an.icon;
+    $('an-badge').textContent=an.badge;
+    $('an-msg').textContent=an.message;
+    $('an-sub').textContent=an.sub;
+    announceIdx=(announceIdx+1)%ANNOUNCE.length;
+  }
+  showAnnounce();
+  if(ANNOUNCE.length>1){
+    announceTimer=setInterval(showAnnounce,8000);
+  }
+}
+
+// ── WEATHER ───────────────────────────────────
+const WX_CODES={0:'Clear',1:'Mostly Clear',2:'Partly Cloudy',3:'Overcast',45:'Foggy',48:'Icy Fog',51:'Light Drizzle',53:'Drizzle',55:'Heavy Drizzle',61:'Light Rain',63:'Rain',65:'Heavy Rain',71:'Light Snow',73:'Snow',75:'Heavy Snow',80:'Showers',81:'Heavy Showers',95:'Thunderstorm',96:'Thunderstorm',99:'Thunderstorm'};
+const WX_ICON={0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',71:'🌨️',73:'🌨️',75:'❄️',80:'🌦️',81:'🌧️',95:'⛈️'};
+const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function degToDir(d){return['N','NE','E','SE','S','SW','W','NW'][Math.round(d/45)%8];}
+function uvDesc(u){if(u<=2)return'Low';if(u<=5)return'Moderate';if(u<=7)return'High';if(u<=10)return'Very High';return'Extreme';}
+async function loadWeather(){
+  try{
+    const url=`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,apparent_temperature,relative_humidity_2m,wind_speed_10m,wind_direction_10m,weather_code,uv_index,precipitation_probability&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York&forecast_days=6`;
+    const res=await fetch(url);
+    const wx=await res.json();
+    const c=wx.current,d=wx.daily;
+    $('wx-icon').textContent=WX_ICON[c.weather_code]||'🌡️';
+    $('wx-temp').textContent=Math.round(c.temperature_2m)+'°';
+    $('wx-feels').textContent='Feels like '+Math.round(c.apparent_temperature)+'°F';
+    $('wx-desc').textContent=(WX_CODES[c.weather_code]||'—').toUpperCase();
+    $('wx-hum').textContent=c.relative_humidity_2m+'%';
+    $('wx-wind').textContent=Math.round(c.wind_speed_10m)+' mph';
+    $('wx-wind2').textContent=Math.round(c.wind_speed_10m)+' mph';
+    $('wx-wdir').textContent='From '+degToDir(c.wind_direction_10m)+' ('+Math.round(c.wind_direction_10m)+'°)';
+    $('wx-hi').textContent=Math.round(d.temperature_2m_max[0])+'°';
+    $('wx-lo').textContent=Math.round(d.temperature_2m_min[0])+'°';
+    $('wx-precip').textContent=(c.precipitation_probability||0)+'%';
+    const uv=Math.round(c.uv_index||0);
+    $('wx-uv').textContent=uv;$('wx-uv-desc').textContent=uvDesc(uv);
+    const rise=new Date(d.sunrise[0]);
+    const set=new Date(d.sunset[0]);
+    $('wx-rise').textContent=rise.toLocaleTimeString('default',{hour:'2-digit',minute:'2-digit'});
+    $('wx-set').textContent=set.toLocaleTimeString('default',{hour:'2-digit',minute:'2-digit'});
+    const dl=Math.round((set-rise)/3600000);
+    $('wx-day').textContent=dl+'h '+Math.round(((set-rise)/60000)%60)+'m';
+    const fc=$('wx-forecast');fc.innerHTML='';
+    for(let i=1;i<=5;i++){
+      const date=new Date(d.time[i]+'T12:00:00');
+      const hi=Math.round(d.temperature_2m_max[i]);
+      const lo=Math.round(d.temperature_2m_min[i]);
+      const barW=Math.round(((hi-20)/(100-20))*100);
+      fc.innerHTML+=`<div class="wx-day"><span class="wx-day-name">${DAYS[date.getDay()]}</span><span style="font-size:1.6vh">${WX_ICON[d.weather_code[i]]||'🌡️'}</span><div class="wx-day-bar"><div class="wx-day-fill" style="width:${barW}%"></div></div><span class="wx-day-temps">${hi}° <span>/ ${lo}°</span></span></div>`;
+    }
+    $('wx-updated').textContent='Updated: '+new Date().toLocaleTimeString('default',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){$('wx-desc').textContent='WEATHER UNAVAILABLE';}
+}
+
+// ── INIT ──────────────────────────────────────
+goTo(0);tick();
+setInterval(tick,1000);
+loadSheets();
+loadWeather();
+setInterval(loadSheets,5*60*1000);
+setInterval(loadWeather,15*60*1000);
+
+// ── KEEP AWAKE ────────────────────────────────
+(function(){
+  setInterval(()=>{document.title='3R Dashboard • '+new Date().toLocaleTimeString();},30000);
+  setInterval(()=>{window.scrollBy(0,0);},60000);
+  if('wakeLock' in navigator){
+    const req=async()=>{try{await navigator.wakeLock.request('screen');}catch(e){}};
+    req();
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')req();});
+  }
+})();
+</script>
+
+
+</body></html>

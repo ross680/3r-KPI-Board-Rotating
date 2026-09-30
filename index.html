@@ -138,7 +138,7 @@ body.tv .hdr{display:none}
 .tv-clock small{display:block;font-weight:600;font-size:1.6vh;color:#9FB1B8;font-stretch:100%}
 .tv-ctl{display:flex;gap:.6vw}
 .tv-ctl button{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.18);color:#fff;border-radius:.8vh;padding:.7vh 1vw;font-size:1.6vh;font-weight:700}
-.tv-stage{flex:1;position:relative;min-height:0}
+.tv-stage{flex:1;position:relative;min-height:0;overflow:hidden}
 .slide{position:absolute;inset:0;padding:3vh 0 1vh;display:flex;flex-direction:column;opacity:0;transition:opacity .6s ease;pointer-events:none}
 .slide.on{opacity:1;pointer-events:auto}
 @media (prefers-reduced-motion:reduce){.slide{transition:none}}
@@ -250,6 +250,31 @@ body.tv .hdr{display:none}
 .sp-bar em{position:absolute;top:0;bottom:0;width:.3vh;background:#fff}
 .trend{flex:1;min-height:0;display:flex}
 .trend svg{width:100%;height:100%;display:block}
+.scrollbox{flex:1;min-height:0;overflow:hidden;position:relative;-webkit-mask-image:linear-gradient(#000 92%,transparent);mask-image:linear-gradient(#000 92%,transparent)}
+.scrollin{display:flex;flex-direction:column;gap:1vh;will-change:transform}
+.scrollin.run{animation:scrollup var(--sd,30s) linear infinite}
+@keyframes scrollup{0%,10%{transform:translateY(0)}100%{transform:translateY(calc(-1 * var(--sh,0px)))}}
+.slide .lb.scrollin .lbr{flex:none;height:9.6vh;max-height:none}
+.slide .scrollin .st-r{flex:none;height:9vh;max-height:none}
+.st-r.top{border-color:var(--blue);background:linear-gradient(90deg,rgba(38,164,203,.18),rgba(18,25,28,.85) 60%)}
+.st-r .rk{font-stretch:125%;font-weight:900;font-size:3.4vh;color:#5E747D}.st-r.top .rk{color:var(--blue)}
+.st-r .who em{display:block;font-style:normal;font-size:1.4vh;color:var(--blue);font-weight:700;font-stretch:100%;margin-top:.3vh}
+.slide .scrollin .ld-r{flex:none;height:9.6vh;max-height:none}
+.am-h,.am-r{display:grid;gap:.8vw;align-items:center;padding:0 1.2vw}
+.am-h{font-size:1.55vh;color:#8397A0;font-weight:700;padding-bottom:.8vh}
+.am-h span{text-align:right}
+.am-r{flex:none;height:7.6vh;background:rgba(18,25,28,.85);border:1px solid #23313A;border-radius:1.2vh}
+.am-r.sales{border-color:rgba(38,164,203,.45)}
+.am-r .who{gap:.9vw;min-width:0}.am-r .av{width:5.6vh;height:5.6vh;font-size:2.1vh}
+.am-r .who b{font-stretch:115%;font-weight:900;font-size:2.7vh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.05}
+.am-r .who em{display:block;font-style:normal;font-size:1.4vh;color:var(--blue);font-weight:700;font-stretch:100%}
+.am-r .grade{width:5vh;height:5vh;font-size:2.8vh;border-radius:.9vh}
+.am-r .c{text-align:right;font-stretch:112%;font-weight:900;font-size:2.6vh;white-space:nowrap}
+.am-r .c small{display:block;font-size:1.4vh;color:#9FB1B8;font-weight:700;font-stretch:100%}
+.ticker{overflow:hidden;white-space:nowrap;border-top:1px solid #23313A;border-bottom:1px solid #23313A;background:rgba(38,164,203,.10);margin-top:1vh;padding:.9vh 0;font-size:2.4vh;font-weight:700}
+.tk-in{display:inline-block;padding-left:100%;animation:tick linear infinite}
+.tk-in i{color:var(--blue);font-style:normal;margin:0 2vw}.tk-in b{color:var(--blue)}
+@keyframes tick{from{transform:translateX(0)}to{transform:translateX(-100%)}}
 .tv-legend{display:flex;gap:2.4vw;font-size:1.9vh;color:#B9C6CC;font-weight:600;padding-top:1vh}
 .tv-legend i{display:inline-block;width:1.6vh;height:1.6vh;border-radius:.3vh;margin-right:.6vw;vertical-align:-.2vh}
 .st-t{display:flex;flex-direction:column;gap:1vh;flex:1;min-height:0}
@@ -329,7 +354,21 @@ const METRICS = [
   {k:"revHr", label:"Revenue per hour", fmt:"$",  target:250,   w:0,  hint:"Revenue ÷ hours worked"},
   {k:"inst",  label:"Installs",         fmt:"#",  target:3,     w:0,  ytdScale:true, hint:"From Install Record tab"},
   {k:"rating",label:"Manager rating",   fmt:"★",  target:5,     w:5,  hint:"Your 1–5 star grade"},
-  {k:"openAmt",label:"Open estimates $",fmt:"$",  target:25000, w:0,  hint:"Pipeline still to close"}
+  {k:"openAmt",label:"Open estimates $",fmt:"$",  target:25000, w:0,  hint:"Pipeline still to close"},
+  {k:"cbRate", label:"Callback rate",    fmt:"%",  target:0.03,  w:0,  inverse:true, hint:"Callbacks ÷ completed jobs (lower is better)"},
+  {k:"eff",    label:"Efficiency",       fmt:"%",  target:1,     w:0,  hint:"Sold hours ÷ hours worked"},
+  {k:"estClose",label:"Estimate close %",fmt:"%",  target:0.45,  w:0,  hint:"Estimates sold ÷ estimates written"},
+  {k:"avgSale",label:"Average sale",     fmt:"$",  target:3500,  w:0,  hint:"Sold $ ÷ estimates sold"},
+  {k:"overdue",label:"Overdue follow-ups",fmt:"#", target:3,     w:0,  inverse:true, hint:"Open estimates past their follow-up date"}
+];
+const SALES_METRICS = [
+  {k:"sold",    label:"Sold revenue",      fmt:"$", target:75000, w:35, ytdScale:true, hint:"Estimates sold per month"},
+  {k:"estClose",label:"Estimate close %",  fmt:"%", target:0.45,  w:20, hint:"Estimates sold ÷ written"},
+  {k:"avgSale", label:"Average sale",      fmt:"$", target:3500,  w:15, hint:"Sold $ ÷ estimates sold"},
+  {k:"estN",    label:"Estimates written", fmt:"#", target:25,    w:10, ytdScale:true, hint:"Per month"},
+  {k:"overdue", label:"Overdue follow-ups",fmt:"#", target:3,     w:10, inverse:true, hint:"Open estimates past follow-up date"},
+  {k:"mem",     label:"Memberships",       fmt:"#", target:3,     w:5,  ytdScale:true, hint:"Sold per month"},
+  {k:"rating",  label:"Manager rating",    fmt:"★", target:5,     w:5,  hint:"Your 1–5 star grade"}
 ];
 const APP_METRICS = [
   {k:"attend",  label:"Attendance",       fmt:"%", target:1,   w:30, hint:"Scheduled weekdays worked (holidays and PTO excused)"},
@@ -341,9 +380,14 @@ const APP_METRICS = [
 ];
 const FIELD_TEAM = /plumb|hvac|apprentic|electric|install|service|tech/i;
 const GRACE_MIN = 10;
+const INSTALL_HOURS = 4;
+// install job types (ServiceTitan "Job Type"); sales visits, estimates and warranty trips never count
+const INSTALL_TYPE = /install|replacement|conversion|full system|plumbing project|rough and finish/i;
+const NOT_INSTALL = /sales|estimate|warranty|inspection/i;
 const SLIDES = [
   {k:"goal",  label:"Monthly goal (install + service split)"},
   {k:"trend", label:"Revenue by month"},
+  {k:"all",   label:"Team scoreboard (every metric, one screen)"},
   {k:"lb",    label:"Tech leaderboard"},
   {k:"stats", label:"Month vs year stat sheet"},
   {k:"spot",  label:"Tech spotlight"},
@@ -351,13 +395,15 @@ const SLIDES = [
   {k:"ytd",   label:"Year to date goals"},
   {k:"wx",    label:"Weather (needs the sheet script)"},
   {k:"rv",    label:"Google reviews"},
-  {k:"ann",   label:"Announcements"}
+  {k:"ann",   label:"Announcements"},
+  {k:"sales", label:"Sales board"}
 ];
 const defaultCfg = () => ({
   sheetId: DEFAULT_SHEET, rotateSec: 15, boardPeriod: "mtd", spotMode:"rotate", coSource:"auto",
   slides: Object.fromEntries(SLIDES.map(s=>[s.k,true])),
   metrics: Object.fromEntries(METRICS.map(m=>[m.k,{w:m.w,target:m.target}])),
   appMetrics: Object.fromEntries(APP_METRICS.map(m=>[m.k,{w:m.w,target:m.target}])),
+  salesMetrics: Object.fromEntries(SALES_METRICS.map(m=>[m.k,{w:m.w,target:m.target}])),
   logoId: "", tvGrades: true
 });
 
@@ -413,7 +459,7 @@ function headerIndex(rows, test){
   const i = rows.findIndex(test); if (i<0) return {i:-1, h:{}};
   const h={}; rows[i].forEach((c,j)=>{ h[String(c).trim().toLowerCase()]=j; }); return {i,h};
 }
-const MK = ["rev","jobs","paid","opp","conv","sold","soldN","estN","gm","hrs","leads","recall","booked","instRev","svcRev"];
+const MK = ["rev","jobs","paid","opp","conv","sold","soldN","estN","gm","hrs","leads","recall","booked","instRev","svcRev","instN","soldHrs","warr"];
 const zeros = () => Array(12).fill(0);
 const newBucket = () => Object.fromEntries(MK.map(k=>[k,zeros()]));
 const newFlat = () => Object.fromEntries(MK.map(k=>[k,0]));
@@ -444,7 +490,7 @@ function buildSnapshot(wb, now=new Date()){
     if(!T[k]) T[k]={k, full:String(nm).trim(), y:newBucket(), l30:newFlat(), open:[], openAmt:0};
     else if(String(nm).trim().length>T[k].full.length) T[k].full=String(nm).trim(); return T[k]; };
   const co = {y:newBucket(), l30:newFlat()};
-  let maxDate=null, jobRows=0, estRows=0;
+  let maxDate=null, jobRows=0, estRows=0; const flags=[];
   const add = (targets, d, f) => { if(!d) return; const inY = d>=yStart && d<=now && d.getFullYear()===Y, in30 = d>=l30 && d<=now;
     for (const x of targets) if (x){ if(inY) f(x.y, d.getMonth(), true); if(in30) f(x.l30, null, false); } };
   const inc = (o,m,k,v) => { if (m==null) o[k]+=v; else o[k][m]+=v; };
@@ -453,6 +499,10 @@ function buildSnapshot(wb, now=new Date()){
   const jr = firstRows(wb,["ST Jobs","Automation Jobs"]);
   const {i:ji,h:jh} = headerIndex(jr, r => r.some(c=>String(c).trim().toLowerCase()==="primary technician"));
   const col = (r,n) => jh[n]!=null ? r[jh[n]] : "";
+  // appointment length per job (Zapier: ST Appointments). Falls back to Total Hours Worked if missing.
+  const apRows = sheetRows(wb,"ST Appointments"); const {i:api,h:aph} = headerIndex(apRows, r=>String(r[0]).trim().toLowerCase()==="job id");
+  const apptHrs = {}; if (api>=0) apRows.slice(api+1).forEach(r=>{ apptHrs[String(r[aph["job id"]])]=num(r[aph["appointment hours"]]); });
+  const useAppt = api>=0;
   if (ji>=0) jr.slice(ji+1).forEach(r=>{
     const status = String(col(r,"status")).trim().toLowerCase(); if(!status) return; jobRows++;
     const created = toDate(col(r,"created date"));
@@ -465,10 +515,17 @@ function buildSnapshot(wb, now=new Date()){
     const t = tech(col(r,"primary technician"));
     const rev = num(col(r,"jobs total revenue") || col(r,"jobs total"));
     const opp = bool(col(r,"opportunity")), conv = bool(col(r,"converted")), recall = bool(col(r,"recall"));
-    const gm = num(col(r,"jobs gross margin")), hrs = num(col(r,"total hours worked"));
+    const gm = num(col(r,"jobs gross margin")), hrs = num(col(r,"total hours worked")); const soldHrs = num(col(r,"sold hours")), warr = bool(col(r,"warranty"));
     const isInst = /install|replace|new system/i.test(String(col(r,"business unit"))+" "+String(col(r,"job type")));
+    // installs = install job type AND over 4 hours; long jobs without an install type get flagged
+    const jtype=String(col(r,"job type")||"");
+    const len = useAppt ? (apptHrs[String(col(r,"job id"))] ?? 0) : hrs;
+    if (len>INSTALL_HOURS && (useAppt || jh["total hours worked"]!=null) && d.getFullYear()===Y) {
+      if (INSTALL_TYPE.test(jtype) && !NOT_INSTALL.test(jtype)) add([t, co], d, (o,m)=>inc(o,m,"instN",1));
+      else flags.push({n:String(col(r,"job #")||col(r,"job id")||""), d:d.toISOString().slice(0,10), tech:String(col(r,"primary technician")||"Unassigned").trim(), type:jtype||"(no job type)", hrs:Math.round(len*10)/10, rev:Math.round(rev), bu:String(col(r,"business unit")||"")});
+    }
     add([t, co], d, (o,m)=>{ inc(o,m,"rev",rev); inc(o,m,"jobs",1); if(rev>0) inc(o,m,"paid",1); if(opp) inc(o,m,"opp",1); if(opp&&conv) inc(o,m,"conv",1);
-      if(recall) inc(o,m,"recall",1); inc(o,m,"gm",gm); inc(o,m,"hrs",hrs); inc(o,m,isInst?"instRev":"svcRev",rev); });
+      if(recall) inc(o,m,"recall",1); inc(o,m,"gm",gm); inc(o,m,"hrs",hrs); inc(o,m,"soldHrs",soldHrs); if(warr) inc(o,m,"warr",1); inc(o,m,isInst?"instRev":"svcRev",rev); });
   });
 
   // Estimates
@@ -481,7 +538,7 @@ function buildSnapshot(wb, now=new Date()){
     if (cd && (!maxDate||cd>maxDate)) maxDate=cd;
     add([t,co], cd, (o,m)=>inc(o,m,"estN",1));
     if (st==="sold") add([t,co], sd, (o,m)=>{ inc(o,m,"sold",amt); inc(o,m,"soldN",1); });
-    if (st==="open" && t){ t.openAmt+=amt; const fu=toDate(r[eh["follow up date"]]); t.open.push({n:String(r[eh["estimate name"]]||"Estimate").slice(0,60), a:Math.round(amt), d:cd?cd.toISOString().slice(0,10):"", fu:fu?fu.toISOString().slice(0,10):""}); }
+    if (st==="open" && t){ t.openAmt+=amt; { const fu0=toDate(r[eh["follow up date"]]); if (fu0 && fu0<now) t.overdueN=(t.overdueN||0)+1; } const fu=toDate(r[eh["follow up date"]]); t.open.push({n:String(r[eh["estimate name"]]||"Estimate").slice(0,60), a:Math.round(amt), d:cd?cd.toISOString().slice(0,10):"", fu:fu?fu.toISOString().slice(0,10):""}); }
   });
   Object.keys(board).forEach(k=>{ if(!T[k]) tech(board[k].name); });
   // ServiceTitan technicians (filled by the Zapier sync) — new techs appear automatically
@@ -494,8 +551,10 @@ function buildSnapshot(wb, now=new Date()){
     const info={name:nm, id:String(r[sth["technician id"]]||""), team, start:start?start.toISOString().slice(0,10):"", shift:String(r[sth["shift start"]]||"08:00"), active};
     stById[info.id]=info;
     const field = active && FIELD_TEAM.test(team) && !/manager|office|part/i.test(team);
-    const t = field ? tech(nm) : T[key(nm)]; if(!t) return;
-    Object.assign(t, {team, stId:info.id, startDate:info.start, shift:info.shift, stActive:active, autoShow:field});
+    const t = (field || (active && /manager|sales/i.test(team+" "+(r[sth.positions]||"")))) ? tech(nm) : T[key(nm)]; if(!t) return;
+    // managers who sell or run jobs (Marc, Ross) count too
+    const sells = active && /manager/i.test(team) && (t.y.sold.reduce((a,b)=>a+b,0) + t.y.rev.reduce((a,b)=>a+b,0)) > 0;
+    Object.assign(t, {team, stId:info.id, startDate:info.start, shift:info.shift, stActive:active, autoShow:field||sells});
     t.role = /apprentic/i.test(team) ? "apprentice" : "tech";
   });
   // Timesheets: clock-ins, PTO, holidays -> attendance
@@ -531,6 +590,31 @@ function buildSnapshot(wb, now=new Date()){
     t.att={y:A, l30:L};
   });
 
+  // ---- automated memberships / reviews / callbacks (Zapier: ST Memberships, ST Reviews, ST Callbacks) ----
+  const byStId = {}; Object.values(stById).forEach(x=>{ byStId[x.id]=x; });
+  const nameKey = id => { const x=byStId[String(id)]; return x ? key(x.name) : null; };
+  const auto = {mem:false, rv:false, cb:false}; const coMem=zeros(), coRv=zeros();
+  const memRows = sheetRows(wb,"ST Memberships"); const {i:mi,h:mh} = headerIndex(memRows, r=>String(r[0]).trim().toLowerCase()==="membership id");
+  if (mi>=0){ auto.mem=true; Object.values(T).forEach(t=>t.memM=zeros());
+    memRows.slice(mi+1).forEach(r=>{ const d=toDate(r[mh["created"]]); if(!d||d.getFullYear()!==Y||d>now) return; if(/renew/i.test(String(r[mh["type"]]||""))) return;
+      coMem[d.getMonth()]++; const k=nameKey(r[mh["sold by id"]]) || key(r[mh["sold by"]]); if(k&&T[k]) T[k].memM[d.getMonth()]++; }); }
+  const rvRows = sheetRows(wb,"ST Reviews"); const {i:ri,h:rh} = headerIndex(rvRows, r=>String(r[0]).trim().toLowerCase()==="published");
+  const autoReviews=[];
+  if (ri>=0){ auto.rv=true; Object.values(T).forEach(t=>t.rvM=zeros());
+    const firsts = Object.values(T).map(t=>({k:t.k, re:new RegExp("\\b"+firstName(t.full).replace(/[^A-Za-z]/g,"")+"\\b","i")})).filter(x=>x.re.source.length>6);
+    rvRows.slice(ri+1).forEach(r=>{ const d=toDate(r[rh.published]); if(!d) return; const rating=num(r[rh.rating]); const text=String(r[rh.review]||"").trim();
+      if (text.length>30 && (rating>=4 || !rating)) autoReviews.push({by:String(r[rh.platform]||"Google")+" review", t:text.slice(0,400), s:rating||5, d:d.toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}), at:d.getTime()});
+      if (d.getFullYear()!==Y||d>now) return; coRv[d.getMonth()]++;
+      const credited=new Set(); const tk=nameKey(r[rh["technician id"]]) || (r[rh.technician]?key(r[rh.technician]):null); if(tk&&T[tk]) credited.add(tk);
+      firsts.forEach(f=>{ if(f.re.test(text)) credited.add(f.k); });
+      credited.forEach(k=>T[k].rvM[d.getMonth()]++); }); }
+  const cbRows = sheetRows(wb,"ST Callbacks"); const {i:ci,h:ch} = headerIndex(cbRows, r=>String(r[0]).trim().toLowerCase()==="callback job id");
+  if (ci>=0 && ji>=0){ auto.cb=true; const jobTech={}; const jIdCol=jh["job id"];
+    jr.slice(ji+1).forEach(r=>{ jobTech[String(r[jIdCol])]=r[jh["primary technician"]]; });
+    Object.values(T).forEach(t=>t.cbM=zeros());
+    cbRows.slice(ci+1).forEach(r=>{ const d=toDate(r[ch["created"]]); if(!d||d.getFullYear()!==Y||d>now) return; if(/cancel/i.test(String(r[ch.status]||""))) return;
+      const orig=jobTech[String(r[ch["original job id"]])]; const k=orig?key(orig):null; if(k&&T[k]) T[k].cbM[d.getMonth()]++; }); }
+
   const round = o => { for (const k in o) o[k] = Array.isArray(o[k]) ? o[k].map(v=>Math.round(v*100)/100) : Math.round(o[k]*100)/100; };
   Object.values(T).forEach(t=>{
     t.openN=t.open.length; t.open.sort((a,b)=>b.a-a.a); t.open=t.open.slice(0,15); t.openAmt=Math.round(t.openAmt);
@@ -538,6 +622,10 @@ function buildSnapshot(wb, now=new Date()){
     t.cb = cbRec[t.k]||zeros(); t.inst = instRec[t.k]||zeros();
     if (!instRec[t.k] && b.inst_mtd) t.inst[M]=b.inst_mtd;
     t.mem={mtd:b.mem_mtd||0, ytd:b.mem_ytd||0}; t.rv={mtd:b.rv_mtd||0, ytd:b.rv_ytd||0};
+    if (auto.mem && t.memM) t.mem={mtd:t.memM[M], ytd:t.memM.slice(0,M+1).reduce((a,b)=>a+b,0), m:t.memM};
+    if (auto.rv && t.rvM) t.rv={mtd:t.rvM[M], ytd:t.rvM.slice(0,M+1).reduce((a,b)=>a+b,0), m:t.rvM};
+    if (auto.cb && t.cbM) t.cb=t.cbM;
+    if (useAppt || jh["total hours worked"]!=null) t.inst = t.y.instN.slice();
     round(t.y); round(t.l30); if(t.att){ round(t.att.y); round(t.att.l30); }
   });
   round(co.y); round(co.l30);
@@ -552,10 +640,23 @@ function buildSnapshot(wb, now=new Date()){
 
   const reviews = sheetRows(wb,"Reviews").slice(1).filter(r=>String(r[2]).trim()).map(r=>({by:String(r[1]).trim(), t:String(r[2]).trim().slice(0,400), s:num(r[3])||5, d: r[4] instanceof Date ? r[4].toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"}) : String(r[4]||"")})).slice(0,20);
   const anns = sheetRows(wb,"Announcements").slice(1).filter(r=>String(r[2]).trim() && !/^💡/u.test(String(r[0]))).map(r=>({ic:String(r[0]).trim(), b:String(r[1]).trim(), m:String(r[2]).trim().slice(0,240), s:String(r[3]).trim()}));
+  // Board_Updates: posts sent from Claude chats (announcement / shoutout / ticker), newest first, auto-expire
+  const up = sheetRows(wb,"Board_Updates"); const {i:ui,h:uh} = headerIndex(up, r=>String(r[0]).trim().toLowerCase()==="posted");
+  const updates = []; const today0=new Date(now); today0.setHours(0,0,0,0);
+  if (ui>=0) up.slice(ui+1).forEach(r=>{ const msg=String(r[uh.message]||"").trim(); if(!msg) return;
+    const exp=toDate(r[uh.expires]); if (exp && exp<today0) return; const st=String(r[uh.status]||"").toLowerCase(); if (/off|hide|done/.test(st)) return;
+    const posted=toDate(r[uh.posted]);
+    updates.push({type:String(r[uh.type]||"announcement").trim().toLowerCase(), ic:String(r[uh.icon]||"").trim(), title:String(r[uh.title]||"").trim().slice(0,60), m:msg.slice(0,240), tech:key(String(r[uh.tech]||"")), at:posted?posted.getTime():0}); });
+  updates.sort((a,b)=>b.at-a.at);
   const leaderSums = Object.values(board).filter(b=>b.status!=="inactive").reduce((a,b)=>{ for(const k of ["mem_mtd","rv_mtd","mem_ytd","rv_ytd","rev_ytd","sold_ytd"]) a[k]=(a[k]||0)+b[k]; return a; },{});
 
-  return {v:2, builtAt: now.getTime(), dataThrough: maxDate?maxDate.toISOString().slice(0,10):"", month:M, year:Y, jobRows, estRows,
-    goals, ytdGoals, actuals, techs:T, co, reviews, anns, leaderSums, weather};
+  if (auto.mem){ leaderSums.mem_mtd=coMem[M]; leaderSums.mem_ytd=coMem.slice(0,M+1).reduce((a,b)=>a+b,0); }
+  if (auto.rv){ leaderSums.rv_mtd=coRv[M]; leaderSums.rv_ytd=coRv.slice(0,M+1).reduce((a,b)=>a+b,0); }
+  const reviewsOut = autoReviews.length ? autoReviews.sort((a,b)=>b.at-a.at).slice(0,20).map(({at,...x})=>x) : reviews;
+  auto.inst = useAppt || jh["total hours worked"]!=null; auto.instBy = useAppt ? "appointment" : "worked";
+  flags.sort((a,b)=>b.d.localeCompare(a.d));
+  return {v:2, builtAt: now.getTime(), auto, flags: flags.slice(0,200), dataThrough: maxDate?maxDate.toISOString().slice(0,10):"", month:M, year:Y, jobRows, estRows,
+    goals, ytdGoals, actuals, techs:T, co, reviews:reviewsOut, anns, updates, leaderSums, weather};
 }
 
 /* ===================== scoring ===================== */
@@ -571,9 +672,10 @@ function statsFor(t, P, m){
   const s = derive(pick(t.y, t.l30, P, M, m));
   s.cb = m!=null ? (t.cb[m]||0) : P==="ytd" ? sumTo(t.cb,M) : P==="l30" ? (t.cb[M]||0) : (t.cb[M]||0);
   s.inst = m!=null ? (t.inst[m]||0) : P==="ytd" ? sumTo(t.inst,M) : (t.inst[M]||0);
-  s.mem = m!=null ? (m===M?t.mem.mtd:null) : P==="ytd" ? t.mem.ytd : t.mem.mtd;
-  s.rv = m!=null ? (m===M?t.rv.mtd:null) : P==="ytd" ? t.rv.ytd : t.rv.mtd;
-  s.rating = (S.techs[t.k]||{}).rating||0; s.openAmt=t.openAmt||0; s.openN=t.openN||0;
+  s.mem = m!=null ? (t.mem.m ? t.mem.m[m] : (m===M?t.mem.mtd:null)) : P==="ytd" ? t.mem.ytd : P==="l30" && t.mem.m ? t.mem.m[M]+(new Date().getDate()<30&&M>0?t.mem.m[M-1]:0) : t.mem.mtd;
+  s.rv = m!=null ? (t.rv.m ? t.rv.m[m] : (m===M?t.rv.mtd:null)) : P==="ytd" ? t.rv.ytd : P==="l30" && t.rv.m ? t.rv.m[M]+(new Date().getDate()<30&&M>0?t.rv.m[M-1]:0) : t.rv.mtd;
+  s.rating = (S.techs[t.k]||{}).rating||0; s.openAmt=t.openAmt||0; s.openN=t.openN||0; s.overdue=t.overdueN||0;
+  s.cbRate = s.jobs ? s.cb/s.jobs : 0; s.eff = s.hrs ? (s.soldHrs||0)/s.hrs : 0; s.estClose = s.estN ? s.soldN/s.estN : 0; s.avgSale = s.soldN ? s.sold/s.soldN : 0;
   const a=t.att; const pickA=f=> !a?0 : m!=null ? (a.y[f][m]||0) : P==="ytd" ? sumTo(a.y[f],M) : P==="l30" ? (a.l30[f]||0) : (a.y[f][M]||0);
   s.sched=pickA("sched"); s.daysW=pickA("days"); s.late=pickA("late"); s.missed=pickA("missed"); s.pto=pickA("pto"); s.clockHrs=pickA("hrs");
   s.hasAtt=!!a; s.attend=s.sched?Math.max(0,(s.sched-s.missed)/s.sched):0; s.onTime=s.daysW?(s.daysW-s.late)/s.daysW:0;
@@ -590,6 +692,7 @@ function coStats(P, m){
 const roleOf = t => (S.techs[t.k]||{}).role || t.role || "tech";
 function scoreTech(t, P){
   if (roleOf(t)==="apprentice") return scoreWith(t, P, APP_METRICS, S.cfg.appMetrics||{});
+  if (roleOf(t)==="sales") return scoreWith(t, P, SALES_METRICS, S.cfg.salesMetrics||{});
   return scoreWith(t, P, METRICS, S.cfg.metrics);
 }
 function scoreWith(t, P, SET, CFGM){
@@ -608,6 +711,13 @@ function scoreWith(t, P, SET, CFGM){
   });
   const score = tw?Math.round(tot/tw*100):0;
   return {score, grade: score>=90?"A":score>=80?"B":score>=70?"C":score>=60?"D":"F", parts, st};
+}
+// everyone who sells (sales side + techs like Marc), ranked by sold, each with a sales score
+function salesRoster(forBoard){
+  const P = forBoard ? S.cfg.boardPeriod : S.period;
+  return roster(forBoard,"all").map(r=>{ const y=statsFor(r.t,"ytd"); return {...r, y, sc:scoreWith(r.t,P,SALES_METRICS,S.cfg.salesMetrics||{}), side:roleOf(r.t)}; })
+    .filter(r=>r.y.sold>0 || r.y.estN>0 || r.side==="sales")
+    .sort((a,b)=>b.st.sold-a.st.sold || b.y.sold-a.y.sold);
 }
 function roster(forBoard, which){
   if (!S.snap) return [];
@@ -651,6 +761,7 @@ function activeSlides(){
   const out=[]; const on=S.cfg.slides||{}; const snap=S.snap; const ok=k=>on[k]!==false;
   if (ok("goal")) out.push({k:"goal"});
   if (ok("trend") && snap && snap.jobRows) out.push({k:"trend"});
+  if (ok("all")) out.push({k:"all"});
   if (ok("lb")) out.push({k:"lb"});
   if (ok("stats") && snap) out.push({k:"stats"});
   if (ok("spot")) out.push({k:"spot"});
@@ -659,6 +770,8 @@ function activeSlides(){
   if (ok("wx") && snap && snap.weather) out.push({k:"wx"});
   if (ok("rv") && snap && snap.reviews.length) out.push({k:"rv"});
   if (ok("ann") && snap) snap.anns.forEach((a,i)=>out.push({k:"ann", i}));
+  if (snap && snap.updates) snap.updates.forEach((u,i)=>{ if(u.type!=="ticker") out.push({k:"upd", i}); });
+  if (ok("sales") && snap && salesRoster(true).length) out.splice(Math.min(3,out.length),0,{k:"sales"});
   return out.length?out:[{k:"goal"}];
 }
 const bigSmall = (big, small) => `<b class="num">${big}</b><span class="num">${small}</span>`;
@@ -701,11 +814,11 @@ function slideHTML(sl){
       <div class="tv-legend"><span><i style="background:#26A4CB"></i>Completed revenue</span><span><i style="background:#5E747D"></i>Sold</span>${goal?`<span>Goal hit ${hit} of ${M} full months</span>`:""}</div>`;
   }
   if (sl.k==="lb"){
-    const R = roster(true).slice(0,7);
+    const R = roster(true);
     if (!R.length) return `<div class="empty-tv"><div><b>No techs on the board yet</b>Add names to the Leaderboard tab or turn techs on in Admin.</div></div>`;
     return `<div class="kicker">${esc(periodLabel(P))}</div><div class="big-h">Tech leaderboard</div>
       <div class="lbh"><span></span><span></span><span style="text-align:left">Tech</span><span style="text-align:center">${grades?"Grade":""}</span><span>Revenue</span><span>Avg ticket</span><span class="x">Close rate</span><span class="x">Open est.</span><span class="x">Callbacks</span></div>
-      <div class="lb">${R.map((r,i)=>`<div class="lbr ${i===0?"top":""}">
+      <div class="scrollbox"><div class="lb scrollin">${R.map((r,i)=>`<div class="lbr ${i===0?"top":""}">
         <div class="rk num">${i+1}</div>${av(r.t.k,r.name)}
         <div class="nm">${esc(r.name)}<small>${grades?"Score "+r.score+" · ":""}${r.st.pts.toLocaleString()} pts · ${r.st.jobs} jobs</small></div>
         ${grades?`<div class="grade g${r.grade}">${r.grade}</div>`:`<div></div>`}
@@ -714,15 +827,24 @@ function slideHTML(sl){
         <div class="c x"><b class="num">${pct(r.st.close)}</b><span>${r.st.opp} opps</span></div>
         <div class="c x"><b class="num">${r.st.openN}</b><span>${money(r.st.openAmt,true)}</span></div>
         <div class="c x"><b class="num" style="color:${r.st.cb>0?"#FF8A80":"#fff"}">${r.st.cb}</b><span>callbacks</span></div>
-      </div>`).join("")}</div>`;
+      </div>`).join("")}</div></div>`;
+  }
+  if (sl.k==="all"){
+    const R=[...roster(true), ...roster(true,"sales")].map(r=>({...r, sales:roleOf(r.t)==="sales"}));
+    if(!R.length) return "";
+    const cols=[["Points",r=>r.st.pts.toLocaleString()],["Revenue",r=>money(r.st.rev,true)],["Jobs",r=>r.st.jobs],["Avg ticket",r=>money(r.st.avg)],["Close %",r=>r.st.opp?pct(r.st.close):"—"],["Sold",r=>money(r.st.sold,true)],["Avg sale",r=>r.st.soldN?money(r.st.avgSale,true):"—"],["Open est.",r=>`${r.st.openN}<small>${money(r.st.openAmt,true)}</small>`],["Members",r=>r.st.mem],["Reviews",r=>r.st.rv],["Installs",r=>r.st.inst],["Leads",r=>r.st.leads],["Callbacks",r=>`<span style="color:${r.st.cb?"#FF8A80":"#fff"}">${r.st.cb}</span>`]];
+    const gc=`minmax(0,2.1fr) ${grades?"5.4vh ":""}repeat(${cols.length},minmax(0,1fr))`;
+    return `<div class="kicker">${esc(periodLabel(P))} · every metric</div><div class="big-h" style="margin-bottom:1.4vh">Team scoreboard</div>
+      <div class="am-h" style="grid-template-columns:${gc}"><span style="text-align:left">Name</span>${grades?"<span></span>":""}${cols.map(c=>`<span>${c[0]}</span>`).join("")}</div>
+      <div class="scrollbox"><div class="scrollin am">${R.map(r=>`<div class="am-r ${r.sales?"sales":""}" style="grid-template-columns:${gc}"><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}${r.sales?"<em>Sales</em>":""}</b></div>${grades?`<div class="grade g${r.grade}">${r.grade}</div>`:""}${cols.map(c=>`<div class="c num">${c[1](r)}</div>`).join("")}</div>`).join("")}</div></div>`;
   }
   if (sl.k==="stats"){
-    const R = roster(true).slice(0,7).map(r=>({...r, y:statsFor(r.t,"ytd"), m:statsFor(r.t,"mtd")}));
+    const R = roster(true).map(r=>({...r, y:statsFor(r.t,"ytd"), m:statsFor(r.t,"mtd")}));
     if (!R.length) return "";
     const cols=[["Revenue",s=>money(s.rev,true)],["Sold",s=>money(s.sold,true)],["Avg ticket",s=>money(s.avg)],["Close rate",s=>pct(s.close)],["Leads",s=>s.leads],["Members",s=>s.mem],["Reviews",s=>s.rv],["Callbacks",s=>s.cb]];
     return `<div class="kicker">Big number = ${esc(monthName())} · small = year to date</div><div class="big-h">Stat sheet</div>
       <div class="st-t"><div class="st-h"><span></span>${cols.map(c=>`<span>${c[0]}</span>`).join("")}</div>
-      ${R.map(r=>`<div class="st-r"><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}</b></div>${cols.map(c=>`<div class="c">${bigSmall(c[1](r.m), c[1](r.y))}</div>`).join("")}</div>`).join("")}</div>`;
+      <div class="scrollbox"><div class="scrollin">${R.map(r=>`<div class="st-r"><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}</b></div>${cols.map(c=>`<div class="c">${bigSmall(c[1](r.m), c[1](r.y))}</div>`).join("")}</div>`).join("")}</div></div></div>`;
   }
   if (sl.k==="spot"){
     const R = roster(true); if(!R.length) return `<div class="empty-tv"><div><b>No spotlight yet</b>Waiting for tech data.</div></div>`;
@@ -735,10 +857,10 @@ function slideHTML(sl){
         <div class="sp-grid">${cells.map(c=>`<div class="tile"><div class="l">${c[0]}</div><div class="v num">${c[1]}</div><div class="s num">${c[2]} YTD</div></div>`).join("")}</div></div></div>`;
   }
   if (sl.k==="leads"){
-    const R = roster(true,"all").map(r=>({...r, lm:statsFor(r.t,"mtd").leads, ly:statsFor(r.t,"ytd").leads, l30:statsFor(r.t,"l30").leads})).sort((a,b)=>b.l30-a.l30||b.ly-a.ly).slice(0,7);
+    const R = roster(true,"all").map(r=>({...r, lm:statsFor(r.t,"mtd").leads, ly:statsFor(r.t,"ytd").leads, l30:statsFor(r.t,"l30").leads})).sort((a,b)=>b.l30-a.l30||b.ly-a.ly);
     const max=Math.max(1,...R.map(r=>r.l30));
     return `<div class="kicker">Last 30 days · counts jobs where the tech is lead generated by</div><div class="big-h">Leads turned over</div>
-      <div class="ld">${R.map((r,i)=>`<div class="ld-r ${i===0&&r.l30?"top":""}"><div class="rk num">${i+1}</div>${av(r.t.k,r.name)}<div class="nm">${esc(r.name)}</div><div class="ld-bar"><i style="width:${r.l30/max*100}%"></i></div><div class="c">${bigSmall(r.l30, r.ly+" YTD")}</div></div>`).join("")}</div>`;
+      <div class="scrollbox"><div class="ld scrollin">${R.map((r,i)=>`<div class="ld-r ${i===0&&r.l30?"top":""}"><div class="rk num">${i+1}</div>${av(r.t.k,r.name)}<div class="nm">${esc(r.name)}</div><div class="ld-bar"><i style="width:${r.l30/max*100}%"></i></div><div class="c">${bigSmall(r.l30, r.ly+" YTD")}</div></div>`).join("")}</div></div>`;
   }
   if (sl.k==="ytd"){
     const Y=snap.ytdGoals, L=snap.leaderSums, yp=(now-new Date(now.getFullYear(),0,1))/(new Date(now.getFullYear()+1,0,1)-new Date(now.getFullYear(),0,1));
@@ -765,22 +887,52 @@ function slideHTML(sl){
       <div style="margin-top:3vh"><div class="quote">${esc(r.t)}</div><div class="qby"><span class="st">${"★".repeat(Math.min(5,Math.round(r.s)))}</span>${esc(r.by)}${r.d?" · "+esc(r.d):""}</div></div>
       <div class="rv-more">${others.map(o=>`<div class="tile"><div style="color:#F2B01E">${"★".repeat(Math.min(5,Math.round(o.s)))}</div>${esc(o.t.length>120?o.t.slice(0,117)+"…":o.t)}<div class="s" style="margin-top:.8vh">${esc(o.by)}</div></div>`).join("")}</div>`;
   }
+  if (sl.k==="upd"){
+    const u=snap.updates[sl.i]; if(!u) return "";
+    if (u.type==="shoutout" && u.tech && snap.techs[u.tech]){ const nm=(S.techs[u.tech]||{}).display||firstName(snap.techs[u.tech].full);
+      return `<div class="kicker">${esc(u.title||"Shout-out")}</div><div class="spot">${av(u.tech,nm)}<div style="min-width:0"><div class="nm">${esc(nm)}</div><div class="ann" style="flex:none"><div class="msg" style="font-size:6vh">${esc(u.m)}</div></div></div></div>`; }
+    return `<div class="ann">${u.ic?`<div class="ic">${esc(u.ic)}</div>`:""}${u.title?`<div class="badge">${esc(u.title)}</div>`:""}<div class="msg">${esc(u.m)}</div></div>`;
+  }
+  if (sl.k==="sales"){
+    const R=salesRoster(true).map(r=>({...r, m:statsFor(r.t,"mtd")}));
+    const gc="5vh minmax(0,1.7fr) repeat(7,minmax(0,1fr))";
+    return `<div class="kicker">Everyone's sales · ${esc(monthName())} big · year to date small</div><div class="big-h">Sales board</div>
+      <div class="st-t"><div class="st-h" style="grid-template-columns:${gc}"><span></span><span></span><span>Sold</span><span>Sold #</span><span>Close %</span><span>Avg sale</span><span>Estimates</span><span>Open pipeline</span><span>Members</span></div>
+      <div class="scrollbox"><div class="scrollin">${R.map((r,i)=>`<div class="st-r ${i===0&&r.m.sold?"top":""}" style="grid-template-columns:${gc}"><div class="rk num">${i+1}</div><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}${r.side==="sales"?"<em>Sales</em>":r.side==="apprentice"?"<em>Apprentice</em>":"<em>Tech</em>"}</b></div>
+        <div class="c">${bigSmall(money(r.m.sold,true),money(r.y.sold,true))}</div><div class="c">${bigSmall(r.m.soldN,r.y.soldN)}</div><div class="c">${bigSmall(r.m.estN?pct(r.m.estClose):"—",r.y.estN?pct(r.y.estClose):"—")}</div><div class="c">${bigSmall(r.m.soldN?money(r.m.avgSale,true):"—",r.y.soldN?money(r.y.avgSale,true):"—")}</div><div class="c">${bigSmall(r.m.estN,r.y.estN)}</div><div class="c">${bigSmall(r.m.openN,money(r.m.openAmt,true))}</div><div class="c">${bigSmall(r.m.mem,r.y.mem)}</div></div>`).join("")}</div></div></div>`;
+  }
   if (sl.k==="ann"){
     const a=snap.anns[sl.i]; if(!a) return "";
     return `<div class="ann">${a.ic?`<div class="ic">${esc(a.ic)}</div>`:""}${a.b?`<div class="badge">${esc(a.b)}</div>`:""}<div class="msg">${esc(a.m)}</div>${a.s?`<div class="sub">${esc(a.s)}</div>`:""}</div>`;
   }
   return "";
 }
+function tickerHTML(){ const T0=(S.snap&&S.snap.updates||[]).filter(u=>u.type==="ticker"); if(!T0.length) return "";
+  const txt=T0.map(u=>`<span>${u.ic?esc(u.ic)+" ":""}${u.title?`<b>${esc(u.title)}:</b> `:""}${esc(u.m)}</span>`).join('<i>•</i>');
+  return `<div class="ticker"><div class="tk-in" style="animation-duration:${Math.max(20,T0.reduce((a,u)=>a+u.m.length,0)/6)}s">${txt}<i>•</i>${txt}</div></div>`; }
 function wxChip(){ const w=S.snap&&S.snap.weather; if(!w) return ""; const [ic,l]=WX(w.c); const d=w.days[0]; return `<div class="wx-chip" title="${esc(l)}"><span>${ic}</span><b class="num">${Math.round(w.t)}°</b>${d?`<small class="num">H ${Math.round(d.hi)}° · L ${Math.round(d.lo)}°</small>`:""}</div>`; }
+let lastShellKey="", lastTicker="";
 function renderBoard(){
   document.body.classList.add("tv");
   const sl = activeSlides(); if (S.slide>=sl.length) S.slide=0;
+  // light path: only swap the slide + progress dots (keeps the ticker scrolling and the DOM small)
+  const shellKey = [S.cfg.logoId, !!(S.portalLogo&&S.portalLogo.mark), S.canEdit].join("|");
+  if (document.querySelector("#tv") && shellKey===lastShellKey){
+    const stage=document.querySelector(".tv-stage"); stage.innerHTML=`<section class="slide on">${slideHTML(sl[S.slide])}</section>`;
+    const dots=document.querySelector(".dots"); dots.style.setProperty("--dur",S.cfg.rotateSec+"s"); dots.innerHTML=sl.map((_,i)=>`<i class="${i<S.slide?"done":i===S.slide?"cur":""}"></i>`).join("");
+    document.querySelector("#tv").classList.toggle("paused",S.paused); document.querySelector("#tvPause").textContent=S.paused?"Play":"Pause";
+    const wr=document.querySelector(".tv-right"); if(wr){ const w=wxChip(); const cur=wr.querySelector(".wx-chip"); if(cur) cur.outerHTML=w||""; else if(w) wr.insertAdjacentHTML("afterbegin",w); }
+    const th=tickerHTML(); if (th!==lastTicker){ lastTicker=th; const slot=document.querySelector("#tkslot"); if(slot) slot.innerHTML=th; }
+    armScroll(); tick(); schedule(); return;
+  }
+  lastShellKey=shellKey; lastTicker=tickerHTML();
   $("#app").innerHTML = `<div class="tv-shell ${S.paused?"paused":""}" id="tv">
     <div class="tv-top"><div class="brand">${logoHTML("Team KPI board · South Shore, MA")}</div>
       ${S.portalLogo&&S.portalLogo.mark&&!S.cfg.logoId?"":logoSrc()?`<div><div class="tv-title">Team KPI board</div><div class="tv-sub">South Shore, MA</div></div>`:`<div><div class="tv-title">Plumbing &amp; Mechanical</div><div class="tv-sub">Team KPI board · South Shore, MA</div></div>`}
       <div class="tv-right">${wxChip()}<div class="tv-clock" id="clock"></div></div>
     </div>
     <div class="tv-stage">${sl.map((s,i)=>`<section class="slide ${i===S.slide?"on":""}" aria-hidden="${i!==S.slide}">${i===S.slide?slideHTML(s):""}</section>`).join("")}</div>
+    <div id="tkslot">${lastTicker}</div>
     <div class="tv-foot"><div class="dots" style="--dur:${S.cfg.rotateSec}s">${sl.map((_,i)=>`<i class="${i<S.slide?"done":i===S.slide?"cur":""}"></i>`).join("")}</div>
       <span id="upd"></span>
       <div class="tv-ctl"><button type="button" id="tvPrev" aria-label="Previous">◀</button><button type="button" id="tvPause">${S.paused?"Play":"Pause"}</button><button type="button" id="tvNext" aria-label="Next">▶</button><button type="button" id="tvFs">Full screen</button>${S.canEdit?`<button type="button" id="tvAdmin">Admin</button>`:""}</div>
@@ -789,10 +941,25 @@ function renderBoard(){
   $("#tvPause").onclick=()=>{S.paused=!S.paused; renderBoard();};
   $("#tvFs").onclick=()=>{ const d=document.documentElement; if(document.fullscreenElement) document.exitFullscreen(); else if(d.requestFullscreen) d.requestFullscreen().catch(()=>{}); };
   if ($("#tvAdmin")) $("#tvAdmin").onclick=()=>{location.hash="admin";};
-  tick(); schedule();
+  armScroll(); tick(); schedule();
 }
-function go(d){ const n=activeSlides().length; const nx=(S.slide+d+n)%n; if (d>0 && nx===0) S.cycle=(S.cycle||0)+1; S.slide=nx; renderBoard(); }
-function schedule(){ clearTimeout(slideTimer); if(!S.paused && route()==="board") slideTimer=setTimeout(()=>go(1), S.cfg.rotateSec*1000); }
+let slideDur=0;
+function armScroll(){
+  slideDur=0;
+  document.querySelectorAll(".slide.on .scrollbox").forEach(box=>{
+    const inn=box.querySelector(".scrollin"); if(!inn) return;
+    const h=inn.scrollHeight; if (h <= box.clientHeight+4) return;
+    const gap=parseFloat(getComputedStyle(inn).rowGap)||0;
+    inn.insertAdjacentHTML("beforeend", inn.innerHTML);            // second copy = seamless loop
+    const dist=h+gap, pxPerSec=Math.max(20, window.innerHeight*0.045); // ~one row every 2 s
+    const secs=Math.max(8, dist/pxPerSec)/0.9;                       // first 10% holds at the top
+    inn.style.setProperty("--sh", dist+"px"); inn.style.setProperty("--sd", secs+"s"); inn.classList.add("run");
+    slideDur=Math.max(slideDur, secs);
+  });
+  if (slideDur){ const dots=document.querySelector(".dots"); if(dots) dots.style.setProperty("--dur", Math.max(S.cfg.rotateSec, slideDur)+"s"); }
+}
+function go(d){ lastAdvance=Date.now(); const n=activeSlides().length; const nx=(S.slide+d+n)%n; if (d>0 && nx===0) S.cycle=(S.cycle||0)+1; S.slide=nx; renderBoard(); }
+function schedule(){ clearTimeout(slideTimer); if(!S.paused && route()==="board") slideTimer=setTimeout(()=>go(1), Math.max(S.cfg.rotateSec, slideDur)*1000); }
 function tick(){
   const c=$("#clock"); if(c){ const d=new Date(); c.innerHTML=`${d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"})}<small>${d.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric"})}</small>`; }
   const u=$("#upd"); if(u) u.textContent = S.snap ? `Updated ${ago(S.snapAt)}${S.snap.dataThrough?" · data through "+new Date(S.snap.dataThrough+"T12:00").toLocaleDateString("en-US",{month:"short",day:"numeric"}):""}` : "";
@@ -822,14 +989,14 @@ function paneScore(){
   if (!S.snap) return `<div class="card"><h2>Scorecard</h2><p class="muted">No data yet. ${esc(S.sync.msg)}</p></div>`;
   const R = roster(false);
   const hidden = Object.keys(S.snap.techs).length - R.length;
-  const sel = S.sel && (R.find(r=>r.t.k===S.sel) || roster(false,"apprentice").find(r=>r.t.k===S.sel));
+  const sel = S.sel && (R.find(r=>r.t.k===S.sel) || roster(false,"apprentice").find(r=>r.t.k===S.sel) || roster(false,"sales").find(r=>r.t.k===S.sel));
   const c = coStats(S.period);
   return `<div class="card">
     <div class="row" style="justify-content:space-between;margin-bottom:12px">
       <div><h2>Tech scorecard</h2><div class="muted small">${esc(periodLabel(S.period))} · data through ${esc(S.snap.dataThrough||"—")} · tap a tech for month-by-month</div></div>
       <div class="seg" role="group" aria-label="Period">${["mtd","l30","ytd"].map(p=>`<button type="button" class="${S.period===p?"on":""}" data-period="${p}">${{mtd:"This month",l30:"Last 30 days",ytd:"Year to date"}[p]}</button>`).join("")}</div>
     </div>
-    <div class="tscroll"><table class="sc" style="min-width:1180px"><thead><tr><th>Tech</th><th>Grade</th><th>Score</th><th>Revenue</th><th>Jobs</th><th>Avg ticket</th><th>Close rate</th><th>Sold</th><th>Open est.</th><th>Points</th><th>Leads</th><th>GM %</th><th>$/hr</th><th>Callbacks</th><th>Mem.</th><th>Reviews</th><th>Rating</th></tr></thead><tbody>
+    <div class="tscroll"><table class="sc" style="min-width:1180px"><thead><tr><th>Tech</th><th>Grade</th><th>Score</th><th>Revenue</th><th>Jobs</th><th>Avg ticket</th><th>Close rate</th><th>Sold</th><th>Open est.</th><th>Points</th><th>Leads</th><th>GM %</th><th>$/hr</th><th>Callbacks</th><th>CB %</th><th>Efficiency</th><th>Overdue f/u</th><th>Mem.</th><th>Reviews</th><th>Rating</th></tr></thead><tbody>
     ${R.map(r=>`<tr class="tr ${S.sel===r.t.k?"sel":""}" data-sel="${esc(r.t.k)}">
       <td><div class="who">${av(r.t.k,r.name,"s")}<b>${esc(r.name)}</b></div></td>
       <td><span class="grade g${r.grade}">${r.grade}</span></td><td class="num"><b>${r.score}</b></td>
@@ -837,14 +1004,35 @@ function paneScore(){
       <td class="num">${pct(r.st.close)} <span class="muted small">(${r.st.opp})</span></td><td class="num">${money(r.st.sold)}</td>
       <td class="num">${r.st.openN} · ${money(r.st.openAmt,true)}</td><td class="num">${r.st.pts.toLocaleString()}</td><td class="num">${r.st.leads}</td><td class="num">${r.st.rev?pct(r.st.gmPct):"—"}</td><td class="num">${r.st.hrs?money(r.st.revHr):"—"}</td>
       <td class="num" style="${r.st.cb?"color:var(--bad);font-weight:800":""}">${r.st.cb}</td>
+      <td class="num">${r.st.jobs?pct(r.st.cbRate):"—"}</td><td class="num">${r.st.hrs?pct(r.st.eff):"—"}</td><td class="num" style="${r.st.overdue?"color:var(--warn);font-weight:800":""}">${r.st.overdue}</td>
       <td class="num">${r.st.mem}</td><td class="num">${r.st.rv}</td>
       <td>${stars(r.t.k)}</td></tr>`).join("")}
-      <tr><td><b>Company</b></td><td></td><td></td><td class="num"><b>${money(c.rev)}</b></td><td class="num">${c.jobs}</td><td class="num">${money(c.avg)}</td><td class="num">${pct(c.close)}</td><td class="num">${money(c.sold)}</td><td></td><td></td><td class="num">${c.leads}</td><td class="num">${c.rev?pct(c.gmPct):"—"}</td><td class="num">${c.hrs?money(c.revHr):"—"}</td><td></td><td></td><td></td><td></td></tr>
+      <tr><td><b>Company</b></td><td></td><td></td><td class="num"><b>${money(c.rev)}</b></td><td class="num">${c.jobs}</td><td class="num">${money(c.avg)}</td><td class="num">${pct(c.close)}</td><td class="num">${money(c.sold)}</td><td></td><td></td><td class="num">${c.leads}</td><td class="num">${c.rev?pct(c.gmPct):"—"}</td><td class="num">${c.hrs?money(c.revHr):"—"}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
     </tbody></table></div>
     ${hidden?`<p class="muted small" style="margin:10px 0 0">${hidden} other name${hidden>1?"s":""} in the data (office staff, former techs) hidden. Turn them on in Techs &amp; photos.</p>`:""}
   </div>
+  ${salesTable()}
   ${appTable()}
+  ${flagTable()}
   ${sel?detailHTML(sel):""}`;
+}
+function salesTable(){
+  const A = salesRoster(false); if(!A.length) return "";
+  return `<div class="card"><h2>Sales</h2><div class="muted small" style="margin-bottom:10px">Everyone who sold or wrote estimates (${esc(periodLabel(S.period))}), ranked by sold. The sales grade uses the Sales scoring rules for everyone; techs keep their tech grade on the scorecard above.</div>
+  <div class="tscroll"><table class="sc" style="min-width:980px"><thead><tr><th>Name</th><th>Side</th><th>Sales grade</th><th>Score</th><th>Sold</th><th>Sold #</th><th>Estimates</th><th>Close %</th><th>Avg sale</th><th>Open est.</th><th>Overdue f/u</th><th>Mem.</th><th>Rating</th></tr></thead><tbody>
+  ${A.map(r=>`<tr class="tr ${S.sel===r.t.k?"sel":""}" data-sel="${esc(r.t.k)}"><td><div class="who">${av(r.t.k,r.name,"s")}<b>${esc(r.name)}</b></div></td><td class="muted small">${r.side==="sales"?"Sales":r.side==="apprentice"?"Apprentice":"Tech"}</td>
+    <td><span class="grade g${r.sc.grade}">${r.sc.grade}</span></td><td class="num"><b>${r.sc.score}</b></td><td class="num">${money(r.st.sold)}</td><td class="num">${r.st.soldN}</td><td class="num">${r.st.estN}</td><td class="num">${r.st.estN?pct(r.st.estClose):"—"}</td><td class="num">${r.st.soldN?money(r.st.avgSale):"—"}</td><td class="num">${r.st.openN} · ${money(r.st.openAmt,true)}</td><td class="num" style="${r.st.overdue?"color:var(--bad);font-weight:800":""}">${r.st.overdue}</td><td class="num">${r.st.mem}</td><td>${stars(r.t.k)}</td></tr>`).join("")}</tbody></table></div></div>`;
+}
+function flagTable(){
+  const F=(S.snap.flags||[]); if(!S.snap.auto||!S.snap.auto.inst) return "";
+  const now=new Date(), M=now.getMonth(), from = S.period==="mtd" ? new Date(now.getFullYear(),M,1) : S.period==="l30" ? new Date(now-30*864e5) : new Date(now.getFullYear(),0,1);
+  const L=F.filter(f=>new Date(f.d+"T12:00")>=from);
+  const byTech={}; L.forEach(f=>byTech[f.tech]=(byTech[f.tech]||0)+1);
+  return `<div class="card"><h2>Install check</h2><div class="muted small" style="margin-bottom:10px">Installs count when the job type is an install and the ${S.snap.auto.instBy==="appointment"?"appointment length":"hours worked"} is over ${INSTALL_HOURS} hours (multi-day jobs add up all their appointments). These jobs ran over ${INSTALL_HOURS} hours <b>without</b> an install job type (${esc(periodLabel(S.period))}). Fix the job type in ServiceTitan, or leave it if it really was a long service call.</div>
+  ${L.length?`<p class="small" style="margin:0 0 10px"><b>${L.length} flagged</b> · ${Object.entries(byTech).sort((a,b)=>b[1]-a[1]).map(([k,v])=>esc(firstName(k))+" "+v).join(" · ")}</p>
+  <div class="tscroll"><table class="sc" style="min-width:760px"><thead><tr><th>Job #</th><th>Completed</th><th style="text-align:left">Tech</th><th style="text-align:left">Job type</th><th style="text-align:left">Business unit</th><th>${S.snap.auto.instBy==="appointment"?"Appt hours":"Hours"}</th><th>Revenue</th></tr></thead><tbody>
+  ${L.slice(0,60).map(f=>`<tr><td><b>${esc(f.n)}</b></td><td class="num">${esc(f.d)}</td><td style="text-align:left">${esc(f.tech)}</td><td style="text-align:left">${esc(f.type)}</td><td style="text-align:left" class="muted small">${esc(f.bu)}</td><td class="num"><b>${f.hrs}</b></td><td class="num">${money(f.rev)}</td></tr>`).join("")}
+  </tbody></table></div>${L.length>60?`<p class="muted small">Showing the 60 most recent.</p>`:""}`:`<div class="note ok">No long jobs missing an install job type.</div>`}</div>`;
 }
 function appTable(){
   const A = roster(false,"apprentice"); if(!A.length) return "";
@@ -863,15 +1051,15 @@ function monthTable(t){
     ...(t.att?[["Days worked",s=>s.daysW+" / "+s.sched],["Missed days",s=>s.missed],["Late clock-ins",s=>s.late],["PTO hours",s=>Math.round(s.pto)],["Hours clocked",s=>Math.round(s.clockHrs)]]:[])];
   return `<div class="card" style="margin-top:14px"><h3>${esc(t.full)} · month by month, ${S.snap.year}</h3><div class="tscroll"><table class="mtbl"><thead><tr><th></th>${MONTHS.slice(0,M+1).map((mn,m)=>`<th class="${m===M?"cur":""}">${mn}</th>`).join("")}<th class="ytd">YTD</th></tr></thead><tbody>
     ${rows.map(([n,f])=>`<tr><td>${n}</td>${ms.slice(0,M+1).map((s,m)=>`<td class="num ${m===M?"cur":""}">${f(s)}</td>`).join("")}<td class="num ytd">${f(y)}</td></tr>`).join("")}
-    <tr><td>Memberships</td>${MONTHS.slice(0,M+1).map((_,m)=>`<td class="num ${m===M?"cur":""}">${m===M?t.mem.mtd:"·"}</td>`).join("")}<td class="num ytd">${t.mem.ytd}</td></tr>
-    <tr><td>Reviews</td>${MONTHS.slice(0,M+1).map((_,m)=>`<td class="num ${m===M?"cur":""}">${m===M?t.rv.mtd:"·"}</td>`).join("")}<td class="num ytd">${t.rv.ytd}</td></tr>
-    </tbody></table></div><p class="muted small" style="margin-bottom:0">Memberships and reviews only have this month and year totals because the Leaderboard tab doesn't keep monthly history.</p></div>`;
+    <tr><td>Memberships</td>${MONTHS.slice(0,M+1).map((_,m)=>`<td class="num ${m===M?"cur":""}">${t.mem.m?t.mem.m[m]:(m===M?t.mem.mtd:"·")}</td>`).join("")}<td class="num ytd">${t.mem.ytd}</td></tr>
+    <tr><td>Reviews</td>${MONTHS.slice(0,M+1).map((_,m)=>`<td class="num ${m===M?"cur":""}">${t.rv.m?t.rv.m[m]:(m===M?t.rv.mtd:"·")}</td>`).join("")}<td class="num ytd">${t.rv.ytd}</td></tr>
+    </tbody></table></div><p class="muted small" style="margin-bottom:0">${S.snap.auto&&S.snap.auto.mem?"Memberships, reviews and callbacks come from ServiceTitan automatically. Reviews count for every tech named in the review.":"Memberships and reviews only have this month and year totals because the Leaderboard tab doesn't keep monthly history."}</p></div>`;
 }
 function detailHTML(r){
   const t=r.t; const o=S.techs[t.k]||{}; const today=Date.now();
   return `<div class="detail">
     <div class="card"><div class="row" style="margin-bottom:10px">${av(t.k,r.name,"m")}<div><h2>${esc(t.full)}</h2><div class="muted small">Score ${r.score} · grade ${r.grade} · ${esc(periodLabel(S.period))}</div></div></div>
-      ${(roleOf(t)==="apprentice"?APP_METRICS.filter(m=>((S.cfg.appMetrics||{})[m.k]||m).w>0):METRICS.filter(m=>(S.cfg.metrics[m.k]||{}).w>0)).map(m=>{const p=r.parts[m.k]; return `<div class="mbar"><span>${m.label}</span><div class="t"><i style="width:${p.s==null?0:Math.round(p.s*100)}%;${m.inverse&&p.v>0?"background:var(--bad)":""}"></i></div><span class="v num">${p.s==null?"not rated":fmtM(m,p.v)}</span></div>`;}).join("")}
+      ${(roleOf(t)==="apprentice"?APP_METRICS.filter(m=>((S.cfg.appMetrics||{})[m.k]||m).w>0):roleOf(t)==="sales"?SALES_METRICS.filter(m=>((S.cfg.salesMetrics||{})[m.k]||m).w>0):METRICS.filter(m=>(S.cfg.metrics[m.k]||{}).w>0)).map(m=>{const p=r.parts[m.k]; return `<div class="mbar"><span>${m.label}</span><div class="t"><i style="width:${p.s==null?0:Math.round(p.s*100)}%;${m.inverse&&p.v>0?"background:var(--bad)":""}"></i></div><span class="v num">${p.s==null?"not rated":fmtM(m,p.v)}</span></div>`;}).join("")}
       <p class="muted small">Bars show progress to each target in Scoring rules.</p>
       <h3 style="margin-top:14px">Manager notes</h3>
       <textarea id="notes" data-k="${esc(t.k)}" placeholder="Coaching notes, ride-along feedback, goals for next month">${esc(o.notes||"")}</textarea>
@@ -891,7 +1079,7 @@ function paneTechs(){
       return `<div class="tcard">${av(t.k,o.display||t.full,"m")}<div class="meta">
         <input type="text" value="${esc(o.display||firstName(t.full))}" data-disp="${esc(t.k)}" aria-label="Board name for ${esc(t.full)}">
         <div class="muted small" style="margin-top:4px">${esc(t.full)} · ${esc(t.team||(t.onBoard?t.status:"not on Leaderboard tab"))}${t.startDate?" · started "+esc(t.startDate):""}</div>
-        <label class="lbl">Grade as <select class="txt" style="width:auto;padding:3px 6px" data-role="${esc(t.k)}"><option value="tech" ${roleOf(t)==="tech"?"selected":""}>Technician</option><option value="apprentice" ${roleOf(t)==="apprentice"?"selected":""}>Apprentice</option></select></label>
+        <label class="lbl">Grade as <select class="txt" style="width:auto;padding:3px 6px" data-role="${esc(t.k)}"><option value="tech" ${roleOf(t)==="tech"?"selected":""}>Technician</option><option value="apprentice" ${roleOf(t)==="apprentice"?"selected":""}>Apprentice</option><option value="sales" ${roleOf(t)==="sales"?"selected":""}>Sales</option></select></label>
         <label class="lbl"><input type="checkbox" data-show="${esc(t.k)}" ${on?"checked":""}> Show on board and scorecard</label>
         ${canUp?`<div class="row" style="margin-top:8px"><label class="btn ghost small" style="padding:5px 10px">${o.photo?"Replace photo":"Add photo"}<input type="file" accept="image/*" data-photo="${esc(t.k)}" hidden></label>${o.photo?`<button class="btn ghost small" style="padding:5px 10px" type="button" data-unphoto="${esc(t.k)}">Remove</button>`:""}</div>`:""}
       </div></div>`;}).join("")}</div></div>`;
@@ -905,6 +1093,10 @@ function paneScoring(){
     <h3 style="margin-top:22px">Apprentices</h3><p class="muted small" style="margin-top:0">Apprentices are graded on attendance and time off from ServiceTitan instead of sales numbers.</p>
     <div class="fgrid"><span class="h">Metric</span><span class="h" style="text-align:right">Weight</span><span class="h" style="text-align:right">Monthly target</span>
     ${APP_METRICS.map(m=>`<span><b>${m.label}</b><div class="muted small">${m.hint}</div></span><input type="number" min="0" max="100" step="1" data-aw="${m.k}" value="${((S.cfg.appMetrics||{})[m.k]||m).w}" aria-label="${m.label} weight"><input type="number" min="0" step="any" data-atg="${m.k}" value="${((S.cfg.appMetrics||{})[m.k]||m).target}" aria-label="${m.label} target" ${m.k==="rating"||m.fmt==="%"?"disabled":""}>`).join("")}
+    </div>
+    <h3 style="margin-top:22px">Sales</h3><p class="muted small" style="margin-top:0">For people set to "Sales" (e.g. Ross).</p>
+    <div class="fgrid"><span class="h">Metric</span><span class="h" style="text-align:right">Weight</span><span class="h" style="text-align:right">Monthly target</span>
+    ${SALES_METRICS.map(m=>`<span><b>${m.label}</b><div class="muted small">${m.hint}</div></span><input type="number" min="0" max="100" step="1" data-sw="${m.k}" value="${((S.cfg.salesMetrics||{})[m.k]||m).w}"><input type="number" min="0" step="any" data-stg="${m.k}" value="${((S.cfg.salesMetrics||{})[m.k]||m).target}" ${m.k==="rating"?"disabled":""}>`).join("")}
     </div>
     <div class="row" style="margin-top:14px"><button class="btn" type="button" id="saveScoring">Save scoring rules</button><button class="btn ghost" type="button" id="resetScoring">Reset to defaults</button></div></div>`;
 }
@@ -948,8 +1140,8 @@ function wireAdmin(){
   document.querySelectorAll("[data-role]").forEach(i=>i.onchange=()=>saveTech(i.dataset.role,{role:i.value}));
   document.querySelectorAll("[data-photo]").forEach(i=>i.onchange=()=>i.files[0]&&uploadPhoto(i.dataset.photo,i.files[0]));
   document.querySelectorAll("[data-unphoto]").forEach(b=>b.onclick=()=>saveTech(b.dataset.unphoto,{photo:"", photoSrc:"removed"}));
-  const ss=$("#saveScoring"); if(ss) ss.onclick=()=>{ const m={}; METRICS.forEach(x=>{ m[x.k]={w:Math.max(0,+document.querySelector(`[data-w="${x.k}"]`).value||0), target:Math.max(0,+document.querySelector(`[data-tg="${x.k}"]`).value||x.target)}; }); const am={}; APP_METRICS.forEach(x=>{ am[x.k]={w:Math.max(0,+document.querySelector(`[data-aw="${x.k}"]`).value||0), target:Math.max(0,+document.querySelector(`[data-atg="${x.k}"]`).value||x.target)}; }); saveCfg({metrics:m, appMetrics:am},"Scoring rules saved"); };
-  const rs=$("#resetScoring"); if(rs) rs.onclick=()=>saveCfg({metrics:defaultCfg().metrics, appMetrics:defaultCfg().appMetrics},"Scoring reset to defaults");
+  const ss=$("#saveScoring"); if(ss) ss.onclick=()=>{ const m={}; METRICS.forEach(x=>{ m[x.k]={w:Math.max(0,+document.querySelector(`[data-w="${x.k}"]`).value||0), target:Math.max(0,+document.querySelector(`[data-tg="${x.k}"]`).value||x.target)}; }); const am={}; APP_METRICS.forEach(x=>{ am[x.k]={w:Math.max(0,+document.querySelector(`[data-aw="${x.k}"]`).value||0), target:Math.max(0,+document.querySelector(`[data-atg="${x.k}"]`).value||x.target)}; }); const sm={}; SALES_METRICS.forEach(x=>{ sm[x.k]={w:Math.max(0,+document.querySelector(`[data-sw="${x.k}"]`).value||0), target:Math.max(0,+document.querySelector(`[data-stg="${x.k}"]`).value||x.target)}; }); saveCfg({metrics:m, appMetrics:am, salesMetrics:sm},"Scoring rules saved"); };
+  const rs=$("#resetScoring"); if(rs) rs.onclick=()=>saveCfg({metrics:defaultCfg().metrics, appMetrics:defaultCfg().appMetrics, salesMetrics:defaultCfg().salesMetrics},"Scoring reset to defaults");
   const sb=$("#saveBoard"); if(sb) sb.onclick=()=>{ const sl={}; document.querySelectorAll("[data-slide]").forEach(c=>sl[c.dataset.slide]=c.checked); saveCfg({rotateSec:Math.min(120,Math.max(5,+$("#rotSec").value||15)), boardPeriod:$("#bPer").value, spotMode:$("#spMode").value, coSource:$("#coSrc").value, tvGrades:$("#tvGr").checked, slides:sl},"Board settings saved"); };
   const lu=$("#logoUp"); if(lu) lu.onchange=async()=>{ const f=lu.files[0]; if(!f) return; try{ const blob=f.type==="image/svg+xml"?f:await resize(f,800,false); const a=await S.assets.upload(blob); await saveCfg({logoId:a.id},"Logo updated"); }catch(e){ toast(uploadMsg(e)); } };
   const lr=$("#logoRm"); if(lr) lr.onclick=()=>saveCfg({logoId:""},"Using the Drive logo");
@@ -1177,27 +1369,31 @@ function hubMode(){
       S.sync={state:"ok",msg:"Live from the 3R Data Hub"}; render(true);
     }catch(e){ S.sync={state:"error",msg:"Couldn't reach the data hub. Showing the last numbers."}; if(!S.snap) render(); }
   };
-  pull(); setInterval(pull, 5*60*1000);
+  pull(); lightLoop(pull);
 }
 
 /* ===================== sheet mode (Google Sites embed / TV) ===================== */
 // Reads the KPI sheet directly with the same Google API key the original GitHub board used.
 const SHEET_KEY = "AIzaSyDEx9g5DCVefcTK8Qa1FGSN8mAMZKEifqQ";
-const SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Announcements","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","Automation Jobs"," Automation Estimates","Weather","Board_Config","Board_Techs"];
+const SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Announcements","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","Automation Jobs"," Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
+function fetchT(u, ms){ const c=new AbortController(); const t=setTimeout(()=>c.abort(), ms||25000); return fetch(u,{cache:"no-store",signal:c.signal}).finally(()=>clearTimeout(t)); }
 async function fetchTab(id, tab){
   const u=`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent("'"+tab+"'")}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING&key=${SHEET_KEY}`;
-  const r=await fetch(u,{cache:"no-store"}); if(!r.ok) return null; const j=await r.json(); return j.values||[];
+  const r=await fetchT(u); if(!r.ok) return null; const j=await r.json(); return j.values||[];
 }
 async function directWeather(){
   try{
-    const r=await fetch("https://api.open-meteo.com/v1/forecast?latitude=42.1615&longitude=-70.7928&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York&forecast_days=6");
+    const r=await fetchT("https://api.open-meteo.com/v1/forecast?latitude=42.1615&longitude=-70.7928&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York&forecast_days=6");
     const j=await r.json(); const c=j.current,d=j.daily;
     return {place:"Norwell, MA", t:c.temperature_2m, f:c.apparent_temperature, c:c.weather_code, w:c.wind_speed_10m, up:Date.now(), days:d.time.map((x,i)=>({d:x,c:d.weather_code[i],hi:d.temperature_2m_max[i],lo:d.temperature_2m_min[i],p:d.precipitation_probability_max[i]||0}))};
   }catch(e){ return null; }
 }
 function sheetMode(){
   const q=new URLSearchParams(location.search); const id=q.get("sheet")||DEFAULT_SHEET;
+  restoreCached();
+  let busy=false;
   const pull = async () => {
+    if (busy) return; busy=true;
     try{
       const tabs = await Promise.all(SHEET_TABS.map(t=>fetchTab(id,t).catch(()=>null)));
       const wb={SheetNames:[],Sheets:{}}; const rows={};
@@ -1210,10 +1406,42 @@ function sheetMode(){
       const cfgRows=rows["board_config"]||[]; const c={}; cfgRows.slice(1).forEach(r=>{ if(String(r[0]||"").trim()) c[String(r[0]).trim()]=r[1]; });
       const tRows=rows["board_techs"]||[]; const meta={}; tRows.slice(1).forEach(r=>{ const k=String(r[0]||"").trim().toLowerCase(); if(!k) return; meta[k]={display:String(r[1]||""), show:(r[2]===""||r[2]==null)?undefined:/^(y|yes|true|1)$/i.test(String(r[2])), photo:String(r[3]||""), rating:+r[4]||0, role:String(r[5]||"")||undefined}; });
       applyHubCfg(c); S.techs=meta; applySnapshot(snap, Date.now(), "sheet");
-      S.sync={state:"ok",msg:"Live from the KPI sheet"}; render(true);
+      S.sync={state:"ok",msg:"Live from the KPI sheet"}; saveCached(); render(true);
     }catch(e){ S.sync={state:"error",msg:(e&&e.message)||"Couldn't reach the sheet. Showing the last numbers."}; if(!S.snap) render(); }
+    finally{ busy=false; }
   };
-  pull(); setInterval(pull, 5*60*1000);
+  pull(); lightLoop(pull);
+}
+/* ---- TV reliability: light refresh schedule, offline cache, watchdog, nightly reload, screen awake ---- */
+// ServiceTitan data only changes at 5 AM and 1 PM, so the TV doesn't need to re-download all day.
+function nextPullMs(){ const h=new Date().getHours(); return (h>=6&&h<19) ? 15*60*1000 : 60*60*1000; }
+function lightLoop(pull){
+  const tick2=()=>{ setTimeout(()=>{ if(document.visibilityState!=="hidden") pull(); tick2(); }, nextPullMs()); }; tick2();
+  window.addEventListener("online", ()=>setTimeout(pull, 3000));
+}
+function saveCached(){ try{ localStorage.setItem("3r-board-cache", JSON.stringify({snap:S.snap, cfg:S.cfg, techs:S.techs, at:S.snapAt})); }catch(_){ /* too big or blocked: fine */ } }
+function restoreCached(){ try{ const c=JSON.parse(localStorage.getItem("3r-board-cache")||"null"); if(c&&c.snap){ S.snap=c.snap; S.cfg=Object.assign(defaultCfg(), c.cfg||{}); S.techs=c.techs||{}; S.snapAt=c.at||0; S.snapSource="cache"; S.sync={state:"ok",msg:"Showing saved numbers while reconnecting"}; render(); } }catch(_){} }
+let lastAdvance=Date.now();
+function reliability(){
+  // keep rotating even if something throws
+  window.addEventListener("error", ()=>{ if(route()==="board") schedule(); });
+  window.addEventListener("unhandledrejection", e=>{ e.preventDefault&&e.preventDefault(); if(route()==="board") schedule(); });
+  // watchdog: if slides stop moving, restart the rotation
+  setInterval(()=>{ if(route()==="board" && !S.paused && Date.now()-lastAdvance > (Math.max(S.cfg.rotateSec,slideDur)*1000)*2+10000){ try{ go(1); }catch(_){ location.reload(); } } }, 20000);
+  // nightly reload at ~3:30 AM clears memory so the TV can run for weeks
+  const now=new Date(), next=new Date(now); next.setHours(3,30,0,0); if(next<=now) next.setDate(next.getDate()+1);
+  setTimeout(()=>location.reload(), next-now);
+  // keep the screen awake: Wake Lock where supported, plus a tiny silent looping video (works on most smart-TV browsers)
+  const wake=async()=>{ try{ if("wakeLock" in navigator && document.visibilityState==="visible") await navigator.wakeLock.request("screen"); }catch(_){} };
+  wake(); document.addEventListener("visibilitychange", ()=>{ wake(); if(document.visibilityState==="visible") keep.play().catch(()=>{}); });
+  const keep=document.createElement("video"); keep.muted=true; keep.loop=true; keep.playsInline=true; keep.setAttribute("playsinline",""); keep.setAttribute("muted","");
+  keep.style.cssText="position:fixed;width:1px;height:1px;opacity:.01;left:0;bottom:0;pointer-events:none";
+  keep.innerHTML='<source src="data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAALeEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEeTbuMU6uEHFO7a1OsggLI7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiEDDiAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYiw2HJLY9Bt4pyBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhDuaygDgibCBELqBEJqBAhJUw2f8c3OgY8CAZ8iaRaOHRU5DT0RFUkSHjUxhdmY2MC4xNi4xMDBzc9ZjwItjxYiw2HJLY9Bt4mfIoUWjh0VOQ09ERVJEh5RMYXZjNjAuMzEuMTAyIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MTAuMDAwMDAwMDAwAB9DtnVAr+eBAKOjgQAAgBACAJ0BKhAAEAAARwiFhYiZhIgCAgAMDWAA/v+rUICjmYED6ACxAQABEBAAGAAwP/QMAAAA/v+rUICjmYEH0ACxAQABEBAAGAAwP/QMAAAA/v+rUICjmYELuACxAQABEBAAGAAwP/QMAAAA/v+rUICjmYEPoACxAQABEBAAGAAwP/QMAAAA/v+rUICjmYETiACxAQABEBAAGAAwP/QMAAAA/v+rUIAfQ7Z17+eCF3CjmYEAAACxAQABEBAAGAAwP/QMAAAA/v+rUICjmIED6ACRAQABEBAUYADA/9AwAAD+/6tQgKOZgQfQALEBAAEQEAAYADA/9AwAAAD+/6tQgKOZgQu4ALEBAAEQEAAYADA/9AwAAAD+/6tQgBxTu2uRu4+zgQC3iveBAfGCAZ/wgQM=" type="video/webm"><source src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAANLbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAJxAAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAnV0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAJxAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAACcQAAAAAAABAAAAAAHtbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAACgABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABmG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAVhzdGJsAAAAuHN0c2QAAAAAAAAAAQAAAKhhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAALmF2Y0MBQsAK/+EAFmdCwArZHsBEAAADAAQAAAMACDxImSABAAVoy4PLIAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAAAJHAAACRwAAABhzdHRzAAAAAAAAAAEAAAAKAABAAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAAKAAAAAQAAADxzdHN6AAAAAAAAAAAAAAAKAAAChgAAAAoAAAAKAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAABRzdGNvAAAAAAAAAAEAAAN7AAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY2MC4xNi4xMDAAAAAIZnJlZQAAAuFtZGF0AAACcAYF//9s3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzEwOCAzMWUxOWY5IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyMyAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTAgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MToweDExMSBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MCBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0wIHdlaWdodHA9MCBrZXlpbnQ9MjUwIGtleWludF9taW49MSBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAAA5liIQF////D0UAAVefgAAAAAZBmjgL+oAAAAAGQZpUAv6gAAAABUGaYBf1AAAABUGagBf1AAAABUGaoBf1AAAABUGawBf1AAAABUGa4Bf1AAAABUGbABb1AAAABUGbIBX1" type="video/mp4">';
+  document.body.appendChild(keep); keep.play().catch(()=>{});
+  const kick=()=>{ keep.play().catch(()=>{}); wake(); const d=document.documentElement; if(!document.fullscreenElement && d.requestFullscreen) d.requestFullscreen().catch(()=>{}); };
+  document.addEventListener("click", kick, {once:true}); document.addEventListener("keydown", kick, {once:true});
+  // extra safety: fresh reload every 6 hours (skips if paused by a person)
+  setInterval(()=>{ if(!S.paused) location.reload(); }, 6*3600*1000);
 }
 function applyHubCfg(c){
   const cfg=defaultCfg();
@@ -1230,12 +1458,12 @@ setInterval(tick, 30000);
 render();
 (async function boot(){
   const C = window.claude;
-  if (!C || typeof C.use!=="function"){ if (new URLSearchParams(location.search).get("hub")) hubMode(); else sheetMode(); return; }
+  if (!C || typeof C.use!=="function"){ reliability(); if (new URLSearchParams(location.search).get("hub")) hubMode(); else sheetMode(); return; }
   const [user, db] = await Promise.all([C.use("user").catch(()=>null), C.use("db").catch(()=>null)]);
   if (user){ try{ S.canEdit = !!(await user.canEdit()); S.isOwner = !!(await user.isOwner()); }catch(_){} }
   S.db = db;
   if (db){
-    db.doc("config/settings").onSnapshot(s=>{ if(s.exists){ const d=s.data(); S.cfg={...defaultCfg(), ...d, slides:{...defaultCfg().slides, ...(d.slides||{})}, metrics:{...defaultCfg().metrics, ...(d.metrics||{})}, appMetrics:{...defaultCfg().appMetrics, ...(d.appMetrics||{})}}; render(true);} }, ()=>{});
+    db.doc("config/settings").onSnapshot(s=>{ if(s.exists){ const d=s.data(); S.cfg={...defaultCfg(), ...d, slides:{...defaultCfg().slides, ...(d.slides||{})}, metrics:{...defaultCfg().metrics, ...(d.metrics||{})}, appMetrics:{...defaultCfg().appMetrics, ...(d.appMetrics||{})}, salesMetrics:{...defaultCfg().salesMetrics, ...(d.salesMetrics||{})}}; render(true);} }, ()=>{});
     db.collection("techs").onSnapshot(q=>{ const o={}; q.docs.forEach(d=>o[d.id]=d.data()); S.techs=o; const ae=document.activeElement; if(ae && (ae.id==="notes"||ae.dataset&&ae.dataset.disp)) return; render(true); }, ()=>{});
     db.doc("board/portallogo").onSnapshot(s=>{ if(s.exists) applyPortalLogo({mark:s.data().mark, word:s.data().word}); }, ()=>{});
     db.doc("board/logo").onSnapshot(s=>{ if(s.exists){ const d=s.data().data; if(d && d!==S.logoData){ S.logoData=d; render(true);} } }, ()=>{});

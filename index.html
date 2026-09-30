@@ -260,17 +260,18 @@ body.tv .hdr{display:none}
 .st-r .rk{font-stretch:125%;font-weight:900;font-size:3.4vh;color:#5E747D}.st-r.top .rk{color:var(--blue)}
 .st-r .who em{display:block;font-style:normal;font-size:1.4vh;color:var(--blue);font-weight:700;font-stretch:100%;margin-top:.3vh}
 .slide .scrollin .ld-r{flex:none;height:9.6vh;max-height:none}
-.am-h,.am-r{display:grid;gap:.8vw;align-items:center;padding:0 1.2vw}
-.am-h{font-size:1.55vh;color:#8397A0;font-weight:700;padding-bottom:.8vh}
+.am-h,.am-r{display:grid;column-gap:1.6vw;align-items:center;padding:0 1.4vw}
+.am-h{font-size:min(1.55vh,.8vw);color:#8397A0;font-weight:700;padding-bottom:.8vh}
+.am-h span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .am-h span{text-align:right}
 .am-r{flex:none;height:7.6vh;background:rgba(18,25,28,.85);border:1px solid #23313A;border-radius:1.2vh}
 .am-r.sales{border-color:rgba(38,164,203,.45)}
-.am-r .who{gap:.9vw;min-width:0}.am-r .av{width:5.6vh;height:5.6vh;font-size:2.1vh}
-.am-r .who b{font-stretch:115%;font-weight:900;font-size:2.7vh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.05}
+.am-r .who{gap:.8vw;min-width:0}.am-r .av{width:min(5.6vh,3vw);height:min(5.6vh,3vw);font-size:min(2.1vh,1.1vw)}
+.am-r .who b{font-stretch:115%;font-weight:900;font-size:min(2.7vh,1.4vw);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.05}
 .am-r .who em{display:block;font-style:normal;font-size:1.4vh;color:var(--blue);font-weight:700;font-stretch:100%}
-.am-r .grade{width:5vh;height:5vh;font-size:2.8vh;border-radius:.9vh}
-.am-r .c{text-align:right;font-stretch:112%;font-weight:900;font-size:2.6vh;white-space:nowrap}
-.am-r .c small{display:block;font-size:1.4vh;color:#9FB1B8;font-weight:700;font-stretch:100%}
+.am-r .grade{width:min(5vh,2.8vw);height:min(5vh,2.8vw);font-size:min(2.8vh,1.5vw);border-radius:.9vh}
+.am-r .c{text-align:right;font-stretch:108%;font-weight:900;font-size:min(2.5vh,1.25vw);white-space:nowrap;overflow:hidden;text-overflow:clip;min-width:0}
+.am-r .c small{display:block;font-size:min(1.4vh,.75vw);color:#9FB1B8;font-weight:700;font-stretch:100%}
 .ticker{overflow:hidden;white-space:nowrap;border-top:1px solid #23313A;border-bottom:1px solid #23313A;background:rgba(38,164,203,.10);margin-top:1vh;padding:.9vh 0;font-size:2.4vh;font-weight:700}
 .tk-in{display:inline-block;padding-left:100%;animation:tick linear infinite}
 .tk-in i{color:var(--blue);font-style:normal;margin:0 2vw}.tk-in b{color:var(--blue)}
@@ -832,8 +833,11 @@ function slideHTML(sl){
   if (sl.k==="all"){
     const R=[...roster(true), ...roster(true,"sales")].map(r=>({...r, sales:roleOf(r.t)==="sales"}));
     if(!R.length) return "";
-    const cols=[["Points",r=>r.st.pts.toLocaleString()],["Revenue",r=>money(r.st.rev,true)],["Jobs",r=>r.st.jobs],["Avg ticket",r=>money(r.st.avg)],["Close %",r=>r.st.opp?pct(r.st.close):"—"],["Sold",r=>money(r.st.sold,true)],["Avg sale",r=>r.st.soldN?money(r.st.avgSale,true):"—"],["Open est.",r=>`${r.st.openN}<small>${money(r.st.openAmt,true)}</small>`],["Members",r=>r.st.mem],["Reviews",r=>r.st.rv],["Installs",r=>r.st.inst],["Leads",r=>r.st.leads],["Callbacks",r=>`<span style="color:${r.st.cb?"#FF8A80":"#fff"}">${r.st.cb}</span>`]];
-    const gc=`minmax(0,2.1fr) ${grades?"5.4vh ":""}repeat(${cols.length},minmax(0,1fr))`;
+    const shortN=n=>{ n=Math.round(+n||0); return n>=10000?(n/1000).toFixed(n>=100000?0:1).replace(/\.0$/,"")+"K":n.toLocaleString(); };
+    const sm=v=>money(v, Math.abs(v)>=10000);
+    // [label, value, relative width] — widths sized to the longest value each column can show
+    const cols=[["Points",r=>shortN(r.st.pts),1.05],["Revenue",r=>money(r.st.rev,true),1.1],["Jobs",r=>r.st.jobs,.7],["Avg ticket",r=>r.st.paid?sm(r.st.avg):"—",1.15],["Close %",r=>r.st.opp?pct(r.st.close):"—",.95],["Sold",r=>money(r.st.sold,true),1.1],["Avg sale",r=>r.st.soldN?sm(r.st.avgSale):"—",1.15],["Open est.",r=>`${r.st.openN}<small>${money(r.st.openAmt,true)}</small>`,1],["Members",r=>r.st.mem,.95],["Reviews",r=>r.st.rv,.9],["Installs",r=>r.st.inst,.9],["Leads",r=>r.st.leads,.8],["Callbacks",r=>`<span style="color:${r.st.cb?"#FF8A80":"#fff"}">${r.st.cb}</span>`,1]];
+    const gc=`minmax(0,2.5fr) ${grades?"min(5.4vh,3vw) ":""}${cols.map(c=>`minmax(0,${c[2]}fr)`).join(" ")}`;
     return `<div class="kicker">${esc(periodLabel(P))} · every metric</div><div class="big-h" style="margin-bottom:1.4vh">Team scoreboard</div>
       <div class="am-h" style="grid-template-columns:${gc}"><span style="text-align:left">Name</span>${grades?"<span></span>":""}${cols.map(c=>`<span>${c[0]}</span>`).join("")}</div>
       <div class="scrollbox"><div class="scrollin am">${R.map(r=>`<div class="am-r ${r.sales?"sales":""}" style="grid-template-columns:${gc}"><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}${r.sales?"<em>Sales</em>":""}</b></div>${grades?`<div class="grade g${r.grade}">${r.grade}</div>`:""}${cols.map(c=>`<div class="c num">${c[1](r)}</div>`).join("")}</div>`).join("")}</div></div>`;

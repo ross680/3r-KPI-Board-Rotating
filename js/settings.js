@@ -48,7 +48,8 @@
     {k:"eff",    label:"Efficiency",       fmt:"%",  target:1,     w:0,  hint:"Sold hours ÷ hours worked"},
     {k:"estClose",label:"Estimate close %",fmt:"%",  target:0.45,  w:0,  hint:"Estimates sold ÷ estimates written"},
     {k:"avgSale",label:"Average sale",     fmt:"$",  target:3500,  w:0,  hint:"Sold $ ÷ estimates sold"},
-    {k:"overdue",label:"Overdue follow-ups",fmt:"#", target:3,     w:0,  inverse:true, hint:"Open estimates past their follow-up date"}
+    {k:"overdue",label:"Overdue follow-ups",fmt:"#", target:3,     w:0,  inverse:true, hint:"Open estimates past their follow-up date"},
+    {k:"flips", label:"Flips",            fmt:"#",  target:4,     w:0,  ytdScale:true, hint:"Logged by hand on the Flips tab. Weight 0 leaves it out of the grade."}
   ];
   var SALES_METRICS = [
     {k:"sold",    label:"Sold revenue",      fmt:"$", target:75000, w:35, ytdScale:true, hint:"Estimates sold per month"},
@@ -146,6 +147,46 @@
     // A metric stops at 100% of its target. A close rate over 100% still grades as 100%.
     capScoreAtTarget: true
   };
+
+  /* Shown only when the Announcements tab has no real messages.
+     The welcome line below is real: it is added even when the tab has other rows. */
+  var DEFAULT_ANNOUNCEMENTS = [
+    { message: "Boiler season is here: tune-ups and no-heat calls are ramping up.", priority: "normal", showOn: "both", example: true },
+    { message: "Sell maintenance memberships on every heating call.", priority: "normal", showOn: "both", example: true },
+    { message: "Carbon monoxide safety: test CO on every fuel-burning appliance.", priority: "normal", showOn: "both", example: true },
+    { message: "Check the on-call roster and claim your weeks; holiday weeks pay extra points.", priority: "normal", showOn: "both", example: true },
+    { message: "Thank you for the 5-star reviews: keep them coming.", priority: "normal", showOn: "both", example: true }
+  ];
+  // Oct 26 through Nov 16, 2026 is three weeks, inclusive, in America/New_York.
+  var WELCOME_ANNOUNCEMENT = {
+    message: "Welcome to the team, Justin and Eric!",
+    detail: "",
+    start: "2026-10-26",
+    end: "2026-11-16",
+    priority: "high",
+    showOn: "both",
+    welcome: true,
+    names: ["Justin", "Eric"],
+    icon: "🎉",
+    badge: "Welcome"
+  };
+  // Prizes stay TBD until Ross fills the Contest tab. This row is used only when that tab
+  // has no row for the current month, and only while the month is November 2026.
+  var DEFAULT_CONTEST = {
+    month: "2026-11",
+    title: "Flip Frenzy",
+    metric: "flips",
+    prize1: "TBD",
+    prize2: "TBD",
+    prize3: "TBD",
+    notes: "",
+    eligible: "techs",
+    fallback: true
+  };
+  // Company flips this month. Board_Config key flip_goal replaces this number.
+  var FLIP_GOAL = 20;
+  // Ticker line for a flip whose date includes a clock time inside this many hours.
+  var FLIP_ALERT_HOURS = 6;
   var SLIDES = [
     {k:"goal",  label:"Monthly goal (install + service split)"},
     {k:"trend", label:"Revenue by month"},
@@ -158,6 +199,8 @@
     {k:"wx",    label:"Weather (needs the sheet script)"},
     {k:"rv",    label:"Google reviews"},
     {k:"ann",   label:"Announcements"},
+    {k:"flips", label:"Flip tracker"},
+    {k:"contest", label:"Monthly contest"},
     {k:"sales", label:"Sales board"}
   ];
 
@@ -166,7 +209,7 @@
   var PHOTO_FOLDER = "11gVMpNygKLHh7vHBqly2c3lj9WwNef_j";
 
   // Tab names must match the sheet exactly. "Automation Estimates" has no leading space.
-  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Announcements","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","ST Reviews","ST Callbacks","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
+  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Announcements","Contest","Flips","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","ST Reviews","ST Callbacks","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
 
   function defaultCfg() {
     return {
@@ -175,7 +218,7 @@
       metrics: Object.fromEntries(METRICS.map(function (m) { return [m.k, {w:m.w, target:m.target}]; })),
       appMetrics: Object.fromEntries(APP_METRICS.map(function (m) { return [m.k, {w:m.w, target:m.target}]; })),
       salesMetrics: Object.fromEntries(SALES_METRICS.map(function (m) { return [m.k, {w:m.w, target:m.target}]; })),
-      logoId: "", tvGrades: true
+      logoId: "", tvGrades: true, flipGoal: FLIP_GOAL
     };
   }
 
@@ -187,6 +230,8 @@
     FIELD_TEAM: FIELD_TEAM, GRACE_MIN: GRACE_MIN, INSTALL_HOURS: INSTALL_HOURS,
     INSTALL_TYPE: INSTALL_TYPE, NOT_INSTALL: NOT_INSTALL, INSTALL_REVENUE: INSTALL_REVENUE,
     RULES: RULES, SLIDES: SLIDES,
+    DEFAULT_ANNOUNCEMENTS: DEFAULT_ANNOUNCEMENTS, WELCOME_ANNOUNCEMENT: WELCOME_ANNOUNCEMENT,
+    DEFAULT_CONTEST: DEFAULT_CONTEST, FLIP_GOAL: FLIP_GOAL, FLIP_ALERT_HOURS: FLIP_ALERT_HOURS,
     LOGO_FILE: LOGO_FILE, LOGO_PDF: LOGO_PDF, PHOTO_FOLDER: PHOTO_FOLDER,
     SHEET_TABS: SHEET_TABS, defaultCfg: defaultCfg
   };

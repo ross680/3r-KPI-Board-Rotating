@@ -193,6 +193,10 @@
     take(sheetRows(wb, "ST Memberships"), function (r) { return String(r[0]).trim().toLowerCase() === "membership id"; }, ["sold by"]);
     take(sheetRows(wb, "ST Reviews"), function (r) { return String(r[0]).trim().toLowerCase() === "published"; }, ["technician"]);
     take(sheetRows(wb, "Board_Updates"), function (r) { return String(r[0]).trim().toLowerCase() === "posted"; }, ["tech"]);
+    var flipHead = flipHeader(sheetRows(wb, "Flips"));
+    if (flipHead.i >= 0 && flipHead.tech != null) {
+      sheetRows(wb, "Flips").slice(flipHead.i + 1).forEach(function (r) { names.see(r[flipHead.tech]); });
+    }
   }
   /* Label on the board: the saved display name, otherwise the first name, otherwise the full name when that first name is shared. */
   function displayName(t, techs, meta) {
@@ -319,6 +323,601 @@
     var sh = m ? +m[1] : 8;
     var sm = m ? +m[2] : 0;
     return sh * 60 + sm + SETTINGS.GRACE_MIN;
+  }
+
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function monthKeyFromParts(y, m) { return y + "-" + pad2(m + 1); }
+  function monthKeyOf(date) {
+    if (!date) return "";
+    var p = nyParts(date);
+    return monthKeyFromParts(p.y, p.m);
+  }
+  function monthKeyNow(now) {
+    var p = nyParts(now || nyNow());
+    return monthKeyFromParts(p.y, p.m);
+  }
+  function parseMonthKey(v) {
+    if (v instanceof Date) return monthKeyOf(v);
+    if (typeof v === "number" && isFinite(v) && v > 20000 && v < 80000) {
+      var excel = toDate(v);
+      return excel ? monthKeyOf(excel) : "";
+    }
+    var s = String(v == null ? "" : v).trim();
+    if (!s) return "";
+    var ym = s.match(/^(\d{4})[-/](\d{1,2})/);
+    if (ym) return ym[1] + "-" + pad2(+ym[2]);
+    var my = s.match(/^(\d{1,2})[-/](\d{4})$/);
+    if (my) return my[2] + "-" + pad2(+my[1]);
+    var months = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+    var named = s.match(/^([A-Za-z]+)\s+(\d{4})$/);
+    if (named && months[named[1].slice(0, 3).toLowerCase()]) return named[2] + "-" + pad2(months[named[1].slice(0, 3).toLowerCase()]);
+    return "";
+  }
+  function asDate(v) {
+    if (!v) return null;
+    if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+    if (typeof v === "number" && isFinite(v)) return new Date(v);
+    if (typeof v === "string") {
+      var d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  }
+  function dateHasTime(v) {
+    if (v == null || v === "") return false;
+    if (typeof v === "number" && isFinite(v)) return Math.abs(v - Math.floor(v)) > (1 / 1440);
+    if (v instanceof Date) {
+      var p = nyParts(v);
+      return !!(p.hh || p.mm || p.ss);
+    }
+    return /\d{1,2}:\d{2}/.test(String(v));
+  }
+  function convertedFlag(v) {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (typeof v === "number") {
+      if (v === 1) return true;
+      if (v === 0) return false;
+    }
+    if (v == null) return null;
+    var s = String(v).trim();
+    if (!s) return null;
+    if (/^(y|yes|true|1)$/i.test(s)) return true;
+    if (/^(n|no|false|0)$/i.test(s)) return false;
+    return null;
+  }
+  function normHead(s) {
+    return String(s || "").trim().toLowerCase()
+      .replace(/\(.*?\)/g, " ")
+      .replace(/\$/g, "")
+      .replace(/['’]/g, "")
+      .replace(/\s*\/\s*/g, "/")
+      .replace(/#/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  function headerMap(row) {
+    var h = {};
+    (row || []).forEach(function (c, i) {
+      var k = normHead(c);
+      if (k && h[k] == null) h[k] = i;
+    });
+    return h;
+  }
+  function pickCol(h, names) {
+    for (var i = 0; i < names.length; i++) if (h[names[i]] != null) return h[names[i]];
+    return null;
+  }
+  function wbHas(wb, name) {
+    if (!wb) return false;
+    var want = String(name).trim().toLowerCase();
+    if (wb.__rows) return Object.prototype.hasOwnProperty.call(wb.__rows, want);
+    if (wb.SheetNames) return wb.SheetNames.some(function (n) { return String(n).trim().toLowerCase() === want; });
+    return false;
+  }
+  /* Flips are typed by the office. Nothing on ST Jobs or ST Estimates counts as a flip. */
+  function flipHeader(rows) {
+    var aliases = {
+      date: ["date", "posted", "when"],
+      tech: ["tech", "technician", "name", "tech name"],
+      customer: ["customer/job", "customer", "job", "job number", "customer/job number"],
+      type: ["type", "kind"],
+      converted: ["converted", "converted y/n", "won"],
+      sold: ["sold", "sold amount", "amount"],
+      notes: ["notes", "note"],
+      month: ["month", "yyyy-mm"],
+      count: ["count", "flips", "flip count", "total"]
+    };
+    rows = rows || [];
+    for (var r = 0; r < Math.min(rows.length, 15); r++) {
+      var h = headerMap(rows[r]);
+      var date = pickCol(h, aliases.date);
+      var tech = pickCol(h, aliases.tech);
+      var month = pickCol(h, aliases.month);
+      var count = pickCol(h, aliases.count);
+      if (tech == null) continue;
+      if (date != null) {
+        return {
+          i: r, layout: "detail", tech: tech, date: date,
+          customer: pickCol(h, aliases.customer), type: pickCol(h, aliases.type),
+          converted: pickCol(h, aliases.converted), sold: pickCol(h, aliases.sold),
+          notes: pickCol(h, aliases.notes)
+        };
+      }
+      if (month != null || count != null) {
+        return { i: r, layout: "summary", tech: tech, month: month, count: count };
+      }
+    }
+    return { i: -1, layout: "none", tech: null };
+  }
+  function cellAt(row, idx) { return idx == null ? "" : row[idx]; }
+  function readFlipEntries(rows, names) {
+    rows = rows || [];
+    var head = flipHeader(rows);
+    var entries = [];
+    if (head.i < 0) return { layout: "none", entries: entries };
+    rows.slice(head.i + 1).forEach(function (r) {
+      var rawName = cleanPersonName(cellAt(r, head.tech));
+      if (!rawName || rawName.charAt(0) === "←" || rawName.charAt(0) === "#") return;
+      if (/^(tech|technician|name|tech name)$/i.test(rawName)) return;
+      var techKey = names ? names.resolve(rawName, "Flips") : key(rawName);
+      var label = (techKey && names && names.people[techKey] && names.people[techKey].full) || rawName;
+      if (head.layout === "summary") {
+        var mk = parseMonthKey(cellAt(r, head.month));
+        var count = num(cellAt(r, head.count));
+        if (!mk || !(count > 0)) return;
+        entries.push({
+          techKey: techKey, techLabel: label, written: rawName, month: mk, count: count,
+          at: null, hasTime: false, converted: null, sold: null, type: "", customer: "", notes: "", layout: "summary"
+        });
+        return;
+      }
+      var rawDate = cellAt(r, head.date);
+      var at = toDate(rawDate);
+      if (!at) return;
+      var soldRaw = cellAt(r, head.sold);
+      var soldBlank = head.sold == null || soldRaw == null || String(soldRaw).trim() === "";
+      entries.push({
+        techKey: techKey, techLabel: label, written: rawName, month: monthKeyOf(at), count: 1,
+        at: at, hasTime: dateHasTime(rawDate), converted: convertedFlag(cellAt(r, head.converted)),
+        sold: soldBlank ? null : num(soldRaw),
+        type: String(cellAt(r, head.type) || "").trim(),
+        customer: String(cellAt(r, head.customer) || "").trim(),
+        notes: String(cellAt(r, head.notes) || "").trim(),
+        layout: "detail"
+      });
+    });
+    return { layout: head.layout, entries: entries };
+  }
+  function showOnValue(v) {
+    var s = String(v == null ? "" : v).trim().toLowerCase();
+    if (s === "slide" || s === "slides") return "slide";
+    if (s === "ticker" || s === "footer") return "ticker";
+    if (!s || s === "both" || s === "all") return "both";
+    return "both";
+  }
+  function ymdOrBlank(v) {
+    if (v == null || String(v).trim() === "") return "";
+    var d = toDate(v);
+    return d ? nyYMD(d) : "";
+  }
+  function readAnnouncements(rows) {
+    rows = rows || [];
+    if (!rows.length) return [];
+    var h = headerMap(rows[0]);
+    var named = h.message != null && (h["start date"] != null || h.start != null || h["end date"] != null || h.end != null || h.priority != null || h["show on"] != null || h.show != null || h.detail != null);
+    var start = (h.message != null || h.icon != null || h.badge != null) ? 1 : 0;
+    var out = [];
+    for (var i = start; i < rows.length; i++) {
+      var r = rows[i] || [];
+      if (/^[💡⚠]/u.test(String(r[0] || ""))) continue;
+      if (named) {
+        var msg = String(cellAt(r, h.message) || "").trim();
+        if (!msg || /^[💡⚠]/u.test(msg)) continue;
+        var detail = h.detail != null ? String(cellAt(r, h.detail) || "").trim() : "";
+        if (!detail && h.sub != null) detail = String(cellAt(r, h.sub) || "").trim();
+        var pri = String(h.priority != null ? cellAt(r, h.priority) : "").trim().toLowerCase();
+        out.push({
+          message: msg.slice(0, 240),
+          detail: detail.slice(0, 240),
+          start: ymdOrBlank(h["start date"] != null ? cellAt(r, h["start date"]) : (h.start != null ? cellAt(r, h.start) : "")),
+          end: ymdOrBlank(h["end date"] != null ? cellAt(r, h["end date"]) : (h.end != null ? cellAt(r, h.end) : "")),
+          priority: (pri === "high" || pri === "urgent") ? "high" : "normal",
+          showOn: showOnValue(h["show on"] != null ? cellAt(r, h["show on"]) : (h.show != null ? cellAt(r, h.show) : "")),
+          icon: h.icon != null ? String(cellAt(r, h.icon) || "").trim() : "",
+          badge: h.badge != null ? String(cellAt(r, h.badge) || "").trim() : "",
+          example: false, welcome: false, legacy: false, names: null
+        });
+      } else {
+        var msg2 = String(r[2] || "").trim();
+        if (!msg2) continue;
+        out.push({
+          message: msg2.slice(0, 240),
+          detail: String(r[3] == null ? "" : r[3]).trim().slice(0, 240),
+          start: "", end: "", priority: "normal", showOn: "slide",
+          icon: String(r[0] || "").trim(), badge: String(r[1] || "").trim(),
+          example: false, welcome: false, legacy: true, names: null
+        });
+      }
+    }
+    return out;
+  }
+  function announcementActive(a, now) {
+    if (!a || !String(a.message || a.m || "").trim()) return false;
+    now = now || nyNow();
+    var today = nyDayIndex(now);
+    if (a.start) {
+      var s = toDate(a.start);
+      if (s && nyDayIndex(s) > today) return false;
+    }
+    if (a.end) {
+      var e = toDate(a.end);
+      if (e && nyDayIndex(e) < today) return false;
+    }
+    return true;
+  }
+  function cloneAnn(a) {
+    return {
+      message: a.message, detail: a.detail || "", start: a.start || "", end: a.end || "",
+      priority: a.priority || "normal", showOn: a.showOn || "both", icon: a.icon || "",
+      badge: a.badge || "", example: !!a.example, welcome: !!a.welcome,
+      names: a.names || null, legacy: !!a.legacy
+    };
+  }
+  function activeAnnouncements(rows, now) {
+    now = now || nyNow();
+    var parsed = readAnnouncements(rows);
+    var base = parsed.length
+      ? parsed.map(cloneAnn)
+      : (SETTINGS.DEFAULT_ANNOUNCEMENTS || []).map(function (a) {
+        return cloneAnn(Object.assign({ detail: "", start: "", end: "", icon: "", badge: "Example" }, a));
+      });
+    var welcome = SETTINGS.WELCOME_ANNOUNCEMENT;
+    if (welcome) {
+      var msg = String(welcome.message || "").trim().toLowerCase();
+      var existing = null;
+      base.forEach(function (a) {
+        if (String(a.message || "").trim().toLowerCase() === msg) existing = a;
+      });
+      if (existing) {
+        existing.welcome = true;
+        existing.names = welcome.names;
+        if (existing.priority !== "high") existing.priority = "high";
+        if (!existing.badge) existing.badge = welcome.badge || "Welcome";
+        if (!existing.icon) existing.icon = welcome.icon || "";
+        if (!existing.showOn) existing.showOn = "both";
+      } else if (announcementActive(welcome, now)) {
+        base.unshift(cloneAnn(welcome));
+      }
+    }
+    var high = [], rest = [];
+    base.forEach(function (a) {
+      if (!announcementActive(a, now)) return;
+      (String(a.priority).toLowerCase() === "high" ? high : rest).push(a);
+    });
+    return high.concat(rest);
+  }
+  function announcementSlots(list) {
+    var high = [], rest = [];
+    (list || []).forEach(function (a) { (String(a.priority).toLowerCase() === "high" ? high : rest).push(a); });
+    return high.concat(rest).concat(high);
+  }
+  function readContests(rows) {
+    rows = rows || [];
+    var headerAt = -1, h = {};
+    for (var i = 0; i < Math.min(rows.length, 15); i++) {
+      var map = headerMap(rows[i]);
+      if (map.month != null && (map.title != null || map.metric != null)) { headerAt = i; h = map; break; }
+    }
+    if (headerAt < 0) return [];
+    function prize(r, keys) {
+      for (var k = 0; k < keys.length; k++) if (h[keys[k]] != null) return String(r[h[keys[k]]] == null ? "" : r[h[keys[k]]]).trim();
+      return "";
+    }
+    var out = [];
+    rows.slice(headerAt + 1).forEach(function (r) {
+      var month = parseMonthKey(r[h.month]);
+      var title = String(h.title != null ? r[h.title] : "").trim();
+      if (!month || !title || title.charAt(0) === "←") return;
+      var whoIdx = h["whos eligible"] != null ? h["whos eligible"] : (h.eligible != null ? h.eligible : null);
+      var who = whoIdx == null ? "techs" : String(r[whoIdx] == null ? "" : r[whoIdx]).trim().toLowerCase();
+      var notesIdx = h["rules or notes"] != null ? h["rules or notes"] : (h.notes != null ? h.notes : (h.rules != null ? h.rules : null));
+      out.push({
+        month: month,
+        title: title.slice(0, 80),
+        metric: String(h.metric != null ? r[h.metric] : "flips").trim().toLowerCase() || "flips",
+        prize1: prize(r, ["prize 1", "prize1", "1st"]),
+        prize2: prize(r, ["prize 2", "prize2", "2nd"]),
+        prize3: prize(r, ["prize 3", "prize3", "3rd"]),
+        notes: notesIdx == null ? "" : String(r[notesIdx] == null ? "" : r[notesIdx]).trim().slice(0, 240),
+        eligible: who || "techs",
+        fallback: false
+      });
+    });
+    return out;
+  }
+  function contestForMonth(rows, now) {
+    now = now || nyNow();
+    var keyNow = monthKeyNow(now);
+    var list = readContests(rows);
+    var found = null;
+    list.forEach(function (c) { if (c.month === keyNow) found = c; });
+    if (found) return found;
+    if (!list.length) {
+      var d = SETTINGS.DEFAULT_CONTEST;
+      if (d && d.month === keyNow) return Object.assign({}, d);
+    }
+    return null;
+  }
+  function daysLeftInMonth(now) {
+    var p = nyParts(now || nyNow());
+    return daysInMonth(p.y, p.m) - p.d + 1;
+  }
+  function roleMatches(role, eligible) {
+    var e = String(eligible || "all").trim().toLowerCase();
+    if (e === "all" || e === "everyone" || e === "company") return true;
+    if (e === "techs" || e === "tech" || e === "technicians" || e === "technician") return role === "tech";
+    if (e === "sales" || e === "sale") return role === "sales";
+    if (e === "apprentices" || e === "apprentice") return role === "apprentice";
+    return role === "tech";
+  }
+  function metricValue(st, metric) {
+    var k = String(metric || "").trim().toLowerCase();
+    var map = {
+      revenue: "rev", rev: "rev",
+      sold: "sold", "sold revenue": "sold",
+      memberships: "mem", membership: "mem", members: "mem",
+      reviews: "rv", review: "rv",
+      installs: "inst", install: "inst",
+      "close rate": "close", close: "close",
+      points: "pts", pts: "pts",
+      jobs: "jobs",
+      "avg ticket": "avg", average: "avg", avg: "avg",
+      leads: "leads", lead: "leads",
+      callbacks: "cb", callback: "cb",
+      flips: "flips", flip: "flips"
+    };
+    return +((st || {})[map[k] || k]) || 0;
+  }
+  function entryInFlipPeriod(e, P, m, ctx) {
+    var now = (ctx && ctx.now) || nyNow();
+    var snap = (ctx && ctx.snap) || {};
+    var p = nyParts(now);
+    var year = snap.year || p.y;
+    if (!e || !e.month) return false;
+    var bits = String(e.month).split("-");
+    var ey = +bits[0], em = +bits[1] - 1;
+    if (P === "l30") {
+      var at30 = asDate(e.at);
+      if (!at30) return false;
+      var start = addNyDays(now, -30);
+      return at30 >= start && at30 <= now;
+    }
+    if (P === "ytd") {
+      var through = m != null ? m : (snap.month != null ? snap.month : p.m);
+      return ey === year && em <= through;
+    }
+    var month = m != null ? m : (snap.month != null ? snap.month : p.m);
+    return ey === year && em === month;
+  }
+  function countFlips(techKey, entries, P, m, ctx, kind) {
+    var n = 0;
+    (entries || []).forEach(function (e) {
+      if (!techKey || e.techKey !== techKey) return;
+      if (!entryInFlipPeriod(e, P, m, ctx)) return;
+      if (kind === "conv") { if (e.converted === true) n += e.count || 1; }
+      else if (kind === "sold") { if (e.sold != null) n += e.sold; }
+      else n += e.count || 1;
+    });
+    return n;
+  }
+  function sameNyDay(a, b) {
+    a = asDate(a); b = asDate(b);
+    return !!(a && b) && nyYMD(a) === nyYMD(b);
+  }
+  function weekStartNy(now) {
+    var p = nyParts(now);
+    var back = p.wd === 0 ? 6 : p.wd - 1;
+    return nyDate(p.y, p.m, p.d - back, 0, 0, 0);
+  }
+  function inThisWeek(date, now) {
+    date = asDate(date);
+    if (!date) return false;
+    var start = weekStartNy(now);
+    var endP = nyParts(now);
+    var end = nyDate(endP.y, endP.m, endP.d, 23, 59, 59);
+    return date >= start && date <= end;
+  }
+  function flipBoard(snap, now, meta) {
+    now = now || nyNow();
+    meta = meta || {};
+    var feed = (snap && snap.feed) || {};
+    var entries = feed.flips || [];
+    var layout = feed.flipLayout || "none";
+    var keyNow = monthKeyNow(now);
+    var rowsMap = {};
+    entries.forEach(function (e) {
+      if (e.month !== keyNow) return;
+      var id = e.techKey || ("~" + String(e.written || e.techLabel || "Unknown").toLowerCase());
+      var row = rowsMap[id];
+      if (!row) row = rowsMap[id] = { key: e.techKey || "", name: e.techLabel || e.written || "Unknown", flips: 0, conv: 0, sold: 0, matched: !!e.techKey };
+      row.flips += e.count || 1;
+      if (e.converted === true) row.conv += e.count || 1;
+      if (e.sold != null) row.sold += e.sold;
+    });
+    var rows = Object.keys(rowsMap).map(function (id) { return rowsMap[id]; });
+    rows.forEach(function (r) {
+      if (r.key && snap && snap.techs && snap.techs[r.key]) r.name = displayName(snap.techs[r.key], snap.techs, meta[r.key] || {});
+    });
+    rows.sort(function (a, b) { return b.flips - a.flips || b.sold - a.sold || String(a.name).localeCompare(String(b.name)); });
+    function sum(pred, val) {
+      var n = 0;
+      entries.forEach(function (e) { if (pred(e)) n += val(e); });
+      return n;
+    }
+    var company = {
+      mtd: sum(function (e) { return e.month === keyNow; }, function (e) { return e.count || 1; }),
+      today: sum(function (e) { return sameNyDay(e.at, now); }, function (e) { return e.count || 1; }),
+      week: sum(function (e) { return inThisWeek(e.at, now); }, function (e) { return e.count || 1; }),
+      conv: sum(function (e) { return e.month === keyNow && e.converted === true; }, function (e) { return e.count || 1; }),
+      sold: sum(function (e) { return e.month === keyNow && e.sold != null; }, function (e) { return e.sold || 0; })
+    };
+    company.rate = company.mtd ? company.conv / company.mtd : 0;
+    var soldKnown = layout === "detail" && entries.some(function (e) { return e.month === keyNow && e.sold != null; });
+    return { layout: layout, convKnown: layout === "detail", soldKnown: soldKnown, rows: rows, company: company };
+  }
+  function flipAlerts(snap, now) {
+    now = now || nyNow();
+    var hours = +SETTINGS.FLIP_ALERT_HOURS;
+    if (!isFinite(hours) || hours <= 0) hours = 6;
+    var cutoff = now.getTime() - hours * 3600e3;
+    var out = [];
+    (((snap && snap.feed && snap.feed.flips) || [])).forEach(function (e) {
+      var at = asDate(e.at);
+      if (!e.hasTime || !at) return;
+      var t = at.getTime();
+      if (t < cutoff || t > now.getTime()) return;
+      var name = e.techLabel || e.written || "A tech";
+      if (e.techKey && snap.techs && snap.techs[e.techKey]) name = displayName(snap.techs[e.techKey], snap.techs, {});
+      out.push({ name: name, at: t, message: "Flip alert: " + name + " just flipped a call" });
+    });
+    out.sort(function (a, b) { return b.at - a.at; });
+    return out;
+  }
+  function contestStandings(contest, ctx) {
+    if (!contest || !ctx || !ctx.snap) return null;
+    var now = ctx.now || nyNow();
+    var bits = String(contest.month || "").split("-");
+    var monthIndex = (+bits[1] || 1) - 1;
+    var people = Object.keys(ctx.snap.techs || {}).map(function (k) { return ctx.snap.techs[k]; }).filter(function (t) {
+      if (!roleMatches(roleOf(t, ctx), contest.eligible)) return false;
+      var meta = (ctx.techs || {})[t.k] || {};
+      if (meta.show === false) return false;
+      if (t.status === "inactive" && meta.show !== true) return false;
+      return true;
+    });
+    var rows = people.map(function (t) {
+      var st = statsFor(t, "mtd", monthIndex, ctx);
+      var meta = (ctx.techs || {})[t.k] || {};
+      return { key: t.k, name: displayName(t, ctx.snap.techs, meta), value: metricValue(st, contest.metric), rev: st.rev || 0 };
+    });
+    rows.sort(function (a, b) { return b.value - a.value || b.rev - a.rev || String(a.name).localeCompare(String(b.name)); });
+    var positive = rows.filter(function (r) { return r.value > 0; });
+    return {
+      contest: contest,
+      rows: positive.slice(0, 5),
+      hasData: positive.length > 0,
+      leader: positive.length ? positive[0] : null,
+      daysLeft: daysLeftInMonth(now)
+    };
+  }
+  function welcomeFaces(names, techs, meta) {
+    techs = techs || {};
+    meta = meta || {};
+    var files = meta.photos || meta.photoFiles || [];
+    return (names || []).map(function (raw) {
+      var name = String(raw || "").trim();
+      var want = name.toLowerCase();
+      var hits = [];
+      Object.keys(techs).forEach(function (id) {
+        var full = (techs[id] && techs[id].full) || "";
+        if (want && firstName(full).toLowerCase() === want) hits.push(techs[id].k || id);
+      });
+      var unique = hits.length === 1 ? hits[0] : null;
+      var photo = "";
+      if (unique && meta[unique] && meta[unique].photo) photo = String(meta[unique].photo);
+      if (!photo && files.length) {
+        var matched = [];
+        files.forEach(function (f) {
+          var title = (f && (f.title || f.name)) ? (f.title || f.name) : String(f || "");
+          if (!title) return;
+          var k = matchTech(techs, title);
+          var fileHit = false;
+          if (k && hits.length === 1 && k === hits[0]) fileHit = true;
+          if (!fileHit && !k) {
+            var parts = title.replace(/\.[^.]+$/, "").split(/[_\s.-]+/).filter(Boolean);
+            if (parts.some(function (p) { return p.toLowerCase() === want; }) && parts.length <= 3 && hits.length <= 1) fileHit = true;
+          }
+          if (fileHit) matched.push(f);
+        });
+        if (matched.length === 1) {
+          var one = matched[0];
+          if (one && one.id) photo = "https://drive.google.com/thumbnail?id=" + one.id + "&sz=w480";
+          else if (one && one.url) photo = String(one.url);
+          else if (typeof one === "string") photo = one;
+        }
+      }
+      return { name: name, key: unique || "", photo: photo };
+    });
+  }
+  function tickerItems(snap, now) {
+    now = now || nyNow();
+    var out = [];
+    flipAlerts(snap, now).forEach(function (a) { out.push({ type: "ticker", ic: "", title: "", m: a.message }); });
+    ((snap && snap.annLive) || []).forEach(function (a) {
+      if (a.showOn !== "ticker" && a.showOn !== "both") return;
+      out.push({ type: "ticker", ic: a.icon || "", title: a.welcome ? "" : (a.badge || ""), m: a.message });
+    });
+    ((snap && snap.updates) || []).forEach(function (u) { if (u && u.type === "ticker") out.push(u); });
+    return out;
+  }
+  function legacyAnnouncements(anns) {
+    return (anns || []).filter(function (a) { return a && (a.message || a.m) && !a.welcome; }).map(function (a) {
+      if (a.message) return cloneAnn(a);
+      return {
+        message: a.m, detail: a.s || "", start: "", end: "", priority: "normal",
+        showOn: a.showOn || "slide", icon: a.ic || "", badge: a.b || "",
+        example: false, welcome: false, legacy: true, names: null
+      };
+    });
+  }
+  function attachFeed(snap, wb, now, names) {
+    if (!snap) return snap;
+    now = now || nyNow();
+    var useAnn = wbHas(wb, "Announcements");
+    var useContest = wbHas(wb, "Contest");
+    var useFlips = wbHas(wb, "Flips");
+    if ((useAnn || useContest || useFlips) && !names) {
+      names = createNameIndex();
+      Object.keys(snap.techs || {}).forEach(function (k) {
+        if (snap.techs[k] && snap.techs[k].full) names.see(snap.techs[k].full);
+      });
+      if (useFlips) {
+        var seen = flipHeader(sheetRows(wb, "Flips"));
+        if (seen.i >= 0 && seen.tech != null) sheetRows(wb, "Flips").slice(seen.i + 1).forEach(function (r) { names.see(r[seen.tech]); });
+      }
+    }
+    var annLive = snap.annLive || null;
+    if (useAnn) annLive = activeAnnouncements(sheetRows(wb, "Announcements"), now);
+    else if (!annLive) {
+      var legacy = legacyAnnouncements(snap.anns);
+      if (legacy.length) {
+        var welcome = SETTINGS.WELCOME_ANNOUNCEMENT;
+        if (welcome && announcementActive(welcome, now) && !legacy.some(function (a) { return String(a.message).trim().toLowerCase() === String(welcome.message).trim().toLowerCase(); })) {
+          legacy.unshift(cloneAnn(welcome));
+        }
+        annLive = legacy.filter(function (a) { return announcementActive(a, now); });
+      } else annLive = activeAnnouncements([], now);
+    }
+    var contest = snap.contest || null;
+    if (useContest) contest = contestForMonth(sheetRows(wb, "Contest"), now);
+    else if (!snap.feed || !snap.feed.ready) contest = contestForMonth([], now);
+    var flips = { layout: (snap.feed && snap.feed.flipLayout) || "none", entries: (snap.feed && snap.feed.flips) || [] };
+    if (useFlips) flips = readFlipEntries(sheetRows(wb, "Flips"), names);
+    if (snap.techs) {
+      flips.entries.forEach(function (e) {
+        if (!e.techKey || snap.techs[e.techKey]) return;
+        snap.techs[e.techKey] = {
+          k: e.techKey, full: e.techLabel, y: newBucket(), l30: newFlat(), open: [], openAmt: 0, openN: 0,
+          onBoard: false, status: "not listed", role: "tech", mem: { mtd: 0, ytd: 0 }, rv: { mtd: 0, ytd: 0 }, cb: zeros(), inst: zeros()
+        };
+      });
+    }
+    snap.feed = { ready: true, flips: flips.entries, flipLayout: flips.layout };
+    snap.annLive = annLive;
+    snap.anns = announcementSlots(annLive);
+    snap.contest = contest;
+    return snap;
   }
 
   function buildSnapshot(wb, now) {
@@ -624,6 +1223,9 @@
       });
     }
 
+    var earlyFlips = readFlipEntries(sheetRows(wb, "Flips"), names);
+    earlyFlips.entries.forEach(function (e) { if (e.techKey) tech(e.techLabel, "Flips"); });
+
     var round = function (o) {
       Object.keys(o).forEach(function (k) {
         o[k] = Array.isArray(o[k]) ? o[k].map(function (v) { return Math.round(v * 100) / 100; }) : Math.round(o[k] * 100) / 100;
@@ -662,9 +1264,6 @@
     var reviews = sheetRows(wb, "Reviews").slice(1).filter(function (r) { return String(r[2]).trim(); }).map(function (r) {
       return {by:String(r[1]).trim(), t:String(r[2]).trim().slice(0, 400), s:num(r[3]) || 5, d: r[4] instanceof Date ? r[4].toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric", timeZone:TZ}) : String(r[4] || "")};
     }).slice(0, 20);
-    var anns = sheetRows(wb, "Announcements").slice(1).filter(function (r) { return String(r[2]).trim() && !/^💡/u.test(String(r[0])); }).map(function (r) {
-      return {ic:String(r[0]).trim(), b:String(r[1]).trim(), m:String(r[2]).trim().slice(0, 240), s:String(r[3]).trim()};
-    });
     var upRows = sheetRows(wb, "Board_Updates");
     var upRes = headerIndex(upRows, function (r) { return String(r[0]).trim().toLowerCase() === "posted"; });
     var updates = [];
@@ -686,8 +1285,9 @@
     auto.inst = useAppt || jh["total hours worked"] != null;
     auto.instBy = useAppt ? "appointment" : "worked";
     flags.sort(function (a, b) { return b.d.localeCompare(a.d); });
-    return {v:2, builtAt: now.getTime(), auto:auto, flags:flags.slice(0, 200), dataThrough: maxDate ? nyYMD(maxDate) : "", month:M, year:Y, jobRows:jobRows, estRows:estRows,
-      goals:goals, ytdGoals:ytdGoals, actuals:actuals, techs:T, co:co, reviews:reviewsOut, anns:anns, updates:updates, leaderSums:leaderSums, weather:weather, ambiguous:names.ambiguous};
+    var snapOut = {v:2, builtAt: now.getTime(), auto:auto, flags:flags.slice(0, 200), dataThrough: maxDate ? nyYMD(maxDate) : "", month:M, year:Y, jobRows:jobRows, estRows:estRows,
+      goals:goals, ytdGoals:ytdGoals, actuals:actuals, techs:T, co:co, reviews:reviewsOut, anns:[], annLive:null, contest:null, feed:null, updates:updates, leaderSums:leaderSums, weather:weather, ambiguous:names.ambiguous};
+    return attachFeed(snapOut, wb, now, names);
   }
 
   function pick(bucket, flat, P, M, m) {
@@ -766,6 +1366,11 @@
       }
       if (SETTINGS.RULES.scopeOverdueToPeriod) s.overdue = rows.filter(function (r) { return r.overdue; }).length;
     }
+    var feedFlips = (snap && snap.feed && snap.feed.flips) || [];
+    s.flips = countFlips(t.k, feedFlips, P, m, ctx, "count");
+    s.flipConv = countFlips(t.k, feedFlips, P, m, ctx, "conv");
+    s.flipSold = countFlips(t.k, feedFlips, P, m, ctx, "sold");
+    s.flipRate = s.flips ? s.flipConv / s.flips : 0;
     var pts = SETTINGS.RULES.points || {};
     var div = function (n, d) { return d ? (n || 0) / d : 0; };
     s.pts = Math.round(div(s.rev, pts.revenue) + div(s.sold, pts.sold) + (s.mem || 0) * (pts.membership || 0) + (s.rv || 0) * (pts.review || 0) + (s.inst || 0) * (pts.install || 0));
@@ -957,6 +1562,11 @@
     ["boardPeriod", "spotMode", "coSource"].forEach(function (k) { if (c[k]) cfg[k] = String(c[k]); });
     if (c.tvGrades !== undefined && c.tvGrades !== "") cfg.tvGrades = !/^(n|no|false|0)$/i.test(String(c.tvGrades));
     if (c.logoPlate !== undefined && c.logoPlate !== "") cfg.logoPlate = !/^(n|no|false|0)$/i.test(String(c.logoPlate));
+    var goalRaw = (c.flip_goal != null && c.flip_goal !== "") ? c.flip_goal : c.flipGoal;
+    if (goalRaw != null && goalRaw !== "") {
+      var fg = +goalRaw;
+      if (isFinite(fg)) cfg.flipGoal = fg;
+    }
     String(c.slidesOff || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean).forEach(function (k) { cfg.slides[k] = false; });
     var applySet = function (set, cfgMap, wp, tp) {
       set.forEach(function (m) {
@@ -994,7 +1604,11 @@
     displayName:displayName, matchTech:matchTech, bindTechMeta:bindTechMeta,
     sheetRows:sheetRows, sumTo:sumTo, pick:pick, derive:derive, statsFor:statsFor, coStats:coStats,
     monthsElapsed:monthsElapsed, letterGrade:letterGrade, scoreWith:scoreWith, scoreTech:scoreTech, roleOf:roleOf,
-    roster:roster, salesRoster:salesRoster, buildSnapshot:buildSnapshot,
+    roster:roster, salesRoster:salesRoster, buildSnapshot:buildSnapshot, attachFeed:attachFeed,
+    announcementActive:announcementActive, activeAnnouncements:activeAnnouncements, announcementSlots:announcementSlots,
+    readAnnouncements:readAnnouncements, welcomeFaces:welcomeFaces,
+    readFlipEntries:readFlipEntries, flipBoard:flipBoard, flipAlerts:flipAlerts, tickerItems:tickerItems,
+    contestForMonth:contestForMonth, contestStandings:contestStandings, daysLeftInMonth:daysLeftInMonth,
     percentToGoal:percentToGoal, monthPace:monthPace, yearPace:yearPace, paceStatus:paceStatus, periodStart:periodStart,
     periodLabel:periodLabel, monthName:monthName, isStale:isStale, chooseDataMode:chooseDataMode,
     applySheetConfig:applySheetConfig, parseTechMeta:parseTechMeta, shiftLimitMinutes:shiftLimitMinutes

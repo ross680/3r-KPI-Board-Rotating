@@ -116,7 +116,7 @@ Month	Title	Metric	Prize 1	Prize 2	Prize 3	Rules or notes	Who's eligible
 
 `Month` is `YYYY-MM`. `Metric` is one the board already computes per person: `flips`, `revenue`, `sold`, `memberships`, `reviews`, `installs`, `close`, `points`, `jobs`, `avg`, `leads`, or `callbacks`. `Who's eligible` is `techs`, `sales`, `apprentices`, or `all`. The slide is in the rotation only during that month in New York. Standings use that month's numbers, the same name matching as the leaderboard, and ties break by revenue, then by name. The top 5 with a score above zero are shown, and the leader is highlighted. If nobody has a number yet, the slide says "Contest starts now".
 
-If the tab is missing or empty, November 2026 uses the fallback in `js/settings.js`: title "Flip Frenzy", metric `flips`, eligible `techs`, prizes `TBD`. Ross has not set prizes. A row you type for that month replaces the fallback.
+If the tab is missing or empty, November 2026 uses the fallback in `js/settings.js`: title "Flip Frenzy", metric `flips`, eligible `techs`, first prize `$500`, and the note "Prize: $500 to the flip leader". A row you type for that month replaces the fallback, including the prize and the note.
 
 `Flips` is filled in by hand. The board does not count a ServiceTitan opportunity, estimate, or lead as a flip.
 
@@ -152,6 +152,7 @@ The Flip Tracker slide ranks this month's flips, shows converted flips and the c
 | `logoPlate` | `no` turns off the white plate behind the logo |
 | `slidesOff` | Comma-separated slide keys to hide: `goal`, `trend`, `all`, `lb`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `sales` |
 | `flip_goal` | Company flip goal for the month. Replaces the 20 in `js/settings.js`. |
+| `hidden_techs` | Comma-separated names left off individual slides, grades, the flip tracker, contest standings, and flip alerts. Defaults to `Franco`. A blank value shows everyone again. Their jobs and dollars stay in the company, team, monthly, and goal totals. A name matches any person who has each of its words, ignoring case, so `Franco` also covers `Franco DosSantos`. |
 | `w_<metric>` / `t_<metric>` | Technician weight and monthly target |
 | `aw_<metric>` / `at_<metric>` | Apprentice weight and target |
 | `sw_<metric>` / `slt_<metric>` | Sales weight and target |

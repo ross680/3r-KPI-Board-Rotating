@@ -339,6 +339,8 @@ body.tv .hdr{display:none}
 .slide .scrollin .flip-r{height:6.6vh;padding:.4vh 1.2vw}
 .ld-r .nm small{display:block;font-stretch:100%;font-weight:600;font-size:1.5vh;color:#9FB1B8;margin-top:.35vh}
 .prizes{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4vw;margin:0 0 2vh}
+.prizes.one{grid-template-columns:minmax(18vw,28vw)}
+.prizes.two{grid-template-columns:repeat(2,minmax(0,1fr))}
 .prize{border:1px solid #23313A;background:rgba(18,25,28,.85);border-radius:1.4vh;padding:1.5vh 1.4vw}
 .prize .l{font-size:1.8vh;color:#9FB1B8;font-weight:700}
 .prize .v{font-stretch:120%;font-weight:900;font-size:3.8vh;line-height:1.05}

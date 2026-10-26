@@ -170,19 +170,22 @@
     icon: "🎉",
     badge: "Welcome"
   };
-  // Prizes stay TBD until Ross fills the Contest tab. This row is used only when that tab
-  // has no row for the current month, and only while the month is November 2026.
+  // Used only when the Contest tab has no row for the current month, and only in November 2026.
+  // A Contest tab row for that month replaces this, including the prize.
   var DEFAULT_CONTEST = {
     month: "2026-11",
     title: "Flip Frenzy",
     metric: "flips",
-    prize1: "TBD",
-    prize2: "TBD",
-    prize3: "TBD",
-    notes: "",
+    prize1: "$500",
+    prize2: "",
+    prize3: "",
+    notes: "Prize: $500 to the flip leader",
     eligible: "techs",
     fallback: true
   };
+  // People left off individual slides. Company totals still include their jobs and dollars.
+  // Board_Config hidden_techs replaces this list. A blank value shows everyone again.
+  var HIDDEN_TECHS = ["Franco"];
   // Company flips this month. Board_Config key flip_goal replaces this number.
   var FLIP_GOAL = 20;
   // Ticker line for a flip whose date includes a clock time inside this many hours.
@@ -218,7 +221,8 @@
       metrics: Object.fromEntries(METRICS.map(function (m) { return [m.k, {w:m.w, target:m.target}]; })),
       appMetrics: Object.fromEntries(APP_METRICS.map(function (m) { return [m.k, {w:m.w, target:m.target}]; })),
       salesMetrics: Object.fromEntries(SALES_METRICS.map(function (m) { return [m.k, {w:m.w, target:m.target}]; })),
-      logoId: "", tvGrades: true, flipGoal: FLIP_GOAL
+      logoId: "", tvGrades: true, flipGoal: FLIP_GOAL,
+      hiddenTechs: HIDDEN_TECHS.slice()
     };
   }
 
@@ -232,6 +236,7 @@
     RULES: RULES, SLIDES: SLIDES,
     DEFAULT_ANNOUNCEMENTS: DEFAULT_ANNOUNCEMENTS, WELCOME_ANNOUNCEMENT: WELCOME_ANNOUNCEMENT,
     DEFAULT_CONTEST: DEFAULT_CONTEST, FLIP_GOAL: FLIP_GOAL, FLIP_ALERT_HOURS: FLIP_ALERT_HOURS,
+    HIDDEN_TECHS: HIDDEN_TECHS,
     LOGO_FILE: LOGO_FILE, LOGO_PDF: LOGO_PDF, PHOTO_FOLDER: PHOTO_FOLDER,
     SHEET_TABS: SHEET_TABS, defaultCfg: defaultCfg
   };

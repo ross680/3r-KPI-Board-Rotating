@@ -228,7 +228,7 @@ function slideHTML(sl){
   }
   if (sl.k==="upd"){
     const u=snap.updates[sl.i]; if(!u) return "";
-    if (u.type==="shoutout" && u.tech && snap.techs[u.tech]){ const nm=Sc.displayName(snap.techs[u.tech], snap.techs, S.techs[u.tech]||{});
+    if (u.type==="shoutout" && u.tech && snap.techs[u.tech] && !Sc.techIsHidden(snap.techs[u.tech], boardCtx())){ const nm=Sc.displayName(snap.techs[u.tech], snap.techs, S.techs[u.tech]||{});
       return `<div class="kicker">${esc(u.title||"Shout-out")}</div><div class="spot">${av(u.tech,nm)}<div style="min-width:0"><div class="nm">${esc(nm)}</div><div class="ann" style="flex:none"><div class="msg" style="font-size:6vh">${esc(u.m)}</div></div></div></div>`; }
     return `<div class="ann">${u.ic?`<div class="ic">${esc(u.ic)}</div>`:""}${u.title?`<div class="badge">${esc(u.title)}</div>`:""}<div class="msg">${esc(u.m)}</div></div>`;
   }
@@ -263,7 +263,7 @@ function welcomeHTML(a){
   return `<div class="ann welcome">${a.icon?`<div class="ic">${esc(a.icon)}</div>`:""}<div class="badge">${esc(a.badge||"Welcome")}</div><div class="msg">${esc(a.message)}</div>${a.detail?`<div class="sub">${esc(a.detail)}</div>`:""}<div class="welcome-row">${cards}</div></div>`;
 }
 function flipSlideHTML(snap, now){
-  const board=Sc.flipBoard(snap, now, S.techs);
+  const board=Sc.flipBoard(snap, now, S.techs, boardCtx());
   const goal=S.cfg.flipGoal!=null?+S.cfg.flipGoal:(SETTINGS.FLIP_GOAL||0);
   const c=board.company;
   const ps=goal?Sc.paceStatus(c.mtd, goal, now):null;
@@ -288,7 +288,7 @@ function contestSlideHTML(snap, now){
   const stand=Sc.contestStandings(snap.contest, boardCtx());
   if (!stand) return "";
   const c=stand.contest;
-  const prizes=[["1st", c.prize1],["2nd", c.prize2],["3rd", c.prize3]];
+  const prizes=Sc.contestPrizes(c);
   const days=stand.daysLeft<=1?"Last day":stand.daysLeft+" days left";
   const who=({techs:"Technicians",tech:"Technicians",sales:"Sales",apprentices:"Apprentices",all:"Everyone"})[String(c.eligible||"").toLowerCase()]||c.eligible||"Everyone";
   const show=v=>{
@@ -303,12 +303,12 @@ function contestSlideHTML(snap, now){
     :`<div class="empty-tv"><div><b>Contest starts now</b>Standings show up after the first ${esc(unit)} this month.</div></div>`;
   return `<div class="kicker">${esc(monthName())} contest · ${esc(days)} · ${esc(who)}</div><div class="big-h">${esc(c.title)}</div>
     ${c.notes?`<div class="contest-notes">${esc(c.notes)}</div>`:""}
-    <div class="prizes">${prizes.map(([n,v])=>{ const tbd=!String(v||"").trim()||/^tbd$/i.test(String(v).trim()); return `<div class="prize ${tbd?"tbd":""}"><div class="l">${n}</div><div class="v">${esc(tbd?"TBD":v)}</div></div>`; }).join("")}</div>
+    ${prizes.length?`<div class="prizes${prizes.length===1?" one":prizes.length===2?" two":""}">${prizes.map(([n,v])=>`<div class="prize"><div class="l">${n}</div><div class="v">${esc(v)}</div></div>`).join("")}</div>`:""}
     ${body}`;
 }
 function tickerHTML(){
   let items=[];
-  try { items=Sc.tickerItems(S.snap||{}, Sc.nyNow())||[]; } catch (e) { items=[]; }
+  try { items=Sc.tickerItems(S.snap||{}, Sc.nyNow(), boardCtx())||[]; } catch (e) { items=[]; }
   if (!Array.isArray(items) || !items.length) return "";
   const txt=items.map(u=>`<span>${u&&u.ic?esc(u.ic)+" ":""}${u&&u.title?`<b>${esc(u.title)}:</b> `:""}${esc(u&&u.m)}</span>`).join('<i>•</i>');
   return `<div class="ticker"><div class="tk-in" style="animation-duration:${Math.max(20,items.reduce((a,u)=>a+String((u&&u.m)||"").length,0)/6)}s">${txt}<i>•</i>${txt}</div></div>`; }

@@ -903,20 +903,20 @@ describe("announcements", function () {
     const s = snap({
       "Announcements": [
         ["ICON", "BADGE", "MESSAGE", "SUB"],
-        ["🍺", "Team Event", "Brews For Sonia", "Friday"],
+        ["🍺", "Team Event", "Shop lunch Friday", "Noon"],
         ["💡", "skip", "this is a note", ""]
       ]
     });
     const live = s.annLive.filter(function (a) { return !a.welcome && !a.example; });
     assert.equal(live.length, 1);
-    assert.equal(live[0].message, "Brews For Sonia");
-    assert.equal(live[0].detail, "Friday");
+    assert.equal(live[0].message, "Shop lunch Friday");
+    assert.equal(live[0].detail, "Noon");
     assert.equal(live[0].showOn, "slide");
     assert.equal(live[0].icon, "🍺");
     assert.equal(s.annLive.some(function (a) { return a.welcome; }), true);
     assert.equal(s.annLive.some(function (a) { return a.example; }), false);
     const ticker = Sc.tickerItems(s, OCT26).map(function (t) { return t.m; });
-    assert.equal(ticker.indexOf("Brews For Sonia"), -1);
+    assert.equal(ticker.indexOf("Shop lunch Friday"), -1);
     assert.ok(ticker.indexOf("Welcome to the team, Justin and Eric!") >= 0);
   });
 
@@ -1068,7 +1068,7 @@ describe("manual flips", function () {
       "Goals": [["monthly_rev", 300000], ["weekly", 75000]],
       "Announcements": [
         ["ICON", "BADGE", "MESSAGE", "SUB"],
-        ["", "Shop", "Brews For Sonia Event — Friday, Oct 2nd", "Friday"]
+        ["", "Shop", "Shop lunch Friday", "Noon"]
       ],
       "ST Jobs": [JOB_H, job({ id: "1", tech: "Sam Rivera", completed: "10/10/2026", rev: 100, opp: "Yes", conv: "Yes", lead: "Sam Rivera" })]
     };
@@ -1113,7 +1113,12 @@ describe("flip contest", function () {
     const on = Sc.contestForMonth([], new Date("2026-11-01T04:30:00.000Z"));
     assert.equal(on.title, "Flip Frenzy");
     assert.equal(on.metric, "flips");
-    assert.equal(on.prize1, "TBD");
+    assert.equal(on.prize1, "$500");
+    assert.equal(on.prize2, "");
+    assert.equal(on.prize3, "");
+    assert.equal(on.notes, "Prize: $500 to the flip leader");
+    assert.deepEqual(Sc.contestPrizes(on), [["1st", "$500"]]);
+    assert.deepEqual(Sc.contestPrizes({ prize1: "TBD", prize2: "", prize3: "Hat" }), [["3rd", "Hat"]]);
     const nov = Sc.nyDate(2026, 10, 15, 12, 0, 0);
     const typed = snap({
       "Contest": [
@@ -1184,5 +1189,148 @@ describe("flip contest", function () {
     }, nov);
     const names = Sc.contestStandings(s.contest, ctx(s, { now: nov })).rows.map(function (r) { return r.name; });
     assert.deepEqual(names, ["Amy", "Sam"]);
+  });
+});
+
+describe("hidden techs", function () {
+  function named(rows) {
+    return rows.map(function (r) { return r.name; });
+  }
+  function hasFranco(rows) {
+    return rows.some(function (r) { return Sc.nameIsHidden(r.name, ["Franco"]); });
+  }
+
+  it("keeps Franco's dollars in the company total and leaves him off individual lists", function () {
+    const s = snap({
+      "ST Techs": [
+        TECH_H,
+        ["Franco DosSantos", "Plumbers: Install / Service", "FALSE", "2026-06-22", "08:00", "91276933", "Installer, Service"],
+        ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""],
+        ["Francisco Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "FR", ""]
+      ],
+      "Leaderboard": [
+        LB_H,
+        ["Franco", "active", 0, 0, 0, 0, 0, 3773, 0],
+        ["Sam Rivera", "active", 0, 0, 0, 0, 0, 100, 0]
+      ],
+      "ST Jobs": [
+        JOB_H,
+        job({ id: "1", tech: "Franco DosSantos", completed: "10/10/2026", rev: 400 }),
+        job({ id: "2", tech: "Sam Rivera", completed: "10/10/2026", rev: 100 }),
+        job({ id: "3", tech: "Francisco Rivera", completed: "10/10/2026", rev: 50 })
+      ],
+      "Flips": [
+        ["Date", "Tech", "Customer / Job #", "Type", "Converted", "Sold $", "Notes"],
+        ["10/26/2026 2:30 PM", "Franco DosSantos", "1", "replacement", "Y", "", ""],
+        ["10/26/2026 1:00 PM", "Sam Rivera", "3", "replacement", "Y", "", ""]
+      ],
+      "Board_Updates": [
+        ["posted", "message", "expires", "status", "type", "icon", "title", "tech"],
+        ["10/26/2026 12:00", "Franco closed a big job", "", "", "ticker", "", "", "Franco"]
+      ]
+    });
+    const hidden = ctx(s);
+    const shown = ctx(s, { cfg: Sc.applySheetConfig({ hidden_techs: "" }) });
+    assert.equal(Sc.coStats("mtd", null, hidden).rev, 550);
+    assert.equal(Sc.coStats("mtd", null, shown).rev, 550);
+    assert.equal(Sc.statsFor(person(s, "Franco DosSantos"), "mtd", null, hidden).rev, 400);
+    assert.equal(s.leaderSums.rev_ytd, 3873);
+    assert.equal(hasFranco(Sc.roster(true, "tech", hidden)), false);
+    assert.equal(hasFranco(Sc.roster(true, "all", hidden)), false);
+    assert.equal(hasFranco(Sc.salesRoster(true, hidden)), false);
+    assert.ok(named(Sc.roster(true, "tech", hidden)).indexOf("Sam") >= 0);
+    assert.ok(named(Sc.roster(true, "tech", hidden)).indexOf("Francisco") >= 0);
+    assert.equal(hasFranco(Sc.roster(true, "tech", shown)), true);
+    assert.equal(hasFranco(Sc.roster(false, "tech", hidden)), true);
+    const forced = ctx(s, { techs: { [person(s, "Franco DosSantos").k]: { show: true, display: "Franco" } } });
+    assert.equal(hasFranco(Sc.roster(true, "tech", forced)), false);
+    const board = Sc.flipBoard(s, OCT26, {});
+    assert.equal(board.company.mtd, 2);
+    assert.equal(hasFranco(board.rows), false);
+    assert.ok(board.rows.some(function (r) { return r.name === "Sam"; }));
+    const alerts = Sc.flipAlerts(s, OCT26).map(function (a) { return a.message; });
+    assert.deepEqual(alerts, ["Flip alert: Sam just flipped a call"]);
+    const tick = Sc.tickerItems(s, OCT26).map(function (t) { return t.m; });
+    assert.equal(tick.some(function (m) { return /franco/i.test(m); }), false);
+    assert.ok(tick.indexOf("Flip alert: Sam just flipped a call") >= 0);
+    const openTick = Sc.tickerItems(s, OCT26, shown).map(function (t) { return t.m; });
+    assert.ok(openTick.some(function (m) { return /franco/i.test(m); }));
+  });
+
+  it("matches Franco, Franco X, and a last name, and a blank list shows everyone", function () {
+    assert.equal(Sc.nameIsHidden("Franco DosSantos", ["Franco"]), true);
+    assert.equal(Sc.nameIsHidden("Franco X", ["Franco"]), true);
+    assert.equal(Sc.nameIsHidden("franco", ["fRaNcO"]), true);
+    assert.equal(Sc.nameIsHidden("Francisco Rivera", ["Franco"]), false);
+    assert.equal(Sc.nameIsHidden("Alex DosSantos", ["DosSantos"]), true);
+    assert.equal(Sc.nameIsHidden("Alex DosSantos", ["Franco"]), false);
+    const s = snap({
+      "ST Techs": [
+        TECH_H,
+        ["Franco X", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "FX", ""],
+        ["Alex DosSantos", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "AD", ""],
+        ["Francisco Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "FR", ""]
+      ]
+    });
+    assert.equal(hasFranco(Sc.roster(true, "tech", ctx(s))), false);
+    assert.ok(named(Sc.roster(true, "tech", ctx(s))).indexOf("Alex") >= 0);
+    assert.ok(named(Sc.roster(true, "tech", ctx(s))).indexOf("Francisco") >= 0);
+    const last = ctx(s, { cfg: Sc.applySheetConfig({ hidden_techs: "DosSantos" }) });
+    assert.equal(Sc.techIsHidden(person(s, "Alex DosSantos"), last), true);
+    assert.equal(Sc.techIsHidden(person(s, "Franco X"), last), false);
+    assert.equal(named(Sc.roster(true, "tech", last)).indexOf("Alex"), -1);
+    const both = ctx(s, { cfg: Sc.applySheetConfig({ hidden_techs: "Sam Rivera, Franco" }) });
+    assert.equal(Sc.techIsHidden(person(s, "Franco X"), both), true);
+    const loose = snap({
+      "Flips": [
+        ["Date", "Tech", "Customer / Job #", "Type", "Converted", "Sold $", "Notes"],
+        ["10/26/2026 2:00 PM", "Franco X", "2", "replacement", "Y", "", ""],
+        ["10/26/2026 1:00 PM", "Sam Rivera", "3", "replacement", "Y", "", ""]
+      ]
+    });
+    const looseBoard = Sc.flipBoard(loose, OCT26, {});
+    assert.equal(looseBoard.company.mtd, 2);
+    assert.equal(hasFranco(looseBoard.rows), false);
+    assert.equal(Sc.flipAlerts(loose, OCT26).some(function (a) { return /franco/i.test(a.message); }), false);
+    assert.deepEqual(Sc.applySheetConfig({}).hiddenTechs, ["Franco"]);
+    assert.deepEqual(Sc.applySheetConfig({ hidden_techs: "" }).hiddenTechs, []);
+    assert.deepEqual(Sc.applySheetConfig({ hidden_techs: "Sam Rivera, Franco" }).hiddenTechs, ["Sam Rivera", "Franco"]);
+    assert.deepEqual(Settings.defaultCfg().hiddenTechs, ["Franco"]);
+  });
+
+  it("leaves Franco out of Flip Frenzy standings while his flips stay in the company total", function () {
+    const nov = Sc.nyDate(2026, 10, 2, 12, 0, 0);
+    const s = snap({
+      "ST Techs": [
+        TECH_H,
+        ["Franco DosSantos", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "F1", ""],
+        ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""]
+      ],
+      "Flips": [
+        ["Tech", "Month", "Count"],
+        ["Franco DosSantos", "2026-11", 5],
+        ["Sam Rivera", "2026-11", 2]
+      ]
+    }, nov);
+    const stand = Sc.contestStandings(s.contest, ctx(s, { now: nov }));
+    assert.equal(stand.leader.name, "Sam");
+    assert.equal(hasFranco(stand.rows), false);
+    const open = Sc.contestStandings(s.contest, ctx(s, { now: nov, cfg: Sc.applySheetConfig({ hidden_techs: "" }) }));
+    assert.equal(open.leader.name, "Franco");
+    assert.equal(Sc.flipBoard(s, nov, {}).company.mtd, 7);
+    assert.equal(hasFranco(Sc.flipBoard(s, nov, {}).rows), false);
+  });
+});
+
+describe("board copy", function () {
+  it("does not keep the removed team event in the defaults", function () {
+    const blob = JSON.stringify({
+      announcements: Settings.DEFAULT_ANNOUNCEMENTS,
+      welcome: Settings.WELCOME_ANNOUNCEMENT,
+      contest: Settings.DEFAULT_CONTEST
+    });
+    assert.equal(/brews|sonia/i.test(blob), false);
+    assert.equal(Settings.DEFAULT_CONTEST.notes, "Prize: $500 to the flip leader");
+    assert.equal(Settings.DEFAULT_CONTEST.prize1, "$500");
   });
 });

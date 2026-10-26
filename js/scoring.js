@@ -649,6 +649,13 @@
     }
     return null;
   }
+  function contestPrizes(contest) {
+    if (!contest) return [];
+    return [["1st", contest.prize1], ["2nd", contest.prize2], ["3rd", contest.prize3]].filter(function (pair) {
+      var text = String(pair[1] == null ? "" : pair[1]).trim();
+      return text && !/^tbd$/i.test(text);
+    });
+  }
   function daysLeftInMonth(now) {
     var p = nyParts(now || nyNow());
     return daysInMonth(p.y, p.m) - p.d + 1;
@@ -729,7 +736,7 @@
     var end = nyDate(endP.y, endP.m, endP.d, 23, 59, 59);
     return date >= start && date <= end;
   }
-  function flipBoard(snap, now, meta) {
+  function flipBoard(snap, now, meta, ctx) {
     now = now || nyNow();
     meta = meta || {};
     var feed = (snap && snap.feed) || {};
@@ -751,6 +758,18 @@
       if (r.key && snap && snap.techs && snap.techs[r.key]) r.name = displayName(snap.techs[r.key], snap.techs, meta[r.key] || {});
     });
     rows.sort(function (a, b) { return b.flips - a.flips || b.sold - a.sold || String(a.name).localeCompare(String(b.name)); });
+    var hideCtx = {
+      snap: snap,
+      techs: (ctx && ctx.techs) || meta || {},
+      cfg: (ctx && ctx.cfg) || SETTINGS.defaultCfg()
+    };
+    var hidden = hiddenList(hideCtx);
+    rows = rows.filter(function (r) {
+      var tech = r.key && snap && snap.techs ? snap.techs[r.key] : null;
+      if (tech && techIsHidden(tech, hideCtx)) return false;
+      if (nameIsHidden(r.name, hidden)) return false;
+      return true;
+    });
     function sum(pred, val) {
       var n = 0;
       entries.forEach(function (e) { if (e && pred(e)) n += val(e); });
@@ -767,8 +786,14 @@
     var soldKnown = layout === "detail" && entries.some(function (e) { return e && e.month === keyNow && e.sold != null; });
     return { layout: layout, convKnown: layout === "detail", soldKnown: soldKnown, rows: rows, company: company };
   }
-  function flipAlerts(snap, now) {
+  function flipAlerts(snap, now, ctx) {
     now = now || nyNow();
+    var hideCtx = {
+      snap: snap,
+      techs: (ctx && ctx.techs) || {},
+      cfg: (ctx && ctx.cfg) || SETTINGS.defaultCfg()
+    };
+    var hidden = hiddenList(hideCtx);
     var hours = +SETTINGS.FLIP_ALERT_HOURS;
     if (!isFinite(hours) || hours <= 0) hours = 6;
     var cutoff = now.getTime() - hours * 3600e3;
@@ -779,8 +804,10 @@
       if (!e.hasTime || !at) return;
       var t = at.getTime();
       if (t < cutoff || t > now.getTime()) return;
-      var name = e.techLabel || e.written || "A tech";
-      if (e.techKey && snap.techs && snap.techs[e.techKey]) name = displayName(snap.techs[e.techKey], snap.techs, {});
+      var tech = e.techKey && snap.techs && snap.techs[e.techKey];
+      if (tech && techIsHidden(tech, hideCtx)) return;
+      if (!tech && (nameIsHidden(e.techLabel, hidden) || nameIsHidden(e.written, hidden))) return;
+      var name = tech ? displayName(tech, snap.techs, (hideCtx.techs || {})[tech.k] || {}) : (e.techLabel || e.written || "A tech");
       out.push({ name: name, at: t, message: "Flip alert: " + name + " just flipped a call" });
     });
     out.sort(function (a, b) { return b.at - a.at; });
@@ -792,6 +819,7 @@
     var bits = String(contest.month || "").split("-");
     var monthIndex = (+bits[1] || 1) - 1;
     var people = Object.keys(ctx.snap.techs || {}).map(function (k) { return ctx.snap.techs[k]; }).filter(function (t) {
+      if (techIsHidden(t, ctx)) return false;
       if (!roleMatches(roleOf(t, ctx), contest.eligible)) return false;
       var meta = (ctx.techs || {})[t.k] || {};
       if (meta.show === false) return false;
@@ -852,15 +880,20 @@
       return { name: name, key: unique || "", photo: photo };
     });
   }
-  function tickerItems(snap, now) {
+  function tickerItems(snap, now, ctx) {
     now = now || nyNow();
+    var hideCtx = ctx || { snap: snap, cfg: SETTINGS.defaultCfg() };
     var out = [];
-    flipAlerts(snap, now).forEach(function (a) { out.push({ type: "ticker", ic: "", title: "", m: a.message }); });
+    flipAlerts(snap, now, hideCtx).forEach(function (a) { out.push({ type: "ticker", ic: "", title: "", m: a.message }); });
     asList(snap && snap.annLive).forEach(function (a) {
       if (!a || (a.showOn !== "ticker" && a.showOn !== "both")) return;
       out.push({ type: "ticker", ic: a.icon || "", title: a.welcome ? "" : (a.badge || ""), m: a.message });
     });
-    asList(snap && snap.updates).forEach(function (u) { if (u && u.type === "ticker") out.push(u); });
+    asList(snap && snap.updates).forEach(function (u) {
+      if (!u || u.type !== "ticker") return;
+      if (u.tech && snap && snap.techs && snap.techs[u.tech] && techIsHidden(snap.techs[u.tech], hideCtx)) return;
+      out.push(u);
+    });
     return out;
   }
   function legacyAnnouncements(anns) {
@@ -1459,6 +1492,26 @@
     var score = tw ? Math.round(tot / tw * 100) : null;
     return {score:score, grade:letterGrade(score), parts:parts, st:st};
   }
+  function hiddenList(ctx) {
+    if (ctx && ctx.cfg && Array.isArray(ctx.cfg.hiddenTechs)) return ctx.cfg.hiddenTechs;
+    return SETTINGS.HIDDEN_TECHS || ["Franco"];
+  }
+  /* "Franco" matches Franco, Franco DosSantos, and Franco X. A last name matches that token. */
+  function nameIsHidden(label, list) {
+    var tokens = nameTokens(label);
+    if (!tokens.length) return false;
+    return (list || []).some(function (raw) {
+      var want = nameTokens(raw);
+      if (!want.length) return false;
+      return want.every(function (w) { return tokens.indexOf(w) >= 0; });
+    });
+  }
+  function techIsHidden(t, ctx) {
+    if (!t) return false;
+    var meta = (ctx && ctx.techs && ctx.techs[t.k]) || {};
+    var list = hiddenList(ctx);
+    return nameIsHidden(t.full, list) || nameIsHidden(meta.display, list) || nameIsHidden(t.k, list);
+  }
   function roleOf(t, ctx) { return ((ctx.techs || {})[t.k] || {}).role || t.role || "tech"; }
   function scoreTech(t, P, ctx) {
     var role = roleOf(t, ctx);
@@ -1477,6 +1530,7 @@
         var onTech = which === "tech" && role === "apprentice" && SETTINGS.RULES.apprenticesOnTechBoard;
         if (!onTech && role !== which) return false;
       }
+      if (forBoard && techIsHidden(t, ctx)) return false;
       if (o.show === true) return true;
       if (o.show === false) return false;
       return (t.onBoard && t.status !== "inactive") || t.autoShow;
@@ -1570,6 +1624,10 @@
       var fg = +goalRaw;
       if (isFinite(fg)) cfg.flipGoal = fg;
     }
+    if (Object.prototype.hasOwnProperty.call(c, "hidden_techs") || Object.prototype.hasOwnProperty.call(c, "hiddenTechs")) {
+      var hiddenRaw = c.hidden_techs != null ? c.hidden_techs : (c.hiddenTechs != null ? c.hiddenTechs : "");
+      cfg.hiddenTechs = String(hiddenRaw).split(/[,|;]/).map(function (x) { return x.trim(); }).filter(Boolean);
+    }
     String(c.slidesOff || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean).forEach(function (k) { cfg.slides[k] = false; });
     var applySet = function (set, cfgMap, wp, tp) {
       set.forEach(function (m) {
@@ -1604,14 +1662,14 @@
   return {
     nyNow:nyNow, nyParts:nyParts, nyDate:nyDate, nyYMD:nyYMD, addNyDays:addNyDays, daysInMonth:daysInMonth,
     toDate:toDate, num:num, bool:bool, key:key, money:money, pct:pct, fmtM:fmtM, initials:initials, firstName:firstName, hashStr:hashStr,
-    displayName:displayName, matchTech:matchTech, bindTechMeta:bindTechMeta,
+    displayName:displayName, matchTech:matchTech, bindTechMeta:bindTechMeta, nameIsHidden:nameIsHidden, techIsHidden:techIsHidden,
     sheetRows:sheetRows, sumTo:sumTo, pick:pick, derive:derive, statsFor:statsFor, coStats:coStats,
     monthsElapsed:monthsElapsed, letterGrade:letterGrade, scoreWith:scoreWith, scoreTech:scoreTech, roleOf:roleOf,
     roster:roster, salesRoster:salesRoster, buildSnapshot:buildSnapshot, attachFeed:attachFeed,
     announcementActive:announcementActive, activeAnnouncements:activeAnnouncements, announcementSlots:announcementSlots,
     readAnnouncements:readAnnouncements, welcomeFaces:welcomeFaces,
     readFlipEntries:readFlipEntries, flipBoard:flipBoard, flipAlerts:flipAlerts, tickerItems:tickerItems,
-    contestForMonth:contestForMonth, contestStandings:contestStandings, daysLeftInMonth:daysLeftInMonth,
+    contestForMonth:contestForMonth, contestPrizes:contestPrizes, contestStandings:contestStandings, daysLeftInMonth:daysLeftInMonth,
     percentToGoal:percentToGoal, monthPace:monthPace, yearPace:yearPace, paceStatus:paceStatus, periodStart:periodStart,
     periodLabel:periodLabel, monthName:monthName, isStale:isStale, chooseDataMode:chooseDataMode,
     applySheetConfig:applySheetConfig, parseTechMeta:parseTechMeta, shiftLimitMinutes:shiftLimitMinutes

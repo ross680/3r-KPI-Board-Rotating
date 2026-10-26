@@ -71,9 +71,81 @@
   var FIELD_TEAM = /plumb|hvac|apprentic|electric|install|service|tech/i;
   var GRACE_MIN = 10;
   var INSTALL_HOURS = 4;
-  // install job types (ServiceTitan "Job Type"); sales visits, estimates and warranty trips never count
+  // Install COUNT looks at the job type. Sales visits, estimates, and warranty trips never count.
   var INSTALL_TYPE = /install|replacement|conversion|full system|plumbing project|rough and finish/i;
   var NOT_INSTALL = /sales|estimate|warranty|inspection/i;
+  // Install REVENUE is a different split: business unit or job type containing these words.
+  var INSTALL_REVENUE = /install|replace|new system/i;
+
+  /* Grading choices. The board reads these. Change a value here to change the rule.
+     Defaults are the choices that stayed in place when names were fixed. */
+  var RULES = {
+    // "full-or-unique-first": Mike Smith and Mike Jones stay separate. A bare "Mike"
+    // attaches to someone only when exactly one person has that first name.
+    // "first": the old rule, everyone with the same first name is one person.
+    nameMatch: "full-or-unique-first",
+    // Lower-is-better metrics score 100% at zero and this fraction at the allowed target.
+    // 0.5 means two callbacks against an allowance of two scores 50%, and four scores 0%.
+    inverseScoreAtTarget: 0.5,
+    // January year-to-date is at least this many months. 1 means a one-day January is not a one-day target.
+    ytdMinMonths: 1,
+    // Month-to-date targets stay the full monthly target. Pace on the goal slide is separate.
+    prorateMtdTargets: false,
+    // Letter cutoffs. The first one the score reaches, from the top, wins. Below all of them is F.
+    letterGrades: [
+      { letter: "A", min: 90 },
+      { letter: "B", min: 80 },
+      { letter: "C", min: 70 },
+      { letter: "D", min: 60 }
+    ],
+    // Sales board order. "sold" ranks by dollars sold. "score" ranks by the sales grade.
+    salesRankBy: "sold",
+    // Apprentices stay off the technician leaderboard and scorecard.
+    apprenticesOnTechBoard: false,
+    // A completed job counts as paid only when revenue is above this amount. 0 keeps $0 jobs out of average ticket.
+    paidRevenueAbove: 0,
+    // Leads use this date. "created" is the job's created date. "completion" uses the completion date.
+    leadOn: "created",
+    // Only this job status counts as revenue.
+    revenueStatus: "completed",
+    // Open estimates and overdue follow-ups are the whole current pipeline, not the selected month.
+    scopeOpenPipelineToPeriod: false,
+    scopeOverdueToPeriod: false,
+    // Membership renewals are not counted as memberships sold.
+    excludeMembershipRenewals: true,
+    renewalPattern: /renew/i,
+    // Review text credits a first name only when that first name belongs to one person.
+    reviewCreditUniqueFirstName: true,
+    // First names shorter than this are not matched inside review text. 3 skips "Al" and "Ed".
+    reviewNameMinLength: 3,
+    // Any PTO hours excuse the whole day. A blank PTO row counts as ptoDefaultHours.
+    ptoExcusesWholeDay: true,
+    ptoDefaultHours: 8,
+    // A timesheet code matching this excuses that day.
+    holidayPattern: /holiday/i,
+    // One employee's holiday code excuses the day for the whole company.
+    holidayExcusesEveryone: true,
+    // Attendance is graded through yesterday. "today" would count today as a missed day after midnight.
+    attendanceThrough: "yesterday",
+    // Scheduled days are Monday through Friday in New York.
+    attendanceWeekdaysOnly: true,
+    // On-time divides by days clocked in, including a weekend they worked. "scheduled" would divide by scheduled days.
+    onTimeDenominator: "daysClockedIn",
+    // Clocking in exactly at shift start plus the grace minutes is on time. One minute later is late.
+    clockAtGraceIsOnTime: true,
+    // Points are not the letter grade. revenue/revenue + sold/sold + memberships*membership + reviews*review + installs*install.
+    points: { revenue: 100, sold: 150, membership: 50, review: 25, install: 15 },
+    // On the Actuals tab this key is calls booked, not callbacks.
+    actualsCallsBookedKey: "cb",
+    // When company totals come from Actuals, the install and service split still comes from jobs.
+    actualsKeepJobRevenueSplit: true,
+    // A manager who has sold or completed work stays a technician unless Board_Techs says sales.
+    managersWhoSellStayTechs: true,
+    // A weight of 0 leaves that metric out of the grade.
+    omitZeroWeight: true,
+    // A metric stops at 100% of its target. A close rate over 100% still grades as 100%.
+    capScoreAtTarget: true
+  };
   var SLIDES = [
     {k:"goal",  label:"Monthly goal (install + service split)"},
     {k:"trend", label:"Revenue by month"},
@@ -113,7 +185,8 @@
     XLSX_MIME: XLSX_MIME, DRIVE: DRIVE, DL_TOOL: DL_TOOL, MONTHS: MONTHS,
     METRICS: METRICS, SALES_METRICS: SALES_METRICS, APP_METRICS: APP_METRICS,
     FIELD_TEAM: FIELD_TEAM, GRACE_MIN: GRACE_MIN, INSTALL_HOURS: INSTALL_HOURS,
-    INSTALL_TYPE: INSTALL_TYPE, NOT_INSTALL: NOT_INSTALL, SLIDES: SLIDES,
+    INSTALL_TYPE: INSTALL_TYPE, NOT_INSTALL: NOT_INSTALL, INSTALL_REVENUE: INSTALL_REVENUE,
+    RULES: RULES, SLIDES: SLIDES,
     LOGO_FILE: LOGO_FILE, LOGO_PDF: LOGO_PDF, PHOTO_FOLDER: PHOTO_FOLDER,
     SHEET_TABS: SHEET_TABS, defaultCfg: defaultCfg
   };

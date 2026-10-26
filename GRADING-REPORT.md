@@ -98,37 +98,46 @@ Period math, the clock, the pace line, attendance, the nightly reload, and the p
 - **Ties depended on insertion order.** Equal scores now sort by revenue, then by name.
 - **A revenue goal of $0 showed 0% and "behind pace".** It now says the monthly goal is not set and prints "—".
 
+## Names
+
+Ross asked to stop merging people who share a first name.
+
+**Before.** Mike Smith ($100, one opportunity) and Mike Jones ($250) became one row, `mike`, with $350. A review that said "Mike" credited every Mike. A Leaderboard row that said "Mike" was added on top of that same row.
+
+**After.** They stay two people. Mike Smith keeps the $100 and the opportunity. Mike Jones keeps the $250. A Leaderboard row or a shout-out that only says "Mike" is not given to either of them. The admin page, including the view that says to ask Ross, lists it: Leaderboard, "Mike" matches Mike Jones and Mike Smith. The membership dollars on that unassigned row still count in the company total. A bare "Sam" still attaches to Sam Rivera when Sam is the only Sam. Review text credits "Ann" when Ann is the only Ann. It does not credit "Mike" when an office Mike and a field Mike both exist. The technician id, or the full name in the technician column, still credits that one person. "Al" is still too short to match inside review text. A headshot named `Rivera_Sam.jpeg` still matches Sam Rivera. `Mike.jpeg` does not, when two Mikes are on the roster. A `Board_Techs` row keyed `mike` is flagged the same way and is not applied to both.
+
+`RULES.nameMatch` in `js/settings.js` is `"full-or-unique-first"`. Set it to `"first"` to merge on first name again.
+
 ## (b) Rules that were not changed
 
-These are business choices. Confirm them before anyone "fixes" them.
+These stay at the same values. Each one is a named setting in `js/settings.js` (`RULES`, or the install patterns next to it) so a later change does not mean a hunt through the math.
 
-- Lower-is-better metrics score 100% at zero and 50% at the allowed target. Callbacks allowed at 2 per month: 0 callbacks scores 100%, 2 scores 50%, 4 scores 0%.
-- January year-to-date is at least one full month.
-- Month-to-date targets are the full month. They are not cut down because the month is only partly over. Pace on the goal slide is separate from the grade.
-- Letter cutoffs stay A 90, B 80, C 70, D 60.
-- People are matched on first name. Mike Smith and Mike Jones are one row.
-- The sales board is ranked by dollars sold, not by the sales score.
-- Apprentices show on the apprentice table, not on the TV tech leaderboard.
-- A `$0` job is not a paid job, so it stays out of average ticket.
-- Install *count* and install *revenue* use different rules. Count looks at the job type (install, replacement, conversion, full system, plumbing project, rough and finish), over 4 hours, excluding sales, estimate, warranty, and inspection. Revenue split looks for install, replace, or new system on the business unit or job type.
-- Leads use the job's created date. Revenue uses completed jobs only.
-- The open pipeline and overdue follow-ups are not limited to the selected month.
-- Membership renewals are excluded.
-- A review can credit every tech whose first name appears in the text. The company total counts that review once. One- and two-letter names are not matched in the text.
-- Any PTO hours excuse the whole day. A company holiday is any timesheet code containing "holiday", on any employee, and it excuses that day for everyone.
-- Attendance runs through yesterday. Today is not a missed day yet.
-- On-time uses days the person clocked in, including a weekend they worked. It does not use scheduled days as the denominator. A weekend with no clock-in is not a missed day.
-- Clocking in exactly at shift start plus 10 minutes is on time.
+- `inverseScoreAtTarget` is 0.5. Lower-is-better metrics score 100% at zero and 50% at the allowed target. Callbacks allowed at 2 per month: 0 callbacks scores 100%, 2 scores 50%, 4 scores 0%.
+- `ytdMinMonths` is 1. January year-to-date is at least one full month.
+- `prorateMtdTargets` is false. Month-to-date targets are the full month. They are not cut down because the month is only partly over. Pace on the goal slide is separate from the grade.
+- `letterGrades` stay A 90, B 80, C 70, D 60.
+- `salesRankBy` is `"sold"`. The sales board is ranked by dollars sold, not by the sales score.
+- `apprenticesOnTechBoard` is false. Apprentices show on the apprentice table, not on the TV tech leaderboard.
+- `paidRevenueAbove` is 0. A `$0` job is not a paid job, so it stays out of average ticket.
+- Install *count* and install *revenue* use different rules. Count uses `INSTALL_TYPE` and `NOT_INSTALL` (install, replacement, conversion, full system, plumbing project, rough and finish; not sales, estimate, warranty, or inspection) and `INSTALL_HOURS` (4). Revenue split uses `INSTALL_REVENUE` (install, replace, or new system on the business unit or job type).
+- `leadOn` is `"created"`. Leads use the job's created date. `revenueStatus` is `"completed"`.
+- `scopeOpenPipelineToPeriod` and `scopeOverdueToPeriod` are false. The open pipeline and overdue follow-ups are not limited to the selected month.
+- `excludeMembershipRenewals` is true (`renewalPattern`).
+- `reviewNameMinLength` is 3. One- and two-letter names are not matched in review text. The company total still counts each review once. Who gets credit from the text is the name rule above (`reviewCreditUniqueFirstName`).
+- `ptoExcusesWholeDay` is true and `ptoDefaultHours` is 8. `holidayPattern` matches "holiday". `holidayExcusesEveryone` is true, so one employee's holiday code excuses that day for the company.
+- `attendanceThrough` is `"yesterday"`. Today is not a missed day yet. `attendanceWeekdaysOnly` is true.
+- `onTimeDenominator` is `"daysClockedIn"`. On-time uses days the person clocked in, including a weekend they worked. A weekend with no clock-in is not a missed day.
+- `clockAtGraceIsOnTime` is true. Grace is `GRACE_MIN`, 10 minutes. Clocking in exactly at shift start plus 10 minutes is on time.
 - Zero hours clocked is a real zero, including early in the month.
 - A manager rating of 0, or a blank rating, is left out. It is not a zero score.
-- Points (`revenue/100 + sold/150 + memberships×50 + reviews×25 + installs×15`) are not the letter grade.
-- On the Actuals tab, `cb` means calls booked, not callbacks.
-- A manager who sells stays a technician unless `Board_Techs` says sales.
-- Part, office, and manager names are not added to the board automatically.
+- `points` are `revenue/100 + sold/150 + memberships×50 + reviews×25 + installs×15`. Points are not the letter grade.
+- `actualsCallsBookedKey` is `"cb"`. On the Actuals tab that means calls booked, not callbacks.
+- `managersWhoSellStayTechs` is true. A manager who sells stays a technician unless `Board_Techs` says sales.
+- Part, office, and manager names are not added to the board automatically (`FIELD_TEAM`).
 - An inactive Leaderboard status is separate from the ServiceTitan active flag.
-- Estimates written and estimates sold can fall in different months, so a month's close rate can be over 100%. The grade caps that metric at 100%.
-- A weight of 0 leaves the metric out of the grade.
-- `coSource = actuals` replaces month-to-date company revenue, sold revenue, and calls booked. The install/service split stays job-based.
+- `capScoreAtTarget` is true. Estimates written and estimates sold can fall in different months, so a month's close rate can be over 100%. The grade caps that metric at 100%.
+- `omitZeroWeight` is true. A weight of 0 leaves the metric out of the grade.
+- `actualsKeepJobRevenueSplit` is true. `coSource = actuals` (a `Board_Config` key) replaces month-to-date company revenue, sold revenue, and calls booked. The install/service split stays job-based.
 - Hand-typed membership and review numbers have no daily history, so "last 30 days" for those stays the month-to-date figure.
 
 ## (c) Other fixes
@@ -141,12 +150,14 @@ These are business choices. Confirm them before anyone "fixes" them.
 - Missing reviews, announcements, or tech rows no longer take the rotation down.
 - The clock, the 3:30 AM reload, and the 6 AM–7 PM pull window use New York time.
 - The leaderboard prints "—" when a person has no score, instead of the word "null".
+- Admin lists first names that match more than one person, including on the public page that tells a viewer to ask Ross. The rotating TV does not show that list.
+- An empty weather forecast no longer runs a min/max over no days, so a blank forecast does not invent a freeze or heat alert.
 
 ## (d) What Ross needs to do
 
 1. **Restrict the Google API key** in Google Cloud: Sheets API only, and HTTP referrers limited to the GitHub Pages address. The fallback key is still in `js/settings.js` because the TVs open the site with no query string. It is also still in git history. Restricting it is what protects it. Do not delete the fallback until step 2 is done for every TV.
 2. **Move each TV** when you are ready. Open it once with `?hub=<data hub URL>&t=<token>`, or once with `?key=<a key you control>`. The page saves that and strips it from the address. Reloads, including 3:30 AM, keep the choice. Open `?mode=sheet` to send a TV back to the sheet. After this deploy, a TV picks up the new files on its next reload (within 6 hours, or at 3:30 AM New York). A manual refresh is faster.
 3. **Do not rewrite git history.** The old key stays in older commits. The ServiceTitan credentials that used to live in the deleted Netlify function are still in history too. Keep rotating that secret. Do not put it back in the repo.
-4. **Confirm the rules in section (b).** The two that change who is who, and how "bad" metrics feel, are first-name merging and the 50%-at-target inverse score.
+4. **The first-name merge is already changed.** Mike Smith and Mike Jones stay separate. Anything that only says "Mike" shows on the admin page instead of being combined. The other rules in section (b) are named settings in `js/settings.js` and were left at the same values, including the 50%-at-target inverse score and the letter cutoffs. Change a value there if you want a different rule.
 5. **Confirm the Opportunity column is filled in** on the jobs tab. If it is blank, close rate drops out of everyone's grade instead of scoring as 0%. That raises grades for anyone who had no opportunities marked. The $40,000 example above is that case: F becomes C.
 6. **Share the Zapier tabs** "anyone with the link can view" if they are not already. Sheet mode now reads `ST Appointments`, `ST Memberships`, `ST Reviews`, `ST Callbacks`, and `Automation Estimates`. When those tabs have rows, they replace the hand-typed membership, review, callback, and install numbers.

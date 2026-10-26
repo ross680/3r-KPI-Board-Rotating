@@ -202,8 +202,9 @@ function slideHTML(sl){
   }
   if (sl.k==="wx"){
     const w=snap.weather; const [ic,lbl]=WX(w.c); const days=w.days.slice(0,6);
-    const minLo=Math.min(...days.map(d=>d.lo)), maxHi=Math.max(...days.map(d=>d.hi));
-    const alert = minLo<=20 ? `Hard freeze coming (${minLo}°). Expect frozen and burst pipe calls, no-heat calls, and check truck water lines.` :
+    const lows=days.map(d=>d.lo).filter(n=>isFinite(n)), highs=days.map(d=>d.hi).filter(n=>isFinite(n));
+    const minLo=lows.length?Math.min(...lows):null, maxHi=highs.length?Math.max(...highs):null;
+    const alert = minLo==null ? "" : minLo<=20 ? `Hard freeze coming (${minLo}°). Expect frozen and burst pipe calls, no-heat calls, and check truck water lines.` :
       minLo<=32 ? `Freezing nights ahead (${minLo}°). Heating calls and frozen lines likely.` :
       maxHi>=90 ? `Heat wave (${maxHi}°). Expect no-cool calls. Push AC tune-ups and water breaks.` :
       maxHi>=85 ? `Hot stretch (${maxHi}°). AC calls will pick up.` :
@@ -221,7 +222,7 @@ function slideHTML(sl){
   }
   if (sl.k==="upd"){
     const u=snap.updates[sl.i]; if(!u) return "";
-    if (u.type==="shoutout" && u.tech && snap.techs[u.tech]){ const nm=(S.techs[u.tech]||{}).display||firstName(snap.techs[u.tech].full);
+    if (u.type==="shoutout" && u.tech && snap.techs[u.tech]){ const nm=Sc.displayName(snap.techs[u.tech], snap.techs, S.techs[u.tech]||{});
       return `<div class="kicker">${esc(u.title||"Shout-out")}</div><div class="spot">${av(u.tech,nm)}<div style="min-width:0"><div class="nm">${esc(nm)}</div><div class="ann" style="flex:none"><div class="msg" style="font-size:6vh">${esc(u.m)}</div></div></div></div>`; }
     return `<div class="ann">${u.ic?`<div class="ic">${esc(u.ic)}</div>`:""}${u.title?`<div class="badge">${esc(u.title)}</div>`:""}<div class="msg">${esc(u.m)}</div></div>`;
   }
@@ -307,15 +308,22 @@ function renderAdmin(){
   document.body.classList.remove("tv");
   $("#brand").innerHTML = brandHTML();
   if (!S.canEdit){
-    $("#app").innerHTML = `<div class="wrap"><div class="card"><h2>Admin is for managers</h2><p class="muted">You can view the board. Ask Ross for editor access to grade techs.</p><button class="btn" type="button" onclick="location.hash='board'">Open board</button></div></div>`; return;
+    $("#app").innerHTML = `<div class="wrap">${nameFlagNote()}<div class="card"><h2>Admin is for managers</h2><p class="muted">You can view the board. Ask Ross for editor access to grade techs.</p><button class="btn" type="button" onclick="location.hash='board'">Open board</button></div></div>`; return;
   }
   const tabs=[["score","Scorecard"],["techs","Techs & photos"],["scoring","Scoring rules"],["board","Board & data"]];
   $("#app").innerHTML = `<div class="wrap">
     ${syncNote()}
+    ${nameFlagNote()}
     <nav class="tabs" role="tablist">${tabs.map(([k,l])=>`<button class="tab ${S.adminTab===k?"on":""}" type="button" data-tab="${k}">${l}</button>`).join("")}</nav>
     <div id="pane">${ {score:paneScore, techs:paneTechs, scoring:paneScoring, board:paneBoard}[S.adminTab]() }</div></div>`;
   document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{S.adminTab=b.dataset.tab; renderAdmin();});
   wireAdmin();
+}
+function nameFlagNote(){
+  const flags=(S.snap&&S.snap.ambiguous)||[];
+  if (!flags.length) return "";
+  const lines=flags.map(f=>`${esc(f.source)}: “${esc(f.name)}” matches ${esc((f.matches||[]).join(" and "))}. Left unassigned so two people are not combined.`).join("<br>");
+  return `<div class="note bad" style="margin-bottom:14px"><b>Names that match more than one person</b><div class="small" style="margin-top:6px">${lines}</div></div>`;
 }
 function syncNote(){
   const s=S.sync; const stale=staleNow();
@@ -392,7 +400,7 @@ function monthTable(t){
     ${rows.map(([n,f])=>`<tr><td>${n}</td>${ms.slice(0,M+1).map((s,m)=>`<td class="num ${m===M?"cur":""}">${f(s)}</td>`).join("")}<td class="num ytd">${f(y)}</td></tr>`).join("")}
     <tr><td>Memberships</td>${MONTHS.slice(0,M+1).map((_,m)=>`<td class="num ${m===M?"cur":""}">${t.mem.m?t.mem.m[m]:(m===M?t.mem.mtd:"·")}</td>`).join("")}<td class="num ytd">${t.mem.ytd}</td></tr>
     <tr><td>Reviews</td>${MONTHS.slice(0,M+1).map((_,m)=>`<td class="num ${m===M?"cur":""}">${t.rv.m?t.rv.m[m]:(m===M?t.rv.mtd:"·")}</td>`).join("")}<td class="num ytd">${t.rv.ytd}</td></tr>
-    </tbody></table></div><p class="muted small" style="margin-bottom:0">${S.snap.auto&&S.snap.auto.mem?"Memberships, reviews and callbacks come from ServiceTitan automatically. Reviews count for every tech named in the review.":"Memberships and reviews only have this month and year totals because the Leaderboard tab doesn't keep monthly history."}</p></div>`;
+    </tbody></table></div><p class="muted small" style="margin-bottom:0">${S.snap.auto&&S.snap.auto.mem?"Memberships, reviews and callbacks come from ServiceTitan automatically. Review text credits a first name only when one person has that name. The technician on the row is always credited.":"Memberships and reviews only have this month and year totals because the Leaderboard tab doesn't keep monthly history."}</p></div>`;
 }
 function detailHTML(r){
   const t=r.t; const o=S.techs[t.k]||{}; const today=Date.now();
@@ -416,7 +424,7 @@ function paneTechs(){
   return `<div class="card"><h2>Techs &amp; photos</h2><p class="muted small" style="margin-top:0">Photos load automatically from the tech headshot folder in Google Drive (files named Last_First). Uploading one here replaces the Drive photo for that tech. Photos are resized to 480 px and only people in 3R can see them.${canUp?"":" Photo upload isn't available in this view."}</p>
     <div class="grid2">${all.map(t=>{const o=S.techs[t.k]||{}; const on = o.show===true || (o.show!==false && ((t.onBoard && t.status!=="inactive") || t.autoShow));
       return `<div class="tcard">${av(t.k,o.display||t.full,"m")}<div class="meta">
-        <input type="text" value="${esc(o.display||firstName(t.full))}" data-disp="${esc(t.k)}" aria-label="Board name for ${esc(t.full)}">
+        <input type="text" value="${esc(o.display||Sc.displayName(t, S.snap.techs, o))}" data-disp="${esc(t.k)}" aria-label="Board name for ${esc(t.full)}">
         <div class="muted small" style="margin-top:4px">${esc(t.full)} · ${esc(t.team||(t.onBoard?t.status:"not on Leaderboard tab"))}${t.startDate?" · started "+esc(t.startDate):""}</div>
         <label class="lbl">Grade as <select class="txt" style="width:auto;padding:3px 6px" data-role="${esc(t.k)}"><option value="tech" ${roleOf(t)==="tech"?"selected":""}>Technician</option><option value="apprentice" ${roleOf(t)==="apprentice"?"selected":""}>Apprentice</option><option value="sales" ${roleOf(t)==="sales"?"selected":""}>Sales</option></select></label>
         <label class="lbl"><input type="checkbox" data-show="${esc(t.k)}" ${on?"checked":""}> Show on board and scorecard</label>
@@ -516,17 +524,11 @@ async function uploadPhoto(k, file){
 }
 
 /* ===================== tech photos from Drive ===================== */
-// Kate's headshot folder: files named Last_First.jpeg. Matched to techs by first name.
+// Kate's headshot folder: files named Last_First.jpeg. A single name matches only when it is unique.
 let photoSyncRunning=false;
 function b64ToBlob(b64, type){ const bin=atob(b64); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i); return new Blob([a],{type:type||"image/jpeg"}); }
 function matchTechKey(title){
-  const parts=String(title||"").replace(/\.[^.]+$/,"").split(/[_\s.-]+/).filter(Boolean);
-  const techs=(S.snap&&S.snap.techs)||{};
-  for (const p of parts.slice().reverse()){ const k=key(p); if (techs[k]) return k; }
-  // fall back to last name (e.g. "Post_John.jpeg" → Jack Post) when it's unique
-  const byLast={}; Object.values(techs).forEach(t=>{ const w=String(t.full||"").trim().split(/\s+/); if(w.length>1){ const l=key(w[w.length-1]); byLast[l]=byLast[l]===undefined?t.k:null; } });
-  for (const p of parts){ const k=byLast[key(p)]; if (k) return k; }
-  return null;
+  return Sc.matchTech((S.snap&&S.snap.techs)||{}, title);
 }
 async function syncDrivePhotos(mcp){
   if (photoSyncRunning || !S.assets || !S.snap || !S.canEdit) return; photoSyncRunning=true;
@@ -662,6 +664,11 @@ async function pushSnapshot(snap){
   try { await S.db.doc("board/snapshot").set({...snap, hash:h, pushedAt:Date.now()}); }
   catch(e){ lastPushed=""; if (e&&e.code==="quota_exceeded") toast("Board storage is full"); }
 }
+function applyPeople(snap, meta){
+  const bound=Sc.bindTechMeta(meta||{}, (snap&&snap.techs)||{});
+  S.techs=bound.meta;
+  snap.ambiguous=(snap.ambiguous||[]).concat(bound.ambiguous||[]);
+}
 function applySnapshot(snap, at, src){ S.snap=snap; S.snapAt=at; S.snapSource=src; }
 
 /* ===================== routing ===================== */
@@ -696,7 +703,7 @@ function hubMode(){
       const snap=j.snapshot, c=snap.cfg||{};
       S.logoData = snap.logo || S.logoData;
       if (snap.logoPdf && snap.logoPdfHash !== (S.portalLogo||{}).h) renderPortalLogo(snap.logoPdf).then(P=>{ P.h=snap.logoPdfHash; applyPortalLogo(P); }).catch(e=>console.warn("portal logo",e));
-      S.cfg=Sc.applySheetConfig(c); S.techs=snap.techMeta||{}; applySnapshot(snap, snap.builtAt, "hub");
+      S.cfg=Sc.applySheetConfig(c); applyPeople(snap, snap.techMeta||{}); applySnapshot(snap, snap.builtAt, "hub");
       S.sync={state:"ok",msg:"Live from the 3R Data Hub"}; render(true);
     }catch(e){ S.sync={state:"error",msg:"Couldn't reach the data hub. Showing the last numbers."}; if(!S.snap) render(); }
   };
@@ -739,7 +746,7 @@ function sheetMode(){
       const snap=buildSnapshot(wb);
       if (!snap.weather) snap.weather = await directWeather();
       const cfgRows=rows["board_config"]||[]; const c={}; cfgRows.slice(1).forEach(r=>{ if(String(r[0]||"").trim()) c[String(r[0]).trim()]=r[1]; });
-      S.cfg=Sc.applySheetConfig(c); S.techs=Sc.parseTechMeta(rows["board_techs"]||[]); applySnapshot(snap, Date.now(), "sheet");
+      S.cfg=Sc.applySheetConfig(c); applyPeople(snap, Sc.parseTechMeta(rows["board_techs"]||[])); applySnapshot(snap, Date.now(), "sheet");
       S.sync={state:"ok",msg:"Live from the KPI sheet"}; saveCached(); render(true);
     }catch(e){ S.sync={state:"error",msg:(e&&e.message)||"Couldn't reach the sheet. Showing the last numbers."}; if(!S.snap) render(); }
     finally{ busy=false; }

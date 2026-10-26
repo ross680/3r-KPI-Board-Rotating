@@ -88,7 +88,7 @@ Estimates written are dated on creation. Sold dollars are dated on sold-on, or o
 
 `ST Memberships`: `membership id`, `created`, `type` (renewals are excluded), `sold by id`, `sold by`.
 
-`ST Reviews`: `published`, `rating`, `review`, `platform`, `technician id`, `technician`. A review goes on the carousel when the text is longer than 30 characters and the rating is 4 or higher, or blank. Credit uses the technician id when it matches, and also any tech whose first name appears in the text. Names of one or two letters are not matched in the text. The company total counts the review once.
+`ST Reviews`: `published`, `rating`, `review`, `platform`, `technician id`, `technician`. A review goes on the carousel when the text is longer than 30 characters and the rating is 4 or higher, or blank. The technician id, or the full name in the technician column, credits that person. The review text credits a first name only when exactly one known person has it. A shared first name is not credited, and the admin page lists the clash. Names shorter than 3 letters are not matched in the text. The company total counts the review once.
 
 `ST Callbacks`: `callback job id`, `created`, `status` (canceled rows are skipped), `original job id`. The original job's primary technician gets the callback. The job's own recall flag is not the callback count.
 
@@ -117,11 +117,13 @@ A target of `0` is kept. Percent targets are fractions (`0.55`, not `55`). Weigh
 
 When `coSource` is `actuals`, month-to-date company revenue, sold revenue, and calls booked come from the Actuals tab. The install and service split on the goal slide still comes from jobs.
 
-`Board_Techs`: key (first name, lowercase), display name, show (`yes` / `no` / blank), photo, rating (1–5), role (`tech`, `apprentice`, or `sales`). A blank show lets the automatic rule decide.
+`Board_Techs`: key, display name, show (`yes` / `no` / blank), photo, rating (1–5), role (`tech`, `apprentice`, or `sales`). A full-name key attaches to that person. A first-name key attaches only when one person has that first name. If two people share it, the row is skipped and the admin page lists it. A blank show lets the automatic rule decide.
 
 `Board_Updates`: `posted`, `message`, `expires`, `status` (`off`, `hide`, or `done` hides it), `type` (`ticker` scrolls the footer; anything else is a slide), `icon`, `title`, `tech`. An expiry before today in New York hides the row.
 
-People are matched on first name. Mike Smith and Mike Jones are one person. That is intentional; see the grading report before changing it.
+People match on the full name when the sheet has one. "Sam" attaches to Sam Rivera only when nobody else is named Sam. Mike Smith and Mike Jones stay two people. A row that only says "Mike" is left unassigned, its numbers still count in the company total, and the admin page names both Mikes. Headshots named `Last_First` still match. A file named `Mike.jpeg` does not, when two Mikes are on the roster.
+
+`RULES` in `js/settings.js` holds the grading choices. `nameMatch` is `"full-or-unique-first"`. Set it to `"first"` to merge on first name again. The other choices, including the 50% inverse score and the letter cutoffs, are named there too and still use the same defaults.
 
 ## How grading works
 
@@ -133,7 +135,7 @@ Lower-is-better metrics (callbacks, missed days, PTO, overdue follow-ups, callba
 
 Month-to-date targets are the full monthly target. They are not prorated inside the month. Year-to-date targets scale by how much of the year has passed, using the real length of the current month, and January counts as at least one full month.
 
-Technicians, apprentices, and salespeople use different metric sets. Defaults are in `js/settings.js`. Apprentices are graded on attendance and do not appear on the TV tech leaderboard. The sales list is ranked by dollars sold, not by the sales score.
+Technicians, apprentices, and salespeople use different metric sets. Defaults, and the choices above, are named in `RULES` inside `js/settings.js`. Apprentices are graded on attendance and do not appear on the TV tech leaderboard. The sales list is ranked by dollars sold, not by the sales score.
 
 Points on the board are not the letter grade. Points are `revenue / 100 + sold / 150 + memberships × 50 + reviews × 25 + installs × 15`, rounded.
 

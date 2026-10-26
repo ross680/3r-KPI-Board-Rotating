@@ -57,6 +57,17 @@ function show(names) {
   names.forEach(function (n) { techs[Sc.key(n)] = { show: true, display: n.split(" ")[0] }; });
   return techs;
 }
+function person(snapshot, fullName) {
+  const t = snapshot.techs[Sc.key(fullName)];
+  assert.ok(t, "expected " + fullName + " among " + Object.keys(snapshot.techs).join(", "));
+  return t;
+}
+function withRule(patch, fn) {
+  const saved = {};
+  Object.keys(patch).forEach(function (k) { saved[k] = Settings.RULES[k]; Settings.RULES[k] = patch[k]; });
+  try { return fn(); }
+  finally { Object.keys(saved).forEach(function (k) { Settings.RULES[k] = saved[k]; }); }
+}
 
 describe("New York dates", function () {
   it("builds wall-clock times on both sides of daylight saving", function () {
@@ -90,8 +101,8 @@ describe("New York dates", function () {
     const s = snap({
       "ST Jobs": [JOB_H, job({ id: "1", completed: "2026-03-01T04:30:00.000Z", rev: 100, created: "2026-02-28" })]
     }, now);
-    assert.equal(s.techs.sam.y.rev[1], 100);
-    assert.equal(s.techs.sam.y.rev[2] || 0, 0);
+    assert.equal(person(s, "Sam Rivera").y.rev[1], 100);
+    assert.equal(person(s, "Sam Rivera").y.rev[2] || 0, 0);
     assert.equal(s.dataThrough, "2026-02-28");
 
     const evening = snap({
@@ -141,7 +152,7 @@ describe("tech grades", function () {
     const s = snap({
       "ST Jobs": [JOB_H, job({ id: "1", tech: "Sam Rivera", completed: "10/15/2026", rev: 40000, opp: "", hrs: 2 })]
     });
-    const graded = Sc.scoreTech(s.techs.sam, "mtd", ctx(s));
+    const graded = Sc.scoreTech(person(s, "Sam Rivera"), "mtd", ctx(s));
     assert.equal(graded.parts.close.s, null);
     assert.equal(graded.parts.avg.s, 1);
     assert.equal(graded.score, 73);
@@ -152,7 +163,7 @@ describe("tech grades", function () {
     const s = snap({
       "Leaderboard": [LB_H, ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0]]
     });
-    const graded = Sc.scoreTech(s.techs.sam, "mtd", ctx(s));
+    const graded = Sc.scoreTech(person(s, "Sam Rivera"), "mtd", ctx(s));
     assert.equal(graded.parts.avg.s, null);
     assert.equal(graded.parts.close.s, null);
     assert.equal(graded.score, 25);
@@ -163,10 +174,10 @@ describe("tech grades", function () {
     const s = snap({
       "Leaderboard": [LB_H, ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0]]
     });
-    const none = Sc.scoreTech(s.techs.sam, "mtd", ctx(s));
+    const none = Sc.scoreTech(person(s, "Sam Rivera"), "mtd", ctx(s));
     assert.equal(none.parts.cb.s, 1);
-    s.techs.sam.cb[9] = 2;
-    const atTarget = Sc.scoreTech(s.techs.sam, "mtd", ctx(s));
+    person(s, "Sam Rivera").cb[9] = 2;
+    const atTarget = Sc.scoreTech(person(s, "Sam Rivera"), "mtd", ctx(s));
     assert.equal(atTarget.parts.cb.s, 0.5);
   });
 
@@ -174,7 +185,7 @@ describe("tech grades", function () {
     const s = snap({
       "ST Techs": [TECH_H, ["Alex Rivera", "Apprentice", "TRUE", "2026-01-01", "08:00", "T1", ""]]
     });
-    const graded = Sc.scoreTech(s.techs.alex, "mtd", ctx(s));
+    const graded = Sc.scoreTech(person(s, "Alex Rivera"), "mtd", ctx(s));
     assert.equal(graded.st.hasAtt, false);
     assert.equal(graded.score, null);
     assert.equal(graded.grade, null);
@@ -185,7 +196,7 @@ describe("tech grades", function () {
     const set = [{ k: "rev", label: "Revenue", fmt: "$", target: 100, w: 100 }];
     function gradeRev(amount) {
       const s = snap({ "ST Jobs": [JOB_H, job({ id: "1", completed: "10/10/2026", rev: amount, hrs: 1 })] });
-      return Sc.scoreWith(s.techs.sam, "mtd", set, {}, ctx(s));
+      return Sc.scoreWith(person(s, "Sam Rivera"), "mtd", set, {}, ctx(s));
     }
     const up = gradeRev(89.5);
     assert.equal(up.score, 90);
@@ -223,8 +234,8 @@ describe("tech grades", function () {
     });
     const techs = Sc.roster(false, "tech", ctx(s));
     const apps = Sc.roster(false, "apprentice", ctx(s));
-    assert.deepEqual(techs.map(function (r) { return r.t.k; }), ["sam"]);
-    assert.deepEqual(apps.map(function (r) { return r.t.k; }), ["alex"]);
+    assert.deepEqual(techs.map(function (r) { return r.t.k; }), [Sc.key("Sam Rivera")]);
+    assert.deepEqual(apps.map(function (r) { return r.t.k; }), [Sc.key("Alex Rivera")]);
   });
 });
 
@@ -233,7 +244,7 @@ describe("sales grades", function () {
     const s = snap({
       "Leaderboard": [LB_H, ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0]]
     });
-    const graded = Sc.scoreTech(s.techs.sam, "mtd", ctx(s, { techs: { sam: { role: "sales", show: true } } }));
+    const graded = Sc.scoreTech(person(s, "Sam Rivera"), "mtd", ctx(s, { techs: { [Sc.key("Sam Rivera")]: { role: "sales", show: true } } }));
     assert.equal(graded.parts.estClose.s, null);
     assert.equal(graded.parts.avgSale.s, null);
     assert.equal(graded.score, 17);
@@ -251,8 +262,8 @@ describe("sales grades", function () {
       }))
     });
     const c = ctx(s, { techs: show(["Amy Cole", "Zoe Cole"]) });
-    const amy = Sc.scoreWith(s.techs.amy, "mtd", Settings.SALES_METRICS, {}, c);
-    const zoe = Sc.scoreWith(s.techs.zoe, "mtd", Settings.SALES_METRICS, {}, c);
+    const amy = Sc.scoreWith(person(s, "Amy Cole"), "mtd", Settings.SALES_METRICS, {}, c);
+    const zoe = Sc.scoreWith(person(s, "Zoe Cole"), "mtd", Settings.SALES_METRICS, {}, c);
     assert.ok(amy.score > zoe.score, "Amy's cleaner book should outscore Zoe");
     const ranked = Sc.salesRoster(false, c);
     assert.deepEqual(ranked.map(function (r) { return r.name; }), ["Zoe", "Amy"]);
@@ -263,8 +274,8 @@ describe("sales grades", function () {
     const s = snap({
       "ST Estimates": [EST_H, ["Sold", "Sam Rivera", "Sam Rivera", 5000, "10/1/2026", "", "", "Water heater"]]
     });
-    assert.equal(s.techs.sam.y.sold[9], 5000);
-    assert.equal(s.techs.sam.y.soldN[9], 1);
+    assert.equal(person(s, "Sam Rivera").y.sold[9], 5000);
+    assert.equal(person(s, "Sam Rivera").y.soldN[9], 1);
   });
 
   it("does not call a follow-up overdue until the New York day after it is due", function () {
@@ -275,7 +286,7 @@ describe("sales grades", function () {
         ["Open", "Sam Rivera", "", 100, "10/1/2026", "", "10/25/2026", "Due yesterday"]
       ]
     });
-    assert.equal(s.techs.sam.overdueN, 1);
+    assert.equal(person(s, "Sam Rivera").overdueN, 1);
   });
 
   it("caps estimate close rate at 100% when more sold this month than were written this month", function () {
@@ -286,11 +297,11 @@ describe("sales grades", function () {
         ["Sold", "Sam Rivera", "Sam Rivera", 1000, "10/3/2026", "10/4/2026", "", "Written this month"]
       ]
     });
-    const st = Sc.statsFor(s.techs.sam, "mtd", null, ctx(s));
+    const st = Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s));
     assert.equal(st.estN, 1);
     assert.equal(st.soldN, 2);
     assert.ok(st.estClose > 1);
-    const graded = Sc.scoreWith(s.techs.sam, "mtd", [{ k: "estClose", target: 0.45, w: 20 }], {}, ctx(s));
+    const graded = Sc.scoreWith(person(s, "Sam Rivera"), "mtd", [{ k: "estClose", target: 0.45, w: 20 }], {}, ctx(s));
     assert.equal(graded.parts.estClose.s, 1);
   });
 });
@@ -313,7 +324,7 @@ describe("apprentice attendance", function () {
       timesheet("Alex Rivera", "T1", "10/21/2026 8:11 AM", "Clock", "ClockInOut", 8),
       timesheet("Alex Rivera", "T1", "10/22/2026 8:00 AM", "PTO", "PaidTimeOff", 8)
     ]);
-    const graded = Sc.scoreTech(s.techs.alex, "mtd", ctx(s));
+    const graded = Sc.scoreTech(person(s, "Alex Rivera"), "mtd", ctx(s));
     const st = graded.st;
     assert.equal(st.sched, 5);
     assert.equal(st.missed, 1);
@@ -323,7 +334,7 @@ describe("apprentice attendance", function () {
     assert.equal(st.clockHrs, 24);
     assert.equal(st.attend, 0.8);
     assert.equal(Math.round(st.onTime * 1000) / 1000, Math.round((2 / 3) * 1000) / 1000);
-    assert.equal(s.techs.alex.att.y.sched[8], 0);
+    assert.equal(person(s, "Alex Rivera").att.y.sched[8], 0);
     assert.equal(graded.score, 61);
     assert.equal(graded.grade, "D");
   });
@@ -335,21 +346,21 @@ describe("apprentice attendance", function () {
     const late = apprenticeSnap([
       timesheet("Alex Rivera", "T1", "10/19/2026 8:11 AM", "Clock", "ClockInOut", 8)
     ]);
-    assert.equal(Sc.statsFor(onTime.techs.alex, "mtd", null, ctx(onTime)).late, 0);
-    assert.equal(Sc.statsFor(late.techs.alex, "mtd", null, ctx(late)).late, 1);
+    assert.equal(Sc.statsFor(person(onTime, "Alex Rivera"), "mtd", null, ctx(onTime)).late, 0);
+    assert.equal(Sc.statsFor(person(late, "Alex Rivera"), "mtd", null, ctx(late)).late, 1);
   });
 
   it("still grades a PTO-only apprentice and leaves a tech with no timesheet unscored", function () {
     const pto = apprenticeSnap([
       timesheet("Alex Rivera", "T1", "10/22/2026 8:00 AM", "PTO", "PaidTimeOff", 8)
     ]);
-    const graded = Sc.scoreTech(pto.techs.alex, "mtd", ctx(pto));
+    const graded = Sc.scoreTech(person(pto, "Alex Rivera"), "mtd", ctx(pto));
     assert.equal(graded.st.hasAtt, true);
     assert.equal(graded.st.missed, 4);
     assert.notEqual(graded.score, null);
 
     const none = apprenticeSnap([]);
-    const blank = Sc.scoreTech(none.techs.alex, "mtd", ctx(none));
+    const blank = Sc.scoreTech(person(none, "Alex Rivera"), "mtd", ctx(none));
     assert.equal(blank.score, null);
     assert.equal(blank.grade, null);
   });
@@ -361,7 +372,7 @@ describe("apprentice attendance", function () {
       timesheet("Alex Rivera", "T1", "10/21/2026 8:00 AM", "Clock", "ClockInOut", 8),
       timesheet("Nobody", "", "10/23/2026 8:00 AM", "Company Holiday", "ClockInOut", 0)
     ]);
-    const st = Sc.statsFor(s.techs.alex, "mtd", null, ctx(s));
+    const st = Sc.statsFor(person(s, "Alex Rivera"), "mtd", null, ctx(s));
     assert.equal(st.sched, 4);
     assert.equal(st.missed, 1);
     assert.equal(st.daysW, 3);
@@ -381,7 +392,7 @@ describe("last 30 days and year to date", function () {
     const s = snap({
       "Leaderboard": [LB_H, ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0]]
     }, feb28);
-    const graded = Sc.scoreTech(s.techs.sam, "ytd", ctx(s, { now: feb28 }));
+    const graded = Sc.scoreTech(person(s, "Sam Rivera"), "ytd", ctx(s, { now: feb28 }));
     assert.equal(graded.parts.rev.target, 80000);
   });
 
@@ -415,7 +426,7 @@ describe("last 30 days and year to date", function () {
         ["C4", "2026-10-11", "Canceled", "J-OCT"]
       ]
     });
-    const t = s.techs.sam;
+    const t = person(s, "Sam Rivera");
     assert.equal(t.mem.mtd, 1);
     assert.equal(t.mem.l30, 2);
     assert.equal(t.mem.ytd, 3);
@@ -434,7 +445,7 @@ describe("last 30 days and year to date", function () {
     const s = snap({
       "Leaderboard": [LB_H, ["Sam Rivera", "active", 5, 4, 0, 9, 8, 0, 0]]
     });
-    const st = Sc.statsFor(s.techs.sam, "l30", null, ctx(s));
+    const st = Sc.statsFor(person(s, "Sam Rivera"), "l30", null, ctx(s));
     assert.equal(st.mem, 5);
     assert.equal(st.rv, 4);
   });
@@ -454,7 +465,7 @@ describe("installs, jobs, and points", function () {
         job({ id: "WAR", num: "1006", completed: "10/14/2026", rev: 0, hrs: 6, type: "Warranty Install" })
       ]
     });
-    const t = s.techs.sam;
+    const t = person(s, "Sam Rivera");
     assert.equal(t.inst[9], 2);
     assert.equal(t.inst[8], 1);
     assert.equal(t.instL30, 2);
@@ -470,14 +481,14 @@ describe("installs, jobs, and points", function () {
         job({ id: "3", completed: "10/12/2026", rev: 1000, status: "Completed", tech: "" })
       ]
     });
-    assert.equal(s.techs.sam.y.jobs[9], 1);
-    assert.equal(s.techs.sam.y.paid[9], 0);
-    assert.equal(s.techs.sam.y.rev[9], 0);
+    assert.equal(person(s, "Sam Rivera").y.jobs[9], 1);
+    assert.equal(person(s, "Sam Rivera").y.paid[9], 0);
+    assert.equal(person(s, "Sam Rivera").y.rev[9], 0);
     assert.equal(s.co.y.rev[9], 1000);
     assert.equal(s.techs[""], undefined);
   });
 
-  it("counts an opportunity marked Yes and merges the same first name", function () {
+  it("counts an opportunity marked Yes and keeps two Mikes apart", function () {
     const s = snap({
       "ST Jobs": [
         JOB_H,
@@ -485,10 +496,12 @@ describe("installs, jobs, and points", function () {
         job({ id: "2", tech: "Mike Jones", completed: "10/11/2026", rev: 250, opp: "No", conv: "Yes" })
       ]
     });
-    assert.deepEqual(Object.keys(s.techs), ["mike"]);
-    assert.equal(s.techs.mike.y.rev[9], 350);
-    assert.equal(s.techs.mike.y.opp[9], 1);
-    assert.equal(s.techs.mike.y.conv[9], 1);
+    assert.equal(person(s, "Mike Smith").y.rev[9], 100);
+    assert.equal(person(s, "Mike Smith").y.opp[9], 1);
+    assert.equal(person(s, "Mike Smith").y.conv[9], 1);
+    assert.equal(person(s, "Mike Jones").y.rev[9], 250);
+    assert.equal(person(s, "Mike Jones").y.opp[9], 0);
+    assert.equal(s.ambiguous.length, 0);
   });
 
   it("adds points from revenue, sold work, memberships, reviews, and installs", function () {
@@ -498,7 +511,7 @@ describe("installs, jobs, and points", function () {
         ["1", "Sam Rivera", "Completed", "10/1/2026", "10/10/2026", 10000]],
       "ST Estimates": [EST_H, ["Sold", "Sam Rivera", "Sam Rivera", 15000, "10/2/2026", "10/2/2026", "", "Sold"]]
     });
-    const st = Sc.statsFor(s.techs.sam, "mtd", null, ctx(s));
+    const st = Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s));
     assert.equal(st.rev, 10000);
     assert.equal(st.sold, 15000);
     assert.equal(st.mem, 2);
@@ -603,6 +616,263 @@ describe("goals, pace, stale data, and sheet settings", function () {
   });
 });
 
+describe("people with the same first name", function () {
+  it("attaches a one-word name only when that first name is unique", function () {
+    const s = snap({
+      "ST Jobs": [JOB_H, job({ id: "1", tech: "Sam Rivera", completed: "10/10/2026", rev: 100 })],
+      "Leaderboard": [LB_H, ["Sam", "active", 4, 1, 0, 4, 1, 0, 0]]
+    });
+    const t = person(s, "Sam Rivera");
+    assert.equal(Object.keys(s.techs).length, 1);
+    assert.equal(t.mem.mtd, 4);
+    assert.equal(t.rv.mtd, 1);
+    assert.equal(s.ambiguous.length, 0);
+  });
+
+  it("leaves a shared first name unassigned and still counts it in company totals", function () {
+    const s = snap({
+      "ST Jobs": [
+        JOB_H,
+        job({ id: "1", tech: "Mike Smith", completed: "10/10/2026", rev: 100 }),
+        job({ id: "2", tech: "Mike Jones", completed: "10/11/2026", rev: 250 })
+      ],
+      "Leaderboard": [LB_H, ["Mike", "active", 9, 0, 0, 9, 0, 0, 0]],
+      "Board_Updates": [
+        ["Posted", "Message", "Expires", "Status", "Type", "Icon", "Title", "Tech"],
+        ["10/20/2026", "Nice work on the heater", "", "", "shoutout", "", "Shout", "Mike"]
+      ]
+    });
+    assert.equal(person(s, "Mike Smith").y.rev[9], 100);
+    assert.equal(person(s, "Mike Jones").y.rev[9], 250);
+    assert.equal(person(s, "Mike Smith").mem.mtd, 0);
+    assert.equal(person(s, "Mike Jones").mem.mtd, 0);
+    assert.equal(s.leaderSums.mem_mtd, 9);
+    assert.equal(s.updates[0].tech, "");
+    const flagged = s.ambiguous.map(function (f) { return f.source; }).sort();
+    assert.deepEqual(flagged, ["Board_Updates", "Leaderboard"]);
+    s.ambiguous.forEach(function (f) {
+      assert.equal(f.name, "Mike");
+      assert.deepEqual(f.matches.slice().sort(), ["Mike Jones", "Mike Smith"]);
+    });
+    const ranked = Sc.roster(false, "tech", ctx(s, {
+      techs: {
+        [Sc.key("Mike Smith")]: { show: true },
+        [Sc.key("Mike Jones")]: { show: true }
+      }
+    }));
+    assert.deepEqual(ranked.map(function (r) { return r.name; }).sort(), ["Mike Jones", "Mike Smith"]);
+  });
+
+  it("credits review text by first name only when that first name is unique", function () {
+    const ann = "Ann fixed the leak and walked us through the whole repair before she left the house.";
+    const mike = "Mike was great and finished the water heater the same day he arrived on site.";
+    const thanks = "Thanks for the fast visit today after we called this morning about the leak.";
+    const al = "Al saved the day and explained every option clearly before leaving the house.";
+    const s = snap({
+      "ST Techs": [
+        TECH_H,
+        ["Ann Cole", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "A1", ""],
+        ["Mike Office", "Office", "TRUE", "2020-01-01", "08:00", "MO", ""],
+        ["Mike Jones", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "MJ", ""],
+        ["Al Poe", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "AL", ""]
+      ],
+      "ST Reviews": [
+        RV_H,
+        ["2026-10-02", 5, ann, "Google", "", ""],
+        ["2026-10-03", 5, mike, "Google", "", ""],
+        ["2026-10-04", 5, thanks, "Google", "MJ", "Mike Jones"],
+        ["2026-10-05", 5, al, "Google", "", ""],
+        ["2026-10-06", 5, thanks, "Google", "AL", "Al Poe"]
+      ]
+    });
+    assert.equal(person(s, "Ann Cole").rv.mtd, 1);
+    assert.equal(person(s, "Mike Jones").rv.mtd, 1);
+    assert.equal(person(s, "Al Poe").rv.mtd, 1);
+    assert.equal(s.techs[Sc.key("Mike Office")], undefined);
+    assert.equal(s.leaderSums.rv_mtd, 5);
+    const reviewFlags = s.ambiguous.filter(function (f) { return f.source === "ST Reviews"; });
+    assert.equal(reviewFlags.length, 1);
+    assert.equal(reviewFlags[0].name, "Mike");
+    assert.deepEqual(reviewFlags[0].matches.slice().sort(), ["Mike Jones", "Mike Office"]);
+  });
+
+  it("can still merge on first name when that setting is turned on", function () {
+    withRule({ nameMatch: "first" }, function () {
+      const s = snap({
+        "ST Jobs": [
+          JOB_H,
+          job({ id: "1", tech: "Mike Smith", completed: "10/10/2026", rev: 100, opp: "Yes", conv: "Yes" }),
+          job({ id: "2", tech: "Mike Jones", completed: "10/11/2026", rev: 250 })
+        ]
+      });
+      assert.deepEqual(Object.keys(s.techs), ["mike"]);
+      assert.equal(s.techs.mike.y.rev[9], 350);
+      assert.equal(s.techs.mike.y.opp[9], 1);
+      assert.equal(s.ambiguous.length, 0);
+    });
+  });
+
+  it("strips a trailing tech label and matches Last_First photos only when unique", function () {
+    const s = snap({
+      "ST Jobs": [
+        JOB_H,
+        job({ id: "1", tech: "Sam Rivera tech", completed: "10/10/2026", rev: 40 }),
+        job({ id: "2", tech: "Sam Rivera", completed: "10/11/2026", rev: 60 })
+      ]
+    });
+    assert.equal(person(s, "Sam Rivera").y.rev[9], 100);
+    const techs = {
+      samrivera: { k: "samrivera", full: "Sam Rivera" },
+      mikesmith: { k: "mikesmith", full: "Mike Smith" },
+      mikejones: { k: "mikejones", full: "Mike Jones" }
+    };
+    assert.equal(Sc.matchTech(techs, "Rivera_Sam.jpeg"), "samrivera");
+    assert.equal(Sc.matchTech(techs, "Smith.jpeg"), "mikesmith");
+    assert.equal(Sc.matchTech(techs, "Mike.jpeg"), null);
+    const bound = Sc.bindTechMeta(
+      { sam: { role: "sales", show: true, rating: 4 }, mike: { show: true } },
+      techs
+    );
+    assert.equal(bound.meta.samrivera.role, "sales");
+    assert.equal(bound.meta.samrivera.rating, 4);
+    assert.equal(bound.meta.mikesmith, undefined);
+    assert.equal(bound.meta.mikejones, undefined);
+    assert.equal(bound.ambiguous.length, 1);
+    assert.equal(bound.ambiguous[0].source, "Board_Techs");
+    assert.deepEqual(bound.ambiguous[0].matches.slice().sort(), ["Mike Jones", "Mike Smith"]);
+  });
+});
+
+describe("named grading settings", function () {
+  it("reads letter cutoffs, inverse scoring, and the January floor from settings", function () {
+    assert.equal(Sc.letterGrade(90), "A");
+    withRule({
+      letterGrades: [
+        { letter: "A", min: 95 },
+        { letter: "B", min: 80 },
+        { letter: "C", min: 70 },
+        { letter: "D", min: 60 }
+      ]
+    }, function () {
+      assert.equal(Sc.letterGrade(90), "B");
+      assert.equal(Sc.letterGrade(95), "A");
+    });
+    assert.equal(Sc.letterGrade(90), "A");
+    assert.equal(Settings.RULES.letterGrades[0].letter, "A");
+    assert.equal(Settings.RULES.letterGrades[0].min, 90);
+
+    withRule({ inverseScoreAtTarget: 0 }, function () {
+      const s = snap({ "Leaderboard": [LB_H, ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0]] });
+      person(s, "Sam Rivera").cb[9] = 2;
+      const graded = Sc.scoreTech(person(s, "Sam Rivera"), "mtd", ctx(s));
+      assert.equal(graded.parts.cb.s, 0);
+    });
+    const half = snap({ "Leaderboard": [LB_H, ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0]] });
+    person(half, "Sam Rivera").cb[9] = 2;
+    assert.equal(Sc.scoreTech(person(half, "Sam Rivera"), "mtd", ctx(half)).parts.cb.s, 0.5);
+
+    const jan15 = Sc.nyDate(2026, 0, 15, 12, 0, 0);
+    withRule({ ytdMinMonths: 0 }, function () {
+      assert.equal(Sc.monthsElapsed(snap({}, jan15), jan15), 15 / 31);
+    });
+    assert.equal(Sc.monthsElapsed(snap({}, jan15), jan15), 1);
+  });
+
+  it("prorates month targets, ranks sales by score, and puts apprentices on the tech list only when asked", function () {
+    withRule({ prorateMtdTargets: true }, function () {
+      const s = snap({ "Leaderboard": [LB_H, ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0]] });
+      const mtd = Sc.scoreTech(person(s, "Sam Rivera"), "mtd", ctx(s));
+      const l30 = Sc.scoreTech(person(s, "Sam Rivera"), "l30", ctx(s));
+      assert.ok(Math.abs(mtd.parts.rev.target - 40000 * (26 / 31)) < 1e-6);
+      assert.equal(l30.parts.rev.target, 40000);
+    });
+    const plain = snap({ "Leaderboard": [LB_H, ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0]] });
+    assert.equal(Sc.scoreTech(person(plain, "Sam Rivera"), "mtd", ctx(plain)).parts.rev.target, 40000);
+
+    withRule({ salesRankBy: "score" }, function () {
+      const s = snap({
+        "ST Estimates": [
+          EST_H,
+          ["Sold", "Amy Cole", "Amy Cole", 80000, "10/2/2026", "10/2/2026", "", "One big"],
+          ["Sold", "Zoe Cole", "Zoe Cole", 200000, "10/3/2026", "10/3/2026", "", "Zoe sold"]
+        ].concat(Array.from({ length: 18 }, function (_, i) {
+          return ["Open", "Zoe Cole", "Zoe Cole", 100, "9/1/2026", "", "9/15/2026", "Over " + i];
+        }))
+      });
+      const c = ctx(s, { techs: show(["Amy Cole", "Zoe Cole"]) });
+      const ranked = Sc.salesRoster(false, c);
+      assert.equal(ranked[0].name, "Amy");
+      assert.ok(ranked[1].st.sold > ranked[0].st.sold);
+    });
+
+    withRule({ apprenticesOnTechBoard: true }, function () {
+      const s = snap({
+        "ST Techs": [
+          TECH_H,
+          ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "T1", ""],
+          ["Alex Rivera", "Apprentice", "TRUE", "2026-01-01", "08:00", "T2", ""]
+        ],
+        "ST Jobs": [JOB_H, job({ id: "1", tech: "Sam Rivera", completed: "10/10/2026", rev: 1000 })]
+      });
+      const keys = Sc.roster(false, "tech", ctx(s)).map(function (r) { return r.t.k; }).sort();
+      assert.deepEqual(keys, [Sc.key("Alex Rivera"), Sc.key("Sam Rivera")].sort());
+    });
+  });
+
+  it("keeps a small ticket unpaid and limits the open pipeline when those settings change", function () {
+    withRule({ paidRevenueAbove: 100 }, function () {
+      const s = snap({ "ST Jobs": [JOB_H, job({ id: "1", completed: "10/10/2026", rev: 50 })] });
+      assert.equal(person(s, "Sam Rivera").y.jobs[9], 1);
+      assert.equal(person(s, "Sam Rivera").y.paid[9], 0);
+    });
+    withRule({ scopeOpenPipelineToPeriod: true }, function () {
+      const s = snap({
+        "ST Estimates": [
+          EST_H,
+          ["Open", "Sam Rivera", "", 100, "9/15/2026", "", "10/1/2026", "Old"],
+          ["Open", "Sam Rivera", "", 40, "10/2/2026", "", "10/20/2026", "New"]
+        ]
+      });
+      const st = Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s));
+      assert.equal(st.openN, 1);
+      assert.equal(st.openAmt, 40);
+    });
+    const allOpen = snap({
+      "ST Estimates": [
+        EST_H,
+        ["Open", "Sam Rivera", "", 100, "9/15/2026", "", "10/1/2026", "Old"],
+        ["Open", "Sam Rivera", "", 40, "10/2/2026", "", "10/20/2026", "New"]
+      ]
+    });
+    assert.equal(Sc.statsFor(person(allOpen, "Sam Rivera"), "mtd", null, ctx(allOpen)).openN, 2);
+  });
+
+  it("lets close rate pass 100 percent and copies the Actuals split only when asked", function () {
+    withRule({ capScoreAtTarget: false }, function () {
+      const s = snap({
+        "ST Estimates": [
+          EST_H,
+          ["Sold", "Sam Rivera", "Sam Rivera", 1000, "9/1/2026", "10/2/2026", "", "Written last month"],
+          ["Sold", "Sam Rivera", "Sam Rivera", 1000, "10/3/2026", "10/4/2026", "", "Written this month"]
+        ]
+      });
+      const graded = Sc.scoreWith(person(s, "Sam Rivera"), "mtd", [{ k: "estClose", target: 0.45, w: 20 }], {}, ctx(s));
+      assert.ok(graded.parts.estClose.s > 1);
+    });
+    withRule({ actualsKeepJobRevenueSplit: false }, function () {
+      const s = snap({
+        "Actuals": [["key", "value"], ["rev", 100], ["install_rev", 70], ["service_rev", 30], ["cb", 4], ["date", 0]],
+        "ST Jobs": [JOB_H, job({ id: "1", completed: "10/10/2026", rev: 10, bu: "Service", type: "Service Call" })]
+      });
+      const c = Sc.coStats("mtd", null, ctx(s, { cfg: Object.assign(Settings.defaultCfg(), { coSource: "actuals" }) }));
+      assert.equal(c.rev, 100);
+      assert.equal(c.instRev, 70);
+      assert.equal(c.svcRev, 30);
+      assert.equal(c.booked, 4);
+    });
+  });
+});
+
 describe("page files", function () {
   it("splits the page, flags stale data, and keeps the API key out of the page", function () {
     const root = path.join(__dirname, "..");
@@ -620,5 +890,10 @@ describe("page files", function () {
     assert.equal(app.includes("DATA IS STALE"), true);
     assert.equal(css.includes(".stale-flag"), true);
     assert.equal(app.includes("function sheetKey"), true);
+    assert.equal(app.includes("Names that match more than one person"), true);
+    assert.equal(app.includes("bindTechMeta"), true);
+    assert.equal(settings.includes("nameMatch:"), true);
+    assert.equal(settings.includes("inverseScoreAtTarget:"), true);
+    assert.equal(settings.includes("letterGrades:"), true);
   });
 });

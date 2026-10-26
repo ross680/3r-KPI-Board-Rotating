@@ -170,19 +170,16 @@
     icon: "🎉",
     badge: "Welcome"
   };
-  // Used only when the Contest tab has no row for the current month, and only in November 2026.
-  // A Contest tab row for that month replaces this, including the prize.
-  var DEFAULT_CONTEST = {
-    month: "2026-11",
-    title: "Flip Frenzy",
-    metric: "flips",
-    prize1: "$500",
-    prize2: "",
-    prize3: "",
-    notes: "Prize: $500 to the flip leader",
-    eligible: "techs",
-    fallback: true
-  };
+  // Three races on one slide from Oct 26, 2026 onward. A Contest or Races tab row replaces a race.
+  // Memberships and reviews are typed by hand, the same way flips are.
+  // The existing Reviews tab is the quote carousel, so the review log is its own tab.
+  var DEFAULT_RACES = [
+    { metric: "memberships", title: "First to 10 memberships", goal: 10, prize: "$500", start: "2026-10-26" },
+    { metric: "flips", title: "First to 10 flips", goal: 10, prize: "$500", start: "2026-10-26" },
+    { metric: "reviews", title: "First to 15 reviews", goal: 15, prize: "$500", start: "2026-10-26" }
+  ];
+  var MEMBERSHIP_TAB = "Memberships";
+  var REVIEW_TRACKER_TAB = "Review Tracker";
   // People left off individual slides. Company totals still include their jobs and dollars.
   // Board_Config hidden_techs replaces this list. A blank value shows everyone again.
   var HIDDEN_TECHS = ["Franco"];
@@ -203,7 +200,7 @@
     {k:"rv",    label:"Google reviews"},
     {k:"ann",   label:"Announcements"},
     {k:"flips", label:"Flip tracker"},
-    {k:"contest", label:"Monthly contest"},
+    {k:"contest", label:"Race to the top"},
     {k:"sales", label:"Sales board"}
   ];
 
@@ -212,7 +209,7 @@
   var PHOTO_FOLDER = "11gVMpNygKLHh7vHBqly2c3lj9WwNef_j";
 
   // Tab names must match the sheet exactly. "Automation Estimates" has no leading space.
-  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Announcements","Contest","Flips","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","ST Reviews","ST Callbacks","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
+  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Announcements","Contest","Races","Flips","Memberships","Review Tracker","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","ST Reviews","ST Callbacks","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
 
   function defaultCfg() {
     return {
@@ -235,7 +232,8 @@
     INSTALL_TYPE: INSTALL_TYPE, NOT_INSTALL: NOT_INSTALL, INSTALL_REVENUE: INSTALL_REVENUE,
     RULES: RULES, SLIDES: SLIDES,
     DEFAULT_ANNOUNCEMENTS: DEFAULT_ANNOUNCEMENTS, WELCOME_ANNOUNCEMENT: WELCOME_ANNOUNCEMENT,
-    DEFAULT_CONTEST: DEFAULT_CONTEST, FLIP_GOAL: FLIP_GOAL, FLIP_ALERT_HOURS: FLIP_ALERT_HOURS,
+    DEFAULT_RACES: DEFAULT_RACES, MEMBERSHIP_TAB: MEMBERSHIP_TAB, REVIEW_TRACKER_TAB: REVIEW_TRACKER_TAB,
+    FLIP_GOAL: FLIP_GOAL, FLIP_ALERT_HOURS: FLIP_ALERT_HOURS,
     HIDDEN_TECHS: HIDDEN_TECHS,
     LOGO_FILE: LOGO_FILE, LOGO_PDF: LOGO_PDF, PHOTO_FOLDER: PHOTO_FOLDER,
     SHEET_TABS: SHEET_TABS, defaultCfg: defaultCfg

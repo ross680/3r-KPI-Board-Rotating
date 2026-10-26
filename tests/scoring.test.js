@@ -1024,7 +1024,12 @@ describe("manual flips", function () {
     assert.equal(board.company.week, 4);
     assert.equal(board.company.conv, 3);
     assert.equal(board.company.sold, 1700);
-    assert.equal(board.rows.filter(function (r) { return r.name === "Mike" && !r.matched; }).length, 1);
+    const mikeRow = board.rows.filter(function (r) { return r.name === "Mike" && !r.matched; });
+    assert.equal(mikeRow.length, 1);
+    assert.equal(mikeRow[0].soldKnown, false);
+    const samRow = board.rows.filter(function (r) { return r.name === "Sam"; })[0];
+    assert.equal(samRow.soldKnown, true);
+    assert.equal(samRow.sold, 1200);
     assert.deepEqual(Sc.flipAlerts(s, OCT26).map(function (a) { return a.message; }), ["Flip alert: Sam just flipped a call"]);
     assert.ok(s.ambiguous.some(function (f) { return f.source === "Flips" && f.name === "Mike"; }));
     assert.equal(Sc.statsFor(person(s, "Sam Rivera"), "mtd", 10, c).flips, 1);

@@ -740,10 +740,10 @@
       if (e.month !== keyNow) return;
       var id = e.techKey || ("~" + String(e.written || e.techLabel || "Unknown").toLowerCase());
       var row = rowsMap[id];
-      if (!row) row = rowsMap[id] = { key: e.techKey || "", name: e.techLabel || e.written || "Unknown", flips: 0, conv: 0, sold: 0, matched: !!e.techKey };
+      if (!row) row = rowsMap[id] = { key: e.techKey || "", name: e.techLabel || e.written || "Unknown", flips: 0, conv: 0, sold: 0, soldKnown: false, matched: !!e.techKey };
       row.flips += e.count || 1;
       if (e.converted === true) row.conv += e.count || 1;
-      if (e.sold != null) row.sold += e.sold;
+      if (e.sold != null) { row.sold += e.sold; row.soldKnown = true; }
     });
     var rows = Object.keys(rowsMap).map(function (id) { return rowsMap[id]; });
     rows.forEach(function (r) {

@@ -92,6 +92,8 @@ function activeSlides(){
   if (ok("trend") && snap && snap.jobRows) out.push({k:"trend"});
   if (ok("all")) out.push({k:"all"});
   if (ok("lb")) out.push({k:"lb"});
+  if (ok("flips")) out.push({k:"flips"});
+  if (ok("contest") && snap && snap.contest) out.push({k:"contest"});
   if (ok("stats") && snap) out.push({k:"stats"});
   if (ok("spot")) out.push({k:"spot"});
   if (ok("leads") && snap && snap.techs && Object.values(snap.techs).some(t=>sumTo(t.y.leads,11)>0)) out.push({k:"leads"});
@@ -234,15 +236,77 @@ function slideHTML(sl){
       <div class="scrollbox"><div class="scrollin">${R.map((r,i)=>`<div class="st-r ${i===0&&r.m.sold?"top":""}" style="grid-template-columns:${gc}"><div class="rk num">${i+1}</div><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}${r.side==="sales"?"<em>Sales</em>":r.side==="apprentice"?"<em>Apprentice</em>":"<em>Tech</em>"}</b></div>
         <div class="c">${bigSmall(money(r.m.sold,true),money(r.y.sold,true))}</div><div class="c">${bigSmall(r.m.soldN,r.y.soldN)}</div><div class="c">${bigSmall(r.m.estN?pct(r.m.estClose):"—",r.y.estN?pct(r.y.estClose):"—")}</div><div class="c">${bigSmall(r.m.soldN?money(r.m.avgSale,true):"—",r.y.soldN?money(r.y.avgSale,true):"—")}</div><div class="c">${bigSmall(r.m.estN,r.y.estN)}</div><div class="c">${bigSmall(r.m.openN,money(r.m.openAmt,true))}</div><div class="c">${bigSmall(r.m.mem,r.y.mem)}</div></div>`).join("")}</div></div></div>`;
   }
+  if (sl.k==="flips") return flipSlideHTML(snap, now);
+  if (sl.k==="contest") return contestSlideHTML(snap, now);
   if (sl.k==="ann"){
     const a=snap.anns[sl.i]; if(!a) return "";
-    return `<div class="ann">${a.ic?`<div class="ic">${esc(a.ic)}</div>`:""}${a.b?`<div class="badge">${esc(a.b)}</div>`:""}<div class="msg">${esc(a.m)}</div>${a.s?`<div class="sub">${esc(a.s)}</div>`:""}</div>`;
+    if (a.welcome) return welcomeHTML(a);
+    const msg=a.message||a.m||"", detail=a.detail||a.s||"", icon=a.icon||a.ic||"", badge=a.badge||a.b||(a.priority==="high"?"Priority":"");
+    const badgeCls=a.example?"badge example":(a.priority==="high"?"badge high":"badge");
+    return `<div class="ann">${icon?`<div class="ic">${esc(icon)}</div>`:""}${badge?`<div class="${badgeCls}">${esc(badge)}</div>`:""}<div class="msg">${esc(msg)}</div>${detail?`<div class="sub">${esc(detail)}</div>`:""}</div>`;
   }
   return "";
 }
-function tickerHTML(){ const T0=(S.snap&&S.snap.updates||[]).filter(u=>u.type==="ticker"); if(!T0.length) return "";
-  const txt=T0.map(u=>`<span>${u.ic?esc(u.ic)+" ":""}${u.title?`<b>${esc(u.title)}:</b> `:""}${esc(u.m)}</span>`).join('<i>•</i>');
-  return `<div class="ticker"><div class="tk-in" style="animation-duration:${Math.max(20,T0.reduce((a,u)=>a+u.m.length,0)/6)}s">${txt}<i>•</i>${txt}</div></div>`; }
+function welcomeHTML(a){
+  const meta=Object.assign({}, S.techs);
+  if (S.snap && S.snap.photoFiles) meta.photos=S.snap.photoFiles;
+  const faces=Sc.welcomeFaces(a.names||[], (S.snap&&S.snap.techs)||{}, meta);
+  const cards=faces.map(f=>{
+    if (!f.photo) return `<div class="welcome-card"><b>${esc(f.name)}</b></div>`;
+    const src=/^(https?:\/\/|data:image\/)/.test(f.photo)?f.photo:"/_blob/"+f.photo;
+    return `<div class="welcome-card"><div class="av"><img src="${esc(src)}" alt=""></div><b>${esc(f.name)}</b></div>`;
+  }).join("");
+  return `<div class="ann welcome">${a.icon?`<div class="ic">${esc(a.icon)}</div>`:""}<div class="badge">${esc(a.badge||"Welcome")}</div><div class="msg">${esc(a.message)}</div>${a.detail?`<div class="sub">${esc(a.detail)}</div>`:""}<div class="welcome-row">${cards}</div></div>`;
+}
+function flipSlideHTML(snap, now){
+  const board=Sc.flipBoard(snap, now, S.techs);
+  const goal=S.cfg.flipGoal!=null?+S.cfg.flipGoal:(SETTINGS.FLIP_GOAL||0);
+  const c=board.company;
+  const ps=goal?Sc.paceStatus(c.mtd, goal, now):null;
+  const convTxt=board.convKnown?(c.mtd?pct(c.rate):"—"):"—";
+  const convSub=board.convKnown?`${c.conv} converted`:"Add a Converted column to track this";
+  const soldTxt=board.soldKnown?money(c.sold, true):"—";
+  const head=`<div class="lbh flip-h"><span></span><span></span><span style="text-align:left">Tech</span><span>Flips</span><span>Sold from flips</span></div>`;
+  const list=board.rows.length?`${head}<div class="scrollbox"><div class="ld scrollin flip-list">${board.rows.map((r,i)=>`<div class="ld-r flip-r ${i===0?"top":""}"><div class="rk num">${i+1}</div>${r.key?av(r.key,r.name):`<div class="av">${esc(Sc.initials(r.name))}</div>`}<div class="nm">${esc(r.name)}${r.matched?"":"<small>Check the spelling on the Flips tab</small>"}</div><div class="c">${bigSmall(r.flips, board.convKnown?r.conv+" converted":"this month")}</div><div class="c">${board.soldKnown&&r.soldKnown?money(r.sold,true):"—"}</div></div>`).join("")}</div></div>`
+    :`<div class="empty-tv"><div><b>No flips logged this month</b>Add a row on the Flips tab and it shows up here.</div></div>`;
+  return `<div class="kicker">${esc(monthName())} · the office logs these by hand</div><div class="big-h tight">Flip tracker</div>
+    <div class="goal-big flip-goal"><div class="goal-num num">${c.mtd}</div><div class="goal-of">${goal?`of <b>${goal}</b> flips this month<br>${ps.ahead?"Ahead of pace":"Behind pace by "+Math.max(0, Math.round(ps.behindBy))}`:"Set flip_goal on Board_Config"}</div></div>
+    ${goal?`<div class="gbar flip-bar"><i style="width:${Math.min(100,(ps.pct||0)*100)}%"></i><div class="pace" style="left:${ps.pace*100}%"></div><div class="pct num">${pct(ps.pct||0)}</div></div>`:""}
+    <div class="tiles flip-tiles">
+      <div class="tile"><div class="l">Today</div><div class="v num">${board.layout==="summary"?"—":c.today}</div><div class="s">${board.layout==="summary"?"needs a date":"flips"}</div></div>
+      <div class="tile"><div class="l">This week</div><div class="v num">${board.layout==="summary"?"—":c.week}</div><div class="s">${board.layout==="summary"?"needs a date":"since Monday"}</div></div>
+      <div class="tile"><div class="l">Converted</div><div class="v num">${convTxt}</div><div class="s">${esc(convSub)}</div></div>
+      <div class="tile"><div class="l">Sold from flips</div><div class="v num">${soldTxt}</div><div class="s">${board.soldKnown?"this month":"optional"}</div></div>
+    </div>
+    ${list}`;
+}
+function contestSlideHTML(snap, now){
+  const stand=Sc.contestStandings(snap.contest, boardCtx());
+  if (!stand) return "";
+  const c=stand.contest;
+  const prizes=[["1st", c.prize1],["2nd", c.prize2],["3rd", c.prize3]];
+  const days=stand.daysLeft<=1?"Last day":stand.daysLeft+" days left";
+  const who=({techs:"Technicians",tech:"Technicians",sales:"Sales",apprentices:"Apprentices",all:"Everyone"})[String(c.eligible||"").toLowerCase()]||c.eligible||"Everyone";
+  const show=v=>{
+    const m=String(c.metric||"");
+    if (m==="flips"||m==="flip") return String(v);
+    if (/revenue|sold|avg|sale/.test(m)) return money(v, true);
+    if (/close|rate/.test(m)) return pct(v);
+    return String(v);
+  };
+  const unit=c.metric==="flips"?"flips":c.metric;
+  const body=stand.hasData?`<div class="scrollbox"><div class="ld scrollin">${stand.rows.map((r,i)=>`<div class="ld-r ${i===0?"top":""}"><div class="rk num">${i+1}</div>${av(r.key,r.name)}<div class="nm">${esc(r.name)}${i===0?"<small>Current leader</small>":""}</div><div class="ld-bar"><i style="width:${stand.rows[0].value?(r.value/stand.rows[0].value*100):0}%"></i></div><div class="c">${bigSmall(show(r.value), unit)}</div></div>`).join("")}</div></div>`
+    :`<div class="empty-tv"><div><b>Contest starts now</b>Standings show up after the first ${esc(unit)} this month.</div></div>`;
+  return `<div class="kicker">${esc(monthName())} contest · ${esc(days)} · ${esc(who)}</div><div class="big-h">${esc(c.title)}</div>
+    ${c.notes?`<div class="contest-notes">${esc(c.notes)}</div>`:""}
+    <div class="prizes">${prizes.map(([n,v])=>{ const tbd=!String(v||"").trim()||/^tbd$/i.test(String(v).trim()); return `<div class="prize ${tbd?"tbd":""}"><div class="l">${n}</div><div class="v">${esc(tbd?"TBD":v)}</div></div>`; }).join("")}</div>
+    ${body}`;
+}
+function tickerHTML(){
+  const items=Sc.tickerItems(S.snap||{}, Sc.nyNow());
+  if (!items.length) return "";
+  const txt=items.map(u=>`<span>${u.ic?esc(u.ic)+" ":""}${u.title?`<b>${esc(u.title)}:</b> `:""}${esc(u.m)}</span>`).join('<i>•</i>');
+  return `<div class="ticker"><div class="tk-in" style="animation-duration:${Math.max(20,items.reduce((a,u)=>a+String(u.m||"").length,0)/6)}s">${txt}<i>•</i>${txt}</div></div>`; }
 function wxChip(){ const w=S.snap&&S.snap.weather; if(!w) return ""; const [ic,l]=WX(w.c); const d=w.days[0]; return `<div class="wx-chip" title="${esc(l)}"><span>${ic}</span><b class="num">${Math.round(w.t)}°</b>${d?`<small class="num">H ${Math.round(d.hi)}° · L ${Math.round(d.lo)}°</small>`:""}</div>`; }
 let lastShellKey="", lastTicker="";
 function renderBoard(){
@@ -394,7 +458,7 @@ function appTable(){
 function stars(k){ const v=(S.techs[k]||{}).rating||0; return `<span class="stars" role="group" aria-label="Manager rating">${[1,2,3,4,5].map(n=>`<button type="button" class="${n<=v?"on":""}" data-rate="${esc(k)}" data-n="${n}" aria-label="${n} star">★</button>`).join("")}</span>`; }
 function monthTable(t){
   const M=S.snap.month; const ms=MONTHS.map((_,m)=>m<=M?statsFor(t,null,m):null); const y=statsFor(t,"ytd");
-  const rows=[["Revenue",s=>money(s.rev)],["Jobs",s=>s.jobs],["Avg ticket",s=>s.paid?money(s.avg):"—"],["Close rate",s=>s.opp?pct(s.close):"—"],["Sold",s=>money(s.sold)],["Estimates",s=>s.estN],["Leads",s=>s.leads],["GM %",s=>s.rev?pct(s.gmPct):"—"],["Hours",s=>Math.round(s.hrs)],["$/hr",s=>s.hrs?money(s.revHr):"—"],["Callbacks",s=>s.cb],["Installs",s=>s.inst],["Recall jobs run",s=>s.recall],
+  const rows=[["Revenue",s=>money(s.rev)],["Jobs",s=>s.jobs],["Avg ticket",s=>s.paid?money(s.avg):"—"],["Close rate",s=>s.opp?pct(s.close):"—"],["Sold",s=>money(s.sold)],["Estimates",s=>s.estN],["Leads",s=>s.leads],["Flips",s=>s.flips],["GM %",s=>s.rev?pct(s.gmPct):"—"],["Hours",s=>Math.round(s.hrs)],["$/hr",s=>s.hrs?money(s.revHr):"—"],["Callbacks",s=>s.cb],["Installs",s=>s.inst],["Recall jobs run",s=>s.recall],
     ...(t.att?[["Days worked",s=>s.daysW+" / "+s.sched],["Missed days",s=>s.missed],["Late clock-ins",s=>s.late],["PTO hours",s=>Math.round(s.pto)],["Hours clocked",s=>Math.round(s.clockHrs)]]:[])];
   return `<div class="card" style="margin-top:14px"><h3>${esc(t.full)} · month by month, ${S.snap.year}</h3><div class="tscroll"><table class="mtbl"><thead><tr><th></th>${MONTHS.slice(0,M+1).map((mn,m)=>`<th class="${m===M?"cur":""}">${mn}</th>`).join("")}<th class="ytd">YTD</th></tr></thead><tbody>
     ${rows.map(([n,f])=>`<tr><td>${n}</td>${ms.slice(0,M+1).map((s,m)=>`<td class="num ${m===M?"cur":""}">${f(s)}</td>`).join("")}<td class="num ytd">${f(y)}</td></tr>`).join("")}
@@ -473,7 +537,7 @@ function paneBoard(){
     <p class="small" style="margin-top:0">Source: <b>3R Rotating KPI Board</b> Google Sheet. The board re-reads it every 5 minutes while an admin has this page open, then pushes the numbers to every screen showing the board.</p>
     <div class="note ${S.sync.state==="ok"?"ok":S.sync.state==="error"?"bad":""}">${esc(S.sync.msg)}${S.snapAt?` Last pushed ${esc(ago(S.snapAt))}.`:""}${S.snap?` ${S.snap.jobRows} job rows, ${S.snap.estRows} estimate rows.`:""}</div>
     <div class="row" style="margin-top:12px"><button class="btn" type="button" id="syncNow" ${S.mcp?"":"disabled"}>Refresh from sheet now</button></div>
-    <p class="muted small" style="margin-top:12px">Revenue, jobs, avg ticket, close rate, gross margin, hours and leads come from ST Jobs, or Automation Jobs if that tab is the one filled in. Sold and open estimates come from ST Estimates or Automation Estimates. Callbacks come from ST Callbacks when that tab has rows, otherwise Call Back Record. Installs are install job types over 4 hours. Memberships and reviews come from ST Memberships and ST Reviews when those tabs are filled, otherwise the Leaderboard tab. Goals come from Goals and YTD Goals.</p>
+    <p class="muted small" style="margin-top:12px">Revenue, jobs, avg ticket, close rate, gross margin, hours and leads come from ST Jobs, or Automation Jobs if that tab is the one filled in. Sold and open estimates come from ST Estimates or Automation Estimates. Callbacks come from ST Callbacks when that tab has rows, otherwise Call Back Record. Installs are install job types over 4 hours. Memberships and reviews come from ST Memberships and ST Reviews when those tabs are filled, otherwise the Leaderboard tab. Goals come from Goals and YTD Goals. Flips are typed on the Flips tab. The monthly contest is typed on the Contest tab.</p>
   </div>`;
 }
 
@@ -669,7 +733,10 @@ function applyPeople(snap, meta){
   S.techs=bound.meta;
   snap.ambiguous=(snap.ambiguous||[]).concat(bound.ambiguous||[]);
 }
-function applySnapshot(snap, at, src){ S.snap=snap; S.snapAt=at; S.snapSource=src; }
+function applySnapshot(snap, at, src){
+  if (snap && Sc.attachFeed) Sc.attachFeed(snap, null, Sc.nyNow());
+  S.snap=snap; S.snapAt=at; S.snapSource=src;
+}
 
 /* ===================== routing ===================== */
 function route(){ const h=location.hash.replace("#",""); if (h==="admin") return "admin"; if (h==="board") return "board"; return "board"; }
@@ -704,6 +771,7 @@ function hubMode(){
       S.logoData = snap.logo || S.logoData;
       if (snap.logoPdf && snap.logoPdfHash !== (S.portalLogo||{}).h) renderPortalLogo(snap.logoPdf).then(P=>{ P.h=snap.logoPdfHash; applyPortalLogo(P); }).catch(e=>console.warn("portal logo",e));
       S.cfg=Sc.applySheetConfig(c); applyPeople(snap, snap.techMeta||{}); applySnapshot(snap, snap.builtAt, "hub");
+      await mergeManualTabs(snap);
       S.sync={state:"ok",msg:"Live from the 3R Data Hub"}; render(true);
     }catch(e){ S.sync={state:"error",msg:"Couldn't reach the data hub. Showing the last numbers."}; if(!S.snap) render(); }
   };
@@ -748,6 +816,7 @@ function sheetMode(){
       const cfgRows=rows["board_config"]||[]; const c={}; cfgRows.slice(1).forEach(r=>{ if(String(r[0]||"").trim()) c[String(r[0]).trim()]=r[1]; });
       S.cfg=Sc.applySheetConfig(c); applyPeople(snap, Sc.parseTechMeta(rows["board_techs"]||[])); applySnapshot(snap, Date.now(), "sheet");
       S.sync={state:"ok",msg:"Live from the KPI sheet"}; saveCached(); render(true);
+      loadHeadshotNames(apiKey);
     }catch(e){ S.sync={state:"error",msg:(e&&e.message)||"Couldn't reach the sheet. Showing the last numbers."}; if(!S.snap) render(); }
     finally{ busy=false; }
   };
@@ -761,7 +830,37 @@ function lightLoop(pull){
   window.addEventListener("online", ()=>setTimeout(pull, 3000));
 }
 function saveCached(){ try{ localStorage.setItem("3r-board-cache", JSON.stringify({snap:S.snap, cfg:S.cfg, techs:S.techs, at:S.snapAt})); }catch(_){ /* too big or blocked: fine */ } }
-function restoreCached(){ try{ const c=JSON.parse(localStorage.getItem("3r-board-cache")||"null"); if(c&&c.snap){ S.snap=c.snap; S.cfg=Object.assign(defaultCfg(), c.cfg||{}); S.techs=c.techs||{}; S.snapAt=c.at||0; S.snapSource="cache"; S.sync={state:"ok",msg:"Showing saved numbers while reconnecting"}; render(); } }catch(_){} }
+function restoreCached(){ try{ const c=JSON.parse(localStorage.getItem("3r-board-cache")||"null"); if(c&&c.snap){ S.snap=c.snap; if(Sc.attachFeed) Sc.attachFeed(S.snap, null, Sc.nyNow()); S.cfg=Object.assign(defaultCfg(), c.cfg||{}); S.techs=c.techs||{}; S.snapAt=c.at||0; S.snapSource="cache"; S.sync={state:"ok",msg:"Showing saved numbers while reconnecting"}; render(); } }catch(_){} }
+async function mergeManualTabs(snap){
+  const apiKey=sheetKey(); if(!apiKey||!snap) return;
+  const id=(S.cfg&&S.cfg.sheetId)||DEFAULT_SHEET;
+  const names=["Announcements","Contest","Flips","Board_Config"];
+  try{
+    const tabs=await Promise.all(names.map(t=>fetchTab(id,t,apiKey).catch(()=>null)));
+    const wb={__rows:{}};
+    names.forEach((t,i)=>{ if(tabs[i]) wb.__rows[t.trim().toLowerCase()]=tabs[i]; });
+    if(Object.keys(wb.__rows).length) Sc.attachFeed(snap, wb, Sc.nyNow());
+    const cfgRows=wb.__rows.board_config;
+    if(cfgRows){
+      const c={};
+      cfgRows.slice(1).forEach(r=>{ if(String(r[0]||"").trim()) c[String(r[0]).trim()]=r[1]; });
+      if(c.flip_goal!=null && c.flip_goal!=="" && isFinite(+c.flip_goal)) S.cfg.flipGoal=+c.flip_goal;
+    }
+  }catch(_){}
+}
+async function loadHeadshotNames(apiKey){
+  if(!apiKey||!SETTINGS.PHOTO_FOLDER||!S.snap) return;
+  try{
+    const q="'"+SETTINGS.PHOTO_FOLDER+"' in parents and trashed=false";
+    const u=`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=200&key=${encodeURIComponent(apiKey)}`;
+    const r=await fetchT(u, 12000);
+    if(!r.ok) return;
+    const j=await r.json();
+    if(!S.snap) return;
+    S.snap.photoFiles=(j.files||[]).map(f=>({id:f.id, title:f.name||f.title||""}));
+    render(true);
+  }catch(_){}
+}
 let lastAdvance=Date.now();
 function reliability(){
   // keep rotating even if something throws

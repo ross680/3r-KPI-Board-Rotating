@@ -897,3 +897,256 @@ describe("page files", function () {
     assert.equal(settings.includes("letterGrades:"), true);
   });
 });
+
+describe("announcements", function () {
+  it("keeps a legacy icon row on the slide and off the ticker", function () {
+    const s = snap({
+      "Announcements": [
+        ["ICON", "BADGE", "MESSAGE", "SUB"],
+        ["🍺", "Team Event", "Brews For Sonia", "Friday"],
+        ["💡", "skip", "this is a note", ""]
+      ]
+    });
+    const live = s.annLive.filter(function (a) { return !a.welcome && !a.example; });
+    assert.equal(live.length, 1);
+    assert.equal(live[0].message, "Brews For Sonia");
+    assert.equal(live[0].detail, "Friday");
+    assert.equal(live[0].showOn, "slide");
+    assert.equal(live[0].icon, "🍺");
+    assert.equal(s.annLive.some(function (a) { return a.welcome; }), true);
+    assert.equal(s.annLive.some(function (a) { return a.example; }), false);
+    const ticker = Sc.tickerItems(s, OCT26).map(function (t) { return t.m; });
+    assert.equal(ticker.indexOf("Brews For Sonia"), -1);
+    assert.ok(ticker.indexOf("Welcome to the team, Justin and Eric!") >= 0);
+  });
+
+  it("uses sample lines only when the tab has no messages, and shows a high message twice", function () {
+    const empty = snap({});
+    assert.equal(empty.annLive.filter(function (a) { return a.example; }).length, 5);
+    assert.equal(empty.anns.filter(function (a) { return a.welcome; }).length, 2);
+    const named = snap({
+      "Announcements": [
+        ["Message", "Detail", "Start date", "End date", "Priority", "Show on"],
+        ["Boiler check", "Bring the combustion analyzer", "10/20/2026", "10/31/2026", "high", "both"],
+        ["Future picnic", "", "11/01/2026", "", "normal", "ticker"],
+        ["Old note", "", "10/01/2026", "10/25/2026", "normal", "slide"]
+      ]
+    });
+    const msgs = named.annLive.map(function (a) { return a.message; });
+    assert.deepEqual(msgs, ["Welcome to the team, Justin and Eric!", "Boiler check"]);
+    assert.equal(named.annLive.some(function (a) { return a.example; }), false);
+    assert.equal(named.anns.filter(function (a) { return a.message === "Boiler check"; }).length, 2);
+    assert.equal(Sc.announcementActive({ message: "x", start: "2026-10-26", end: "2026-11-16" }, Sc.nyDate(2026, 10, 16, 23, 0, 0)), true);
+    assert.equal(Sc.announcementActive(Settings.WELCOME_ANNOUNCEMENT, Sc.nyDate(2026, 9, 25, 23, 0, 0)), false);
+    assert.equal(Sc.announcementActive(Settings.WELCOME_ANNOUNCEMENT, Sc.nyDate(2026, 10, 17, 0, 30, 0)), false);
+  });
+
+  it("does not add the welcome line twice when the sheet already has it", function () {
+    const s = snap({
+      "Announcements": [
+        ["Message", "Detail", "Start date", "End date", "Priority", "Show on"],
+        ["Welcome to the team, Justin and Eric!", "Glad you are here", "2026-10-26", "2026-11-16", "high", "both"]
+      ]
+    });
+    assert.equal(s.annLive.filter(function (a) { return a.welcome; }).length, 1);
+    assert.equal(s.annLive[0].detail, "Glad you are here");
+  });
+
+  it("shows a headshot only when one file matches that first name", function () {
+    const techs = {
+      justinromano: { k: "justinromano", full: "Justin Romano" },
+      ericnorth: { k: "ericnorth", full: "Eric North" },
+      justinb: { k: "justinb", full: "Justin Blake" }
+    };
+    const none = Sc.welcomeFaces(["Justin", "Eric"], { justinromano: techs.justinromano }, {});
+    assert.equal(none[0].photo, "");
+    assert.equal(none[0].name, "Justin");
+    assert.equal(none[1].name, "Eric");
+    const one = Sc.welcomeFaces(["Justin", "Eric"], { justinromano: techs.justinromano }, {
+      photos: [{ id: "abc", title: "Romano_Justin.jpeg" }]
+    });
+    assert.ok(one[0].photo.indexOf("abc") > 0);
+    assert.equal(one[0].name, "Justin");
+    assert.equal(one[1].photo, "");
+    const two = Sc.welcomeFaces(["Justin"], { justinromano: techs.justinromano, justinb: techs.justinb }, {
+      photos: [{ id: "a", title: "Justin.jpeg" }, { id: "b", title: "Blake_Justin.jpeg" }]
+    });
+    assert.equal(two[0].photo, "");
+  });
+});
+
+describe("manual flips", function () {
+  const FLIP_H = ["Date", "Tech", "Customer / Job #", "Type", "Converted", "Sold $", "Notes"];
+  function flipRow(o) {
+    return [o.date, o.tech, o.customer || "", o.type || "replacement", o.converted == null ? "" : o.converted, o.sold == null ? "" : o.sold, o.notes || ""];
+  }
+
+  it("does not treat a ServiceTitan opportunity or lead as a flip", function () {
+    const s = snap({
+      "ST Jobs": [JOB_H, job({ id: "1", tech: "Sam Rivera", completed: "10/10/2026", rev: 100, opp: "Yes", conv: "Yes", lead: "Sam Rivera" })]
+    });
+    const st = Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s));
+    assert.equal(st.flips, 0);
+    assert.equal(st.leads, 1);
+    assert.equal(st.opp, 1);
+  });
+
+  it("counts a typed flip for the tech, with Y, Yes, 1, a blank, and sold dollars", function () {
+    const s = snap({
+      "ST Techs": [
+        TECH_H,
+        ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""],
+        ["Mike Smith", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "MS", ""],
+        ["Mike Jones", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "MJ", ""]
+      ],
+      "Flips": [
+        FLIP_H,
+        flipRow({ date: "10/26/2026 2:30 PM", tech: "Sam Rivera", customer: "1001", converted: "Y", sold: "$1,200" }),
+        flipRow({ date: "2026-10-26", tech: "Sam", customer: "1002", converted: "Yes" }),
+        flipRow({ date: "10/26/2026 8:00 AM", tech: "Mike Smith", converted: "1", sold: "500" }),
+        flipRow({ date: "10/25/2026 4:00 PM", tech: "Mike Smith", converted: "N", sold: "0" }),
+        flipRow({ date: "10/26/2026", tech: "Mike" }),
+        flipRow({ date: "11/02/2026", tech: "Sam Rivera", converted: "Y", sold: "9000" }),
+        flipRow({ date: "not a date", tech: "Sam Rivera", converted: "Y", sold: "10" })
+      ]
+    });
+    const c = ctx(s);
+    const sam = Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, c);
+    assert.equal(sam.flips, 2);
+    assert.equal(sam.flipConv, 2);
+    assert.equal(sam.flipSold, 1200);
+    assert.equal(Sc.statsFor(person(s, "Mike Smith"), "mtd", null, c).flips, 2);
+    assert.equal(Sc.statsFor(person(s, "Mike Jones"), "mtd", null, c).flips, 0);
+    const board = Sc.flipBoard(s, OCT26, {});
+    assert.equal(board.layout, "detail");
+    assert.equal(board.company.mtd, 5);
+    assert.equal(board.company.today, 4);
+    assert.equal(board.company.week, 4);
+    assert.equal(board.company.conv, 3);
+    assert.equal(board.company.sold, 1700);
+    const mikeRow = board.rows.filter(function (r) { return r.name === "Mike" && !r.matched; });
+    assert.equal(mikeRow.length, 1);
+    assert.equal(mikeRow[0].soldKnown, false);
+    const samRow = board.rows.filter(function (r) { return r.name === "Sam"; })[0];
+    assert.equal(samRow.soldKnown, true);
+    assert.equal(samRow.sold, 1200);
+    assert.deepEqual(Sc.flipAlerts(s, OCT26).map(function (a) { return a.message; }), ["Flip alert: Sam just flipped a call"]);
+    assert.ok(s.ambiguous.some(function (f) { return f.source === "Flips" && f.name === "Mike"; }));
+    assert.equal(Sc.statsFor(person(s, "Sam Rivera"), "mtd", 10, c).flips, 1);
+    const earlyNov = new Date("2026-11-01T03:30:00.000Z");
+    const lateNov = new Date("2026-11-01T04:30:00.000Z");
+    const boundary = snap({
+      "Flips": [FLIP_H, flipRow({ date: earlyNov, tech: "Sam Rivera", converted: "Y" })]
+    }, Sc.nyDate(2026, 10, 1, 12, 0, 0));
+    assert.equal(Sc.nyYMD(earlyNov), "2026-10-31");
+    assert.equal(Sc.nyYMD(lateNov), "2026-11-01");
+    assert.equal(Sc.statsFor(person(boundary, "Sam Rivera"), "mtd", 9, ctx(boundary, { now: Sc.nyDate(2026, 10, 1, 12, 0, 0) })).flips, 1);
+    assert.equal(Sc.statsFor(person(boundary, "Sam Rivera"), "mtd", 10, ctx(boundary, { now: Sc.nyDate(2026, 10, 1, 12, 0, 0) })).flips, 0);
+  });
+
+  it("reads a Tech / Month / Count sheet when there is no date column", function () {
+    const s = snap({
+      "Flips": [
+        ["Tech", "Month (YYYY-MM)", "Count"],
+        ["Sam Rivera", "2026-10", 4],
+        ["Jo Cole", "2026-11", 2]
+      ]
+    });
+    assert.equal(s.feed.flipLayout, "summary");
+    const board = Sc.flipBoard(s, OCT26, {});
+    assert.equal(board.convKnown, false);
+    assert.equal(board.company.mtd, 4);
+    assert.equal(board.company.today, 0);
+    assert.equal(board.company.week, 0);
+    assert.deepEqual(Sc.flipAlerts(s, OCT26), []);
+    assert.equal(Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s)).flips, 4);
+    assert.equal(Sc.statsFor(person(s, "Jo Cole"), "mtd", null, ctx(s)).flips, 0);
+  });
+
+  it("uses flip_goal from Board_Config", function () {
+    assert.equal(Settings.defaultCfg().flipGoal, 20);
+    assert.equal(Sc.applySheetConfig({}).flipGoal, 20);
+    assert.equal(Sc.applySheetConfig({ flip_goal: "35" }).flipGoal, 35);
+  });
+});
+
+describe("flip contest", function () {
+  it("stays off in October and turns on for November, including the daylight-saving boundary", function () {
+    assert.equal(snap({}).contest, null);
+    assert.equal(Sc.contestForMonth([], new Date("2026-11-01T03:30:00.000Z")), null);
+    const on = Sc.contestForMonth([], new Date("2026-11-01T04:30:00.000Z"));
+    assert.equal(on.title, "Flip Frenzy");
+    assert.equal(on.metric, "flips");
+    assert.equal(on.prize1, "TBD");
+    const nov = Sc.nyDate(2026, 10, 15, 12, 0, 0);
+    const typed = snap({
+      "Contest": [
+        ["Month", "Title", "Metric", "Prize 1", "Prize 2", "Prize 3", "Rules or notes", "Who's eligible"],
+        ["2026-11", "Custom Cup", "revenue", "Grill", "", "", "Service techs", "techs"]
+      ]
+    }, nov);
+    assert.equal(typed.contest.title, "Custom Cup");
+    assert.equal(typed.contest.prize1, "Grill");
+    assert.equal(typed.contest.prize2, "");
+    const otherMonth = snap({
+      "Contest": [
+        ["Month", "Title", "Metric", "Prize 1", "Prize 2", "Prize 3", "Rules or notes", "Who's eligible"],
+        ["2026-12", "December", "flips", "", "", "", "", "techs"]
+      ]
+    }, nov);
+    assert.equal(otherMonth.contest, null);
+  });
+
+  it("ranks techs by flips, then revenue, then name, and skips apprentices and sales", function () {
+    const nov = Sc.nyDate(2026, 10, 2, 12, 0, 0);
+    const s = snap({
+      "ST Techs": [
+        TECH_H,
+        ["Jo Cole", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "J1", ""],
+        ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""],
+        ["Amy Cole", "Apprentices", "TRUE", "2020-01-01", "08:00", "A1", ""],
+        ["Sue Sales", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "SS", ""]
+      ],
+      "ST Jobs": [
+        JOB_H,
+        job({ id: "1", tech: "Jo Cole", completed: "11/02/2026", rev: 100 }),
+        job({ id: "2", tech: "Amy Cole", completed: "11/02/2026", rev: 999 })
+      ],
+      "Flips": [
+        ["Tech", "Month", "Count"],
+        ["Jo Cole", "2026-11", 2],
+        ["Sam Rivera", "2026-11", 2],
+        ["Amy Cole", "2026-11", 9],
+        ["Sue Sales", "2026-11", 8]
+      ]
+    }, nov);
+    const c = ctx(s, {
+      now: nov,
+      techs: { [Sc.key("Sue Sales")]: { role: "sales", show: true } }
+    });
+    const stand = Sc.contestStandings(s.contest, c);
+    assert.equal(stand.contest.title, "Flip Frenzy");
+    assert.equal(stand.hasData, true);
+    assert.equal(stand.daysLeft, 29);
+    assert.deepEqual(stand.rows.map(function (r) { return r.name; }), ["Jo", "Sam"]);
+    assert.equal(stand.leader.name, "Jo");
+    const quiet = snap({
+      "ST Techs": [TECH_H, ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""]]
+    }, nov);
+    assert.equal(Sc.contestStandings(quiet.contest, ctx(quiet, { now: nov })).hasData, false);
+  });
+
+  it("breaks a remaining tie by display name", function () {
+    const nov = Sc.nyDate(2026, 10, 2, 12, 0, 0);
+    const s = snap({
+      "ST Techs": [
+        TECH_H,
+        ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""],
+        ["Amy Cole", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "A2", ""]
+      ],
+      "Flips": [["Tech", "Month", "Count"], ["Sam Rivera", "2026-11", 1], ["Amy Cole", "2026-11", 1]]
+    }, nov);
+    const names = Sc.contestStandings(s.contest, ctx(s, { now: nov })).rows.map(function (r) { return r.name; });
+    assert.deepEqual(names, ["Amy", "Sam"]);
+  });
+});

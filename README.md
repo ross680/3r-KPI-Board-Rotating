@@ -1,6 +1,6 @@
 # 3R KPI Board
 
-Rotating KPI board for the shop TVs at 3R Plumbing and Mechanical. It loops through the monthly goal, revenue trend, team scoreboard, tech leaderboard, stat sheet, tech spotlight, leads, year-to-date goals, Norwell weather, reviews, announcements, a ticker, and the sales board.
+Rotating KPI board for the shop TVs at 3R Plumbing and Mechanical. It loops through the monthly goal, revenue trend, team scoreboard, tech leaderboard, flip tracker, monthly contest, stat sheet, tech spotlight, leads, year-to-date goals, Norwell weather, reviews, announcements, a ticker, and the sales board.
 
 The site is static. GitHub Pages serves it as-is. There is no build step and nothing to compile. Shop TVs load classic scripts, not JavaScript modules.
 
@@ -94,7 +94,49 @@ Estimates written are dated on creation. Sold dollars are dated on sold-on, or o
 
 `Reviews` (typed by hand, used when `ST Reviews` is empty): row 1 is a header, then column B by, C text, D stars, E date.
 
-`Announcements`: icon, badge, message, sub. A row whose first cell starts with a lightbulb is skipped.
+`Announcements` still accepts the original columns, in this order: icon, badge, message, sub. A row whose first cell starts with a lightbulb is skipped. Those older rows stay full-screen slides. They do not jump onto the ticker.
+
+The tab can also use named columns. Put this header in row 1:
+
+```
+Message	Detail	Start date	End date	Priority	Show on
+```
+
+`Detail` can also be named `SUB`. `Start date` and `End date` are optional. A blank date means "no limit". Dates are America/New_York calendar days, and the end date is included. `Priority` is `normal` or `high`. High messages are shown first and a second time each loop. `Show on` is `slide`, `ticker`, or `both`. Blank means `both`.
+
+If the tab has no messages, the board shows five sample lines (boiler season, memberships, carbon monoxide, the on-call roster, and reviews) until someone types a real one. Samples are marked Example.
+
+One real message is added on top of whatever is on the tab, from October 26, 2026 through November 16, 2026: "Welcome to the team, Justin and Eric!" It is high priority, on the slide and the ticker. The slide is blue, with the first names. A headshot is added only when one file in the tech photo folder matches that first name. The slide does not add a last name.
+
+`Contest`: one row per month. Header:
+
+```
+Month	Title	Metric	Prize 1	Prize 2	Prize 3	Rules or notes	Who's eligible
+```
+
+`Month` is `YYYY-MM`. `Metric` is one the board already computes per person: `flips`, `revenue`, `sold`, `memberships`, `reviews`, `installs`, `close`, `points`, `jobs`, `avg`, `leads`, or `callbacks`. `Who's eligible` is `techs`, `sales`, `apprentices`, or `all`. The slide is in the rotation only during that month in New York. Standings use that month's numbers, the same name matching as the leaderboard, and ties break by revenue, then by name. The top 5 with a score above zero are shown, and the leader is highlighted. If nobody has a number yet, the slide says "Contest starts now".
+
+If the tab is missing or empty, November 2026 uses the fallback in `js/settings.js`: title "Flip Frenzy", metric `flips`, eligible `techs`, prizes `TBD`. Ross has not set prizes. A row you type for that month replaces the fallback.
+
+`Flips` is filled in by hand. The board does not count a ServiceTitan opportunity, estimate, or lead as a flip.
+
+For the office, paste this header into row 1 of a tab named `Flips`:
+
+```
+Date	Tech	Customer / Job #	Type	Converted	Sold $	Notes
+```
+
+Then one row per flip. `Date` can be `10/26/2026`, `10/26/2026 2:30 PM`, or `2026-10-26`. Dates are read in America/New_York. `Tech` should be the full name, the same way it appears on the Leaderboard tab. "Sam" counts for Sam only when he is the only Sam. "Mike" does not count for either Mike when two Mikes work here, but it still counts in the company total and shows on the flip tracker so it can be fixed. `Type` is whatever you call it (replacement, install, water heater, generator, other). `Converted` can be left blank and filled in later. `Y`, `Yes`, and `1` count as converted. `N` or `No` does not. `Sold $` is optional. `Notes` is optional.
+
+A shorter sheet works too. The board uses it when there is no Date column:
+
+```
+Tech	Month	Count
+```
+
+`Month` is `YYYY-MM`, for example `2026-11`. `Count` is how many flips that tech had in that month. This version has no converted flag, no dollars, and no "today" or "this week" numbers.
+
+The Flip Tracker slide ranks this month's flips, shows converted flips and the conversion rate, sold dollars, today's flips, this week's flips (Monday through today, New York), and the company total against the monthly goal. The goal starts at 20 in `js/settings.js` (`FLIP_GOAL`). Change it without a code edit by putting `flip_goal` on the Board_Config tab. A flip dated with a clock time in the last 6 hours adds a ticker line: "Flip alert: <tech> just flipped a call". A date with no time does not.
 
 `Weather`: key/value rows for `place`, `temp`, `feels`, `code`, `wind`, `updated`, then a table of `date`, `code`, `hi`, `lo`, `precip`. If that tab is missing, the page asks Open-Meteo for Norwell (42.1615, -70.7928).
 
@@ -108,7 +150,8 @@ Estimates written are dated on creation. Sold dollars are dated on sold-on, or o
 | `coSource` | `auto` (from jobs) or `actuals` |
 | `tvGrades` | `no` hides letter grades on the TV. Admin still shows them. |
 | `logoPlate` | `no` turns off the white plate behind the logo |
-| `slidesOff` | Comma-separated slide keys to hide: `goal`, `trend`, `all`, `lb`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `sales` |
+| `slidesOff` | Comma-separated slide keys to hide: `goal`, `trend`, `all`, `lb`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `sales` |
+| `flip_goal` | Company flip goal for the month. Replaces the 20 in `js/settings.js`. |
 | `w_<metric>` / `t_<metric>` | Technician weight and monthly target |
 | `aw_<metric>` / `at_<metric>` | Apprentice weight and target |
 | `sw_<metric>` / `slt_<metric>` | Sales weight and target |

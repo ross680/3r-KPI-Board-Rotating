@@ -316,3 +316,37 @@ body.tv .hdr{display:none}
 .gNA{background:#5E747D}
 #upd.stale{color:#FFB020}
 .stale-flag{display:inline-block;background:#E08A1E;color:#1a1000;font-weight:900;letter-spacing:.04em;padding:.25vh .7vw;border-radius:.5vh;margin-right:.8vw}
+
+/* Welcome, contest, and the manual flip tracker. */
+.ann .badge.high{background:#E7F6FC;color:#06384A}
+.ann .badge.example{background:#5E747D;color:#fff}
+.ann.welcome .msg{font-size:7.2vh}
+.welcome-row{display:flex;gap:3vw;margin-top:5vh;flex-wrap:wrap}
+.welcome-card{min-width:22vw;background:linear-gradient(180deg,rgba(38,164,203,.34),rgba(38,164,203,.08));border:1px solid var(--blue);border-radius:2.4vh;padding:4vh 2vw 3.2vh;text-align:center;box-shadow:0 0 0 1.1vh rgba(38,164,203,.16)}
+.welcome-card .av{width:22vh;height:22vh;margin:0 auto 2vh;font-size:8vh;border:.6vh solid #fff}
+.welcome-card b{display:block;font-stretch:125%;font-weight:900;font-size:7vh;letter-spacing:-.03em;line-height:.95}
+.big-h.tight{font-size:5.2vh;margin:.2vh 0 1vh}
+.flip-goal{align-items:center}
+.flip-goal .goal-num{font-size:8vh;line-height:.9}
+.flip-goal .goal-of{font-size:2.5vh;padding-bottom:0}
+.flip-bar{height:3vh;margin:.6vh 0}
+.flip-tiles{margin-top:.2vh}
+.flip-tiles .tile{padding:.7vh 1vw}
+.flip-tiles .v{font-size:3.4vh}
+.flip-h,.flip-r{grid-template-columns:5vh 7.4vh minmax(0,1.6fr) 16vw 18vw}
+.flip-h{margin:0 0 .2vh}
+.flip-list{gap:.45vh}
+.slide .scrollin .flip-r{height:6.6vh;padding:.4vh 1.2vw}
+.ld-r .nm small{display:block;font-stretch:100%;font-weight:600;font-size:1.5vh;color:#9FB1B8;margin-top:.35vh}
+.prizes{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4vw;margin:0 0 2vh}
+.prize{border:1px solid #23313A;background:rgba(18,25,28,.85);border-radius:1.4vh;padding:1.5vh 1.4vw}
+.prize .l{font-size:1.8vh;color:#9FB1B8;font-weight:700}
+.prize .v{font-stretch:120%;font-weight:900;font-size:3.8vh;line-height:1.05}
+.prize.tbd .v{color:#9FB1B8}
+.contest-notes{font-size:2.4vh;color:#B9C6CC;font-weight:600;margin:-.6vh 0 1.6vh;max-width:80vw}
+@media (max-aspect-ratio:1/1){
+  .welcome-card b{font-size:4.4vh}
+  .welcome-row{gap:2vw}
+  .prizes{grid-template-columns:1fr}
+  .flip-tiles{grid-template-columns:repeat(2,1fr)}
+}

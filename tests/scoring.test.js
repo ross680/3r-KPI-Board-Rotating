@@ -1063,6 +1063,42 @@ describe("manual flips", function () {
     assert.equal(Sc.statsFor(person(s, "Jo Cole"), "mtd", null, ctx(s)).flips, 0);
   });
 
+  it("still builds when the Flips and Contest tabs are missing", function () {
+    const sheets = {
+      "Goals": [["monthly_rev", 300000], ["weekly", 75000]],
+      "Announcements": [
+        ["ICON", "BADGE", "MESSAGE", "SUB"],
+        ["", "Shop", "Brews For Sonia Event — Friday, Oct 2nd", "Friday"]
+      ],
+      "ST Jobs": [JOB_H, job({ id: "1", tech: "Sam Rivera", completed: "10/10/2026", rev: 100, opp: "Yes", conv: "Yes", lead: "Sam Rivera" })]
+    };
+    assert.equal(Object.prototype.hasOwnProperty.call(wb(sheets).__rows, "flips"), false);
+    assert.equal(Object.prototype.hasOwnProperty.call(wb(sheets).__rows, "contest"), false);
+    const s = snap(sheets);
+    assert.equal(s.feed.flipLayout, "none");
+    assert.deepEqual(s.feed.flips, []);
+    assert.equal(s.contest, null);
+    assert.equal(Sc.flipBoard(s, OCT26, {}).company.mtd, 0);
+    const sam = Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s));
+    assert.equal(sam.flips, 0);
+    assert.equal(sam.leads, 1);
+    assert.equal(sam.opp, 1);
+    const tick = Sc.tickerItems(s, OCT26);
+    assert.ok(tick.some(function (t) { return t.m === "Welcome to the team, Justin and Eric!"; }));
+    const nov = snap(sheets, Sc.nyDate(2026, 10, 15, 12, 0, 0));
+    assert.equal(nov.contest && nov.contest.title, "Flip Frenzy");
+    assert.equal(nov.feed.flipLayout, "none");
+    assert.equal(Sc.flipBoard(nov, Sc.nyDate(2026, 10, 15, 12, 0, 0), {}).company.mtd, 0);
+    s.feed.flips = {};
+    s.annLive = {};
+    assert.equal(Sc.flipBoard(s, OCT26, {}).company.mtd, 0);
+    assert.equal(Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s)).flips, 0);
+    assert.doesNotThrow(function () { Sc.tickerItems(s, OCT26); });
+    assert.doesNotThrow(function () { Sc.attachFeed(s, null, OCT26); });
+    assert.ok(Array.isArray(s.feed.flips));
+    assert.equal(s.contest, null);
+  });
+
   it("uses flip_goal from Board_Config", function () {
     assert.equal(Settings.defaultCfg().flipGoal, 20);
     assert.equal(Sc.applySheetConfig({}).flipGoal, 20);

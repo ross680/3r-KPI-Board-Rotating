@@ -599,7 +599,7 @@
   }
   function announcementSlots(list) {
     var high = [], rest = [];
-    (list || []).forEach(function (a) { (String(a.priority).toLowerCase() === "high" ? high : rest).push(a); });
+    (Array.isArray(list) ? list : []).forEach(function (a) { if (a) (String(a.priority).toLowerCase() === "high" ? high : rest).push(a); });
     return high.concat(rest).concat(high);
   }
   function readContests(rows) {
@@ -700,10 +700,11 @@
     var month = m != null ? m : (snap.month != null ? snap.month : p.m);
     return ey === year && em === month;
   }
+  function asList(v) { return Array.isArray(v) ? v : []; }
   function countFlips(techKey, entries, P, m, ctx, kind) {
     var n = 0;
-    (entries || []).forEach(function (e) {
-      if (!techKey || e.techKey !== techKey) return;
+    asList(entries).forEach(function (e) {
+      if (!e || !techKey || e.techKey !== techKey) return;
       if (!entryInFlipPeriod(e, P, m, ctx)) return;
       if (kind === "conv") { if (e.converted === true) n += e.count || 1; }
       else if (kind === "sold") { if (e.sold != null) n += e.sold; }
@@ -732,12 +733,12 @@
     now = now || nyNow();
     meta = meta || {};
     var feed = (snap && snap.feed) || {};
-    var entries = feed.flips || [];
+    var entries = asList(feed.flips);
     var layout = feed.flipLayout || "none";
     var keyNow = monthKeyNow(now);
     var rowsMap = {};
     entries.forEach(function (e) {
-      if (e.month !== keyNow) return;
+      if (!e || e.month !== keyNow) return;
       var id = e.techKey || ("~" + String(e.written || e.techLabel || "Unknown").toLowerCase());
       var row = rowsMap[id];
       if (!row) row = rowsMap[id] = { key: e.techKey || "", name: e.techLabel || e.written || "Unknown", flips: 0, conv: 0, sold: 0, soldKnown: false, matched: !!e.techKey };
@@ -752,7 +753,7 @@
     rows.sort(function (a, b) { return b.flips - a.flips || b.sold - a.sold || String(a.name).localeCompare(String(b.name)); });
     function sum(pred, val) {
       var n = 0;
-      entries.forEach(function (e) { if (pred(e)) n += val(e); });
+      entries.forEach(function (e) { if (e && pred(e)) n += val(e); });
       return n;
     }
     var company = {
@@ -763,7 +764,7 @@
       sold: sum(function (e) { return e.month === keyNow && e.sold != null; }, function (e) { return e.sold || 0; })
     };
     company.rate = company.mtd ? company.conv / company.mtd : 0;
-    var soldKnown = layout === "detail" && entries.some(function (e) { return e.month === keyNow && e.sold != null; });
+    var soldKnown = layout === "detail" && entries.some(function (e) { return e && e.month === keyNow && e.sold != null; });
     return { layout: layout, convKnown: layout === "detail", soldKnown: soldKnown, rows: rows, company: company };
   }
   function flipAlerts(snap, now) {
@@ -772,7 +773,8 @@
     if (!isFinite(hours) || hours <= 0) hours = 6;
     var cutoff = now.getTime() - hours * 3600e3;
     var out = [];
-    (((snap && snap.feed && snap.feed.flips) || [])).forEach(function (e) {
+    asList(snap && snap.feed && snap.feed.flips).forEach(function (e) {
+      if (!e) return;
       var at = asDate(e.at);
       if (!e.hasTime || !at) return;
       var t = at.getTime();
@@ -854,15 +856,15 @@
     now = now || nyNow();
     var out = [];
     flipAlerts(snap, now).forEach(function (a) { out.push({ type: "ticker", ic: "", title: "", m: a.message }); });
-    ((snap && snap.annLive) || []).forEach(function (a) {
-      if (a.showOn !== "ticker" && a.showOn !== "both") return;
+    asList(snap && snap.annLive).forEach(function (a) {
+      if (!a || (a.showOn !== "ticker" && a.showOn !== "both")) return;
       out.push({ type: "ticker", ic: a.icon || "", title: a.welcome ? "" : (a.badge || ""), m: a.message });
     });
-    ((snap && snap.updates) || []).forEach(function (u) { if (u && u.type === "ticker") out.push(u); });
+    asList(snap && snap.updates).forEach(function (u) { if (u && u.type === "ticker") out.push(u); });
     return out;
   }
   function legacyAnnouncements(anns) {
-    return (anns || []).filter(function (a) { return a && (a.message || a.m) && !a.welcome; }).map(function (a) {
+    return (Array.isArray(anns) ? anns : []).filter(function (a) { return a && (a.message || a.m) && !a.welcome; }).map(function (a) {
       if (a.message) return cloneAnn(a);
       return {
         message: a.m, detail: a.s || "", start: "", end: "", priority: "normal",
@@ -887,7 +889,7 @@
         if (seen.i >= 0 && seen.tech != null) sheetRows(wb, "Flips").slice(seen.i + 1).forEach(function (r) { names.see(r[seen.tech]); });
       }
     }
-    var annLive = snap.annLive || null;
+    var annLive = Array.isArray(snap.annLive) ? snap.annLive : null;
     if (useAnn) annLive = activeAnnouncements(sheetRows(wb, "Announcements"), now);
     else if (!annLive) {
       var legacy = legacyAnnouncements(snap.anns);
@@ -902,11 +904,12 @@
     var contest = snap.contest || null;
     if (useContest) contest = contestForMonth(sheetRows(wb, "Contest"), now);
     else if (!snap.feed || !snap.feed.ready) contest = contestForMonth([], now);
-    var flips = { layout: (snap.feed && snap.feed.flipLayout) || "none", entries: (snap.feed && snap.feed.flips) || [] };
+    var flips = { layout: (snap.feed && snap.feed.flipLayout) || "none", entries: asList(snap.feed && snap.feed.flips) };
     if (useFlips) flips = readFlipEntries(sheetRows(wb, "Flips"), names);
+    if (!Array.isArray(flips.entries)) flips.entries = [];
     if (snap.techs) {
       flips.entries.forEach(function (e) {
-        if (!e.techKey || snap.techs[e.techKey]) return;
+        if (!e || !e.techKey || snap.techs[e.techKey]) return;
         snap.techs[e.techKey] = {
           k: e.techKey, full: e.techLabel, y: newBucket(), l30: newFlat(), open: [], openAmt: 0, openN: 0,
           onBoard: false, status: "not listed", role: "tech", mem: { mtd: 0, ytd: 0 }, rv: { mtd: 0, ytd: 0 }, cb: zeros(), inst: zeros()

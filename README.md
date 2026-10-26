@@ -92,7 +92,7 @@ Estimates written are dated on creation. Sold dollars are dated on sold-on, or o
 
 `ST Callbacks`: `callback job id`, `created`, `status` (canceled rows are skipped), `original job id`. The original job's primary technician gets the callback. The job's own recall flag is not the callback count.
 
-`Reviews` (typed by hand, used when `ST Reviews` is empty): row 1 is a header, then column B by, C text, D stars, E date.
+`Reviews` (typed by hand, used when `ST Reviews` is empty): row 1 is a header, then column B by, C text, D stars, E date. This is the quote carousel. The race uses a separate tab named `Review Tracker`.
 
 `Announcements` still accepts the original columns, in this order: icon, badge, message, sub. A row whose first cell starts with a lightbulb is skipped. Those older rows stay full-screen slides. They do not jump onto the ticker.
 
@@ -116,41 +116,37 @@ Race	Metric	Goal	Prize	Start
 
 `Metric` is `memberships`, `flips`, or `reviews`. `Start` is a New York date. The slide is titled RACE TO THE TOP and stays in the rotation from the earliest start date onward. The defaults in `js/settings.js`, used when neither tab has a race row, are three races that all start October 26, 2026 and each pay $500: first tech to 10 memberships, first tech to 10 flips, and first tech to 15 reviews. A row you type replaces the race with the same metric. The other defaults stay.
 
-Each card shows the goal, the prize, the start date, and the top 3 techs with a bar toward the goal. The first person to reach the goal gets a WINNER banner. People on the hidden-tech list are left off.
+Each card shows the goal, the prize, the start date, and the top 3 techs with a bar toward the goal. The first person to reach the goal gets a WINNER banner, even when someone else later has a higher count. People on the hidden-tech list are left off.
 
-Progress keeps going after the month changes. Membership month-to-date and review month-to-date are not used, because those columns reset.
+All three races count rows typed by hand, the same way the flip tracker does. ServiceTitan membership and review rows still feed the grades. They do not move the race. The Leaderboard month-to-date and year-to-date columns are not used.
 
-- Flips come from dated rows on the Flips tab, on or after the start date. A row dated October 25 does not count. A row dated October 26 or November 2 does. A month-only count for October does not count, because that month started before the race. A month-only count for November does.
-- Memberships and reviews are counted from ServiceTitan rows dated on or after the start: `ST Memberships` uses Created, and `ST Reviews` uses Published. The same person matching as the rest of the board applies.
-
-To drive a tech from the Leaderboard year-to-date columns instead, add a second table on the Races tab. Those columns are H `mem_ytd` and I `rv_ytd` when row 2 is the header. The baseline is the number that was in that column at the start of the race, before new memberships or reviews. Progress is the current column minus that baseline. A blank cell leaves that tech on the dated count. A baseline of 0 counts the whole column.
-
-```
-Tech	mem_ytd	rv_ytd
-Nick	12	4
-```
-
-The same baselines can be typed on Board_Config as `baseline_mem` and `baseline_rv`, with `Name=number` pairs separated by commas. A Races tab baseline wins when both are set for the same person. On the live sheet those two Leaderboard columns are 0 today, so leave the baseline blank unless the column is the number you want the race to follow.
-
-`Flips` is filled in by hand. The board does not count a ServiceTitan opportunity, estimate, or lead as a flip.
-
-For the office, paste this header into row 1 of a tab named `Flips`:
+The board does not create these tabs. Add them in the sheet and paste this header into row 1. It is the same header as `Flips`:
 
 ```
 Date	Tech	Customer / Job #	Type	Converted	Sold $	Notes
 ```
 
-Then one row per flip. `Date` can be `10/26/2026`, `10/26/2026 2:30 PM`, or `2026-10-26`. Dates are read in America/New_York. `Tech` should be the full name, the same way it appears on the Leaderboard tab. "Sam" counts for Sam only when he is the only Sam. "Mike" does not count for either Mike when two Mikes work here, but it still counts in the company total and shows on the flip tracker so it can be fixed. `Type` is whatever you call it (replacement, install, water heater, generator, other). `Converted` can be left blank and filled in later. `Y`, `Yes`, and `1` count as converted. `N` or `No` does not. `Sold $` is optional. `Notes` is optional.
+| Race | Tab name |
+| --- | --- |
+| First to 10 flips | `Flips` |
+| First to 10 memberships | `Memberships` |
+| First to 15 reviews | `Review Tracker` |
 
-A shorter sheet works too. The board uses it when there is no Date column:
+`Reviews` is already the quote carousel (`#`, `REVIEWER`, `REVIEW`, `STARS`, `DATE`). Leave that tab alone. The race reads `Review Tracker`.
+
+One row is one membership, flip, or review. `Date` can be `10/26/2026`, `10/26/2026 2:30 PM`, or `2026-10-26`. Dates are read in America/New_York. A row dated October 25 does not count. A row dated October 26 or November 2 does, including after the month changes. A row dated after today does not count yet. `Tech` should be the full name, the same way it appears on the Leaderboard tab. "Sam" counts for Sam only when he is the only Sam. "Mike" does not count for either Mike when two Mikes work here. `Type`, `Converted`, `Sold $`, and `Notes` can be left blank. `Y`, `Yes`, and `1` still count as converted on the flip tracker. `N` or `No` does not.
+
+A shorter sheet works on any of the three tabs when there is no Date column:
 
 ```
 Tech	Month	Count
 ```
 
-`Month` is `YYYY-MM`, for example `2026-11`. `Count` is how many flips that tech had in that month. This version has no converted flag, no dollars, and no "today" or "this week" numbers.
+`Month` is `YYYY-MM`. A count for October does not count in the race, because that month started before October 26. A count for November does, for the whole number in `Count`.
 
-The Flip Tracker slide ranks this month's flips, shows converted flips and the conversion rate, sold dollars, today's flips, this week's flips (Monday through today, New York), and the company total against the monthly goal. The goal starts at 20 in `js/settings.js` (`FLIP_GOAL`). Change it without a code edit by putting `flip_goal` on the Board_Config tab. A flip dated with a clock time in the last 6 hours adds a ticker line: "Flip alert: <tech> just flipped a call". A date with no time does not.
+`Flips` is filled in by hand. The board does not count a ServiceTitan opportunity, estimate, or lead as a flip. A name the board cannot match, such as "Mike" when two Mikes work here, still counts in the company flip total and shows on the flip tracker so it can be fixed. It does not go on the race until the full name is on the row.
+
+The Flip Tracker slide ranks this month's flips, shows converted flips and the conversion rate, sold dollars, today's flips, this week's flips (Monday through today, New York), and the company total against the monthly goal. The month-only sheet has no converted flag, no dollars, and no "today" or "this week" numbers. The goal starts at 20 in `js/settings.js` (`FLIP_GOAL`). Change it without a code edit by putting `flip_goal` on the Board_Config tab. A flip dated with a clock time in the last 6 hours adds a ticker line: "Flip alert: <tech> just flipped a call". A date with no time does not.
 
 `Weather`: key/value rows for `place`, `temp`, `feels`, `code`, `wind`, `updated`, then a table of `date`, `code`, `hi`, `lo`, `precip`. If that tab is missing, the page asks Open-Meteo for Norwell (42.1615, -70.7928).
 
@@ -167,8 +163,6 @@ The Flip Tracker slide ranks this month's flips, shows converted flips and the c
 | `slidesOff` | Comma-separated slide keys to hide: `goal`, `trend`, `all`, `lb`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `sales` |
 | `flip_goal` | Company flip goal for the month. Replaces the 20 in `js/settings.js`. |
 | `hidden_techs` | Comma-separated names left off individual slides, grades, the flip tracker, the races, and flip alerts. Defaults to `Franco`. A blank value shows everyone again. Their jobs and dollars stay in the company, team, monthly, and goal totals. A name matches any person who has each of its words, ignoring case, so `Franco` also covers `Franco DosSantos`. |
-| `baseline_mem` | `Name=number` pairs. Membership race progress becomes Leaderboard `mem_ytd` minus this baseline. |
-| `baseline_rv` | `Name=number` pairs. Review race progress becomes Leaderboard `rv_ytd` minus this baseline. |
 | `w_<metric>` / `t_<metric>` | Technician weight and monthly target |
 | `aw_<metric>` / `at_<metric>` | Apprentice weight and target |
 | `sw_<metric>` / `slt_<metric>` | Sales weight and target |

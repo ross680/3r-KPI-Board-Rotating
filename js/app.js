@@ -295,8 +295,9 @@ function contestSlideHTML(snap){
   };
   const cards=(stand.races||[]).map(race=>{
     const rows=race.rows||[];
+    const hint=race.metric==="memberships"?"Add a row on the Memberships tab":race.metric==="reviews"?"Add a row on the Review Tracker tab":"Add a row on the Flips tab";
     const body=rows.length?rows.map(r=>`<div class="race-row"><div class="nm">${esc(r.name)}</div><div class="race-bar"><i style="width:${race.goal?Math.min(100,r.value/race.goal*100):0}%"></i></div><div class="n num">${r.value}<small>/${race.goal}</small></div></div>`).join("")
-      :`<div class="race-empty">${race.started?"No one yet":"Starts "+esc(when(race.start))}</div>`;
+      :`<div class="race-empty">${race.started?esc(hint):"Starts "+esc(when(race.start))}</div>`;
     const win=race.winner?`<div class="race-winner">WINNER · ${esc(race.winner.name)}</div>`:"";
     return `<section class="race-card${race.winner?" won":""}"><div class="race-prize">${esc(race.prize||"$500")}</div><h3>${esc(race.title)}</h3><div class="race-meta">Goal ${race.goal} · since ${esc(when(race.start))}</div>${win}${body}</section>`;
   }).join("");
@@ -594,7 +595,7 @@ function paneBoard(){
     <p class="small" style="margin-top:0">Source: <b>3R Rotating KPI Board</b> Google Sheet. The board re-reads it every 5 minutes while an admin has this page open, then pushes the numbers to every screen showing the board.</p>
     <div class="note ${S.sync.state==="ok"?"ok":S.sync.state==="error"?"bad":""}">${esc(S.sync.msg)}${S.snapAt?` Last pushed ${esc(ago(S.snapAt))}.`:""}${S.snap?` ${S.snap.jobRows} job rows, ${S.snap.estRows} estimate rows.`:""}</div>
     <div class="row" style="margin-top:12px"><button class="btn" type="button" id="syncNow" ${S.mcp?"":"disabled"}>Refresh from sheet now</button></div>
-    <p class="muted small" style="margin-top:12px">Revenue, jobs, avg ticket, close rate, gross margin, hours and leads come from ST Jobs, or Automation Jobs if that tab is the one filled in. Sold and open estimates come from ST Estimates or Automation Estimates. Callbacks come from ST Callbacks when that tab has rows, otherwise Call Back Record. Installs are install job types over 4 hours. Memberships and reviews come from ST Memberships and ST Reviews when those tabs are filled, otherwise the Leaderboard tab. Goals come from Goals and YTD Goals. Flips are typed on the Flips tab. The monthly contest is typed on the Contest tab.</p>
+    <p class="muted small" style="margin-top:12px">Revenue, jobs, avg ticket, close rate, gross margin, hours and leads come from ST Jobs, or Automation Jobs if that tab is the one filled in. Sold and open estimates come from ST Estimates or Automation Estimates. Callbacks come from ST Callbacks when that tab has rows, otherwise Call Back Record. Installs are install job types over 4 hours. Membership and review grades come from ST Memberships and ST Reviews when those tabs are filled, otherwise the Leaderboard tab. Goals come from Goals and YTD Goals. The race counts rows typed on the Flips, Memberships, and Review Tracker tabs. A Contest or Races row can change a race goal, prize, or start date. The Reviews tab is the quote list.</p>
   </div>`;
 }
 
@@ -891,7 +892,7 @@ function restoreCached(){ try{ const c=JSON.parse(localStorage.getItem("3r-board
 async function mergeManualTabs(snap){
   const apiKey=sheetKey(); if(!apiKey||!snap) return;
   const id=(S.cfg&&S.cfg.sheetId)||DEFAULT_SHEET;
-  const names=["Announcements","Contest","Flips","Board_Config"];
+  const names=["Announcements","Contest","Races","Flips",SETTINGS.MEMBERSHIP_TAB,SETTINGS.REVIEW_TRACKER_TAB,"Board_Config"];
   try{
     const tabs=await Promise.all(names.map(t=>fetchTab(id,t,apiKey).catch(()=>null)));
     const wb={__rows:{}};

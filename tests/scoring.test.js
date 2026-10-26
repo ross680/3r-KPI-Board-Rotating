@@ -605,6 +605,10 @@ describe("goals, pace, stale data, and sheet settings", function () {
     assert.ok(Settings.SHEET_TABS.includes("ST Memberships"));
     assert.ok(Settings.SHEET_TABS.includes("ST Reviews"));
     assert.ok(Settings.SHEET_TABS.includes("ST Callbacks"));
+    assert.ok(Settings.SHEET_TABS.includes("Memberships"));
+    assert.ok(Settings.SHEET_TABS.includes("Review Tracker"));
+    assert.equal(Settings.MEMBERSHIP_TAB, "Memberships");
+    assert.equal(Settings.REVIEW_TRACKER_TAB, "Review Tracker");
   });
 
   it("does not throw on an empty workbook", function () {
@@ -1077,6 +1081,8 @@ describe("manual flips", function () {
     const s = snap(sheets);
     assert.equal(s.feed.flipLayout, "none");
     assert.deepEqual(s.feed.flips, []);
+    assert.deepEqual(s.feed.memberships, []);
+    assert.deepEqual(s.feed.reviews, []);
     assert.equal(s.contest, null);
     const raceNow = Sc.raceStandings(s, ctx(s));
     assert.equal(raceNow.active, true);
@@ -1101,6 +1107,8 @@ describe("manual flips", function () {
     assert.doesNotThrow(function () { Sc.tickerItems(s, OCT26); });
     assert.doesNotThrow(function () { Sc.attachFeed(s, null, OCT26); });
     assert.ok(Array.isArray(s.feed.flips));
+    assert.ok(Array.isArray(s.feed.memberships));
+    assert.ok(Array.isArray(s.feed.reviews));
     assert.equal(s.contest, null);
   });
 
@@ -1199,66 +1207,88 @@ describe("race to the top", function () {
     assert.equal(Sc.flipBoard(octOnly, nov, {}).company.mtd, 1);
   });
 
-  it("counts memberships and reviews from Oct 26, and a baseline uses the YTD column instead", function () {
+  const LOG_H = ["Date", "Tech", "Customer / Job #", "Type", "Converted", "Sold $", "Notes"];
+  function logRow(date, tech, customer, notes) {
+    return [date, tech, customer || "", "", "", "", notes || ""];
+  }
+
+  it("counts typed membership and review rows from Oct 26 and ignores ServiceTitan and the quote list", function () {
     const nov = Sc.nyDate(2026, 10, 2, 12, 0, 0);
-    const mem = [["Membership ID", "Created", "Type", "Sold By ID", "Sold By"]];
-    mem.push(["1", "10/20/2026", "New", "", "Sam Rivera"]);
-    mem.push(["2", "10/26/2026", "New", "", "Sam Rivera"]);
-    mem.push(["3", "11/02/2026", "New", "", "Sam Rivera"]);
-    mem.push(["4", "11/05/2026", "New", "", "Sam Rivera"]);
-    const rv = [["Published", "Rating", "Review", "Platform", "Technician ID", "Technician"]];
-    rv.push(["10/20/2026", 5, "Great work from the team today", "Google", "", "Sam Rivera"]);
-    rv.push(["10/26/2026", 5, "Came out the same day and fixed it", "Google", "", "Sam Rivera"]);
-    rv.push(["11/01/2026", 5, "Clear price and a clean install", "Google", "", "Jo Cole"]);
-    const s = snap({
+    const memberships = [LOG_H];
+    memberships.push(logRow("10/20/2026", "Sam Rivera", "Before", ""));
+    memberships.push(logRow("10/26/2026", "Sam Rivera", "Acme", "new plan"));
+    memberships.push(logRow("11/02/2026", "Sam Rivera", "Beta", ""));
+    memberships.push(logRow("11/05/2026", "Sam Rivera", "Later", ""));
+    memberships.push(logRow("10/26/2026", "Mike", "Shared", "two Mikes"));
+    const reviews = [LOG_H];
+    reviews.push(logRow("10/20/2026", "Sam Rivera"));
+    reviews.push(logRow("10/26/2026", "Sam Rivera", "Cole", "five stars"));
+    reviews.push(logRow("11/01/2026", "Jo Cole"));
+    for (var i = 0; i < 14; i++) reviews.push(logRow("10/27/2026 " + (8 + (i % 6)) + ":00", "Jo Cole"));
+    reviews.push(logRow("10/28/2026 9:00 AM", "Jo Cole"));
+    const sheets = {
       "ST Techs": [
         TECH_H,
         ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""],
-        ["Jo Cole", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "J1", ""]
+        ["Jo Cole", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "J1", ""],
+        ["Mike Smith", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "MS", ""],
+        ["Mike Jones", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "MJ", ""]
       ],
       "Leaderboard": [
         LB_H,
         ["Sam Rivera", "active", 3, 2, 0, 14, 8, 0, 0],
         ["Jo Cole", "active", 1, 1, 0, 6, 4, 0, 0]
       ],
-      "ST Memberships": mem,
-      "ST Reviews": rv
-    }, nov);
-    const dated = raceAt(s, nov);
-    assert.equal(one(dated, "memberships").rows[0].value, 2);
-    assert.equal(one(dated, "reviews").rows.filter(function (r) { return r.name === "Sam"; })[0].value, 1);
-    assert.equal(one(dated, "reviews").rows.filter(function (r) { return r.name === "Jo"; })[0].value, 1);
-    const withBase = snap({
-      "ST Techs": [
-        TECH_H,
-        ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""],
-        ["Jo Cole", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "J1", ""]
+      "ST Memberships": [
+        MEM_H,
+        ["1", "10/26/2026", "New", "", "Sam Rivera"],
+        ["2", "11/02/2026", "New", "", "Jo Cole"]
       ],
-      "Leaderboard": [
-        LB_H,
-        ["Sam Rivera", "active", 3, 2, 0, 14, 8, 0, 0],
-        ["Jo Cole", "active", 1, 1, 0, 6, 4, 0, 0]
+      "ST Reviews": [
+        RV_H,
+        ["10/26/2026", 5, "Came out the same day and fixed the boiler right away", "Google", "", "Sam Rivera"]
       ],
-      "ST Memberships": mem,
-      "ST Reviews": rv,
-      "Races": [
-        ["Tech", "mem_ytd", "rv_ytd"],
-        ["Sam Rivera", 9, 3]
+      "Reviews": [
+        ["#", "REVIEWER", "REVIEW", "STARS", "DATE"],
+        ["1", "John S.", "Amazing service! Fixed our boiler same day. Highly recommend 3R!", "5", "June 4, 2026"]
+      ]
+    };
+    const ignored = snap(sheets, nov);
+    assert.equal(one(raceAt(ignored, nov), "memberships").rows.length, 0);
+    assert.equal(one(raceAt(ignored, nov), "reviews").rows.length, 0);
+    assert.equal(ignored.feed.membershipLayout, "none");
+    assert.equal(ignored.feed.reviewLayout, "none");
+    assert.ok(ignored.reviews.some(function (r) { return /boiler/i.test(r.t); }));
+    const s = snap(Object.assign({}, sheets, {
+      "Memberships": memberships,
+      "Review Tracker": reviews.concat([
+        ["Tech", "Month", "Count"],
+        ["Sam Rivera", "2026-10", 9],
+        ["Sam Rivera", "2026-11", 4]
+      ])
+    }), nov);
+    const memRace = one(raceAt(s, nov), "memberships");
+    assert.equal(memRace.rows[0].name, "Sam");
+    assert.equal(memRace.rows[0].value, 2);
+    assert.equal(memRace.winner, null);
+    assert.equal(memRace.rows.some(function (r) { return r.name === "Mike"; }), false);
+    const samEntry = s.feed.memberships.filter(function (e) { return e.customer === "Acme"; })[0];
+    assert.equal(samEntry.notes, "new plan");
+    assert.equal(samEntry.count, 1);
+    const rvRace = one(raceAt(s, nov), "reviews");
+    assert.equal(rvRace.winner.name, "Jo");
+    assert.equal(rvRace.rows[0].name, "Jo");
+    assert.equal(rvRace.rows[0].value, 16);
+    assert.equal(rvRace.rows.filter(function (r) { return r.name === "Sam"; })[0].value, 1);
+    const summaryOnly = snap({
+      "Memberships": [
+        ["Tech", "Month", "Count"],
+        ["Sam Rivera", "2026-10", 8],
+        ["Sam Rivera", "2026-11", 3]
       ]
     }, nov);
-    const based = raceAt(withBase, nov);
-    assert.equal(one(based, "memberships").source, "baseline");
-    assert.equal(one(based, "memberships").rows.filter(function (r) { return r.name === "Sam"; })[0].value, 5);
-    assert.equal(one(based, "reviews").rows.filter(function (r) { return r.name === "Sam"; })[0].value, 5);
-    assert.equal(one(based, "reviews").rows.filter(function (r) { return r.name === "Jo"; })[0].value, 1);
-    const fromCfg = raceAt(s, nov);
-    fromCfg.races = null;
-    const cfgStand = Sc.raceStandings(s, ctx(s, {
-      now: nov,
-      cfg: Sc.applySheetConfig({ baseline_mem: "Sam Rivera=9", baseline_rv: "Sam Rivera=3" })
-    }));
-    assert.equal(one(cfgStand, "memberships").rows.filter(function (r) { return r.name === "Sam"; })[0].value, 5);
-    assert.equal(one(cfgStand, "reviews").rows.filter(function (r) { return r.name === "Sam"; })[0].value, 5);
+    assert.equal(summaryOnly.feed.membershipLayout, "summary");
+    assert.equal(one(raceAt(summaryOnly, nov), "memberships").rows[0].value, 3);
   });
 });
 
@@ -1380,6 +1410,16 @@ describe("hidden techs", function () {
         ["Tech", "Month", "Count"],
         ["Franco DosSantos", "2026-11", 5],
         ["Sam Rivera", "2026-11", 2]
+      ],
+      "Memberships": [
+        ["Date", "Tech", "Customer / Job #", "Type", "Converted", "Sold $", "Notes"],
+        ["11/02/2026", "Franco DosSantos", "1", "", "", "", ""],
+        ["11/02/2026", "Sam Rivera", "2", "", "", "", ""]
+      ],
+      "Review Tracker": [
+        ["Date", "Tech", "Customer / Job #", "Type", "Converted", "Sold $", "Notes"],
+        ["11/01/2026", "Franco DosSantos", "", "", "", "", ""],
+        ["11/02/2026", "Sam Rivera", "", "", "", "", ""]
       ]
     }, nov);
     const stand = Sc.raceStandings(s, ctx(s, { now: nov }));
@@ -1388,6 +1428,12 @@ describe("hidden techs", function () {
     assert.equal(flips.rows[0].value, 2);
     assert.equal(hasFranco(flips.rows), false);
     assert.equal(flips.winner, null);
+    ["memberships", "reviews"].forEach(function (metric) {
+      const race = stand.races.filter(function (r) { return r.metric === metric; })[0];
+      assert.equal(race.rows[0].name, "Sam");
+      assert.equal(race.rows[0].value, 1);
+      assert.equal(hasFranco(race.rows), false);
+    });
     const open = Sc.raceStandings(s, ctx(s, { now: nov, cfg: Sc.applySheetConfig({ hidden_techs: "" }) }));
     const openFlips = open.races.filter(function (r) { return r.metric === "flips"; })[0];
     assert.equal(openFlips.rows[0].name, "Franco");

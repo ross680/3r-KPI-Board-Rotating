@@ -96,13 +96,17 @@ function activeSlides(){
   if (ok("contest") && snap && snap.contest) out.push({k:"contest"});
   if (ok("stats") && snap) out.push({k:"stats"});
   if (ok("spot")) out.push({k:"spot"});
-  if (ok("leads") && snap && snap.techs && Object.values(snap.techs).some(t=>sumTo(t.y.leads,11)>0)) out.push({k:"leads"});
+  try {
+    if (ok("leads") && snap && snap.techs && Object.values(snap.techs).some(t=>t && t.y && sumTo(t.y.leads,11)>0)) out.push({k:"leads"});
+  } catch (e) {}
   if (ok("ytd")) out.push({k:"ytd"});
   if (ok("wx") && snap && snap.weather) out.push({k:"wx"});
   if (ok("rv") && snap && snap.reviews && snap.reviews.length) out.push({k:"rv"});
-  if (ok("ann") && snap && snap.anns) snap.anns.forEach((a,i)=>out.push({k:"ann", i}));
-  if (snap && snap.updates) snap.updates.forEach((u,i)=>{ if(u.type!=="ticker") out.push({k:"upd", i}); });
-  if (ok("sales") && snap && salesRoster(true).length) out.splice(Math.min(3,out.length),0,{k:"sales"});
+  if (ok("ann") && snap && Array.isArray(snap.anns)) snap.anns.forEach((a,i)=>{ if(a) out.push({k:"ann", i}); });
+  if (snap && Array.isArray(snap.updates)) snap.updates.forEach((u,i)=>{ if(u && u.type!=="ticker") out.push({k:"upd", i}); });
+  try {
+    if (ok("sales") && snap && salesRoster(true).length) out.splice(Math.min(3,out.length),0,{k:"sales"});
+  } catch (e) {}
   return out.length?out:[{k:"goal"}];
 }
 const bigSmall = (big, small) => `<b class="num">${big}</b><span class="num">${small}</span>`;
@@ -303,24 +307,31 @@ function contestSlideHTML(snap, now){
     ${body}`;
 }
 function tickerHTML(){
-  const items=Sc.tickerItems(S.snap||{}, Sc.nyNow());
-  if (!items.length) return "";
-  const txt=items.map(u=>`<span>${u.ic?esc(u.ic)+" ":""}${u.title?`<b>${esc(u.title)}:</b> `:""}${esc(u.m)}</span>`).join('<i>•</i>');
-  return `<div class="ticker"><div class="tk-in" style="animation-duration:${Math.max(20,items.reduce((a,u)=>a+String(u.m||"").length,0)/6)}s">${txt}<i>•</i>${txt}</div></div>`; }
+  let items=[];
+  try { items=Sc.tickerItems(S.snap||{}, Sc.nyNow())||[]; } catch (e) { items=[]; }
+  if (!Array.isArray(items) || !items.length) return "";
+  const txt=items.map(u=>`<span>${u&&u.ic?esc(u.ic)+" ":""}${u&&u.title?`<b>${esc(u.title)}:</b> `:""}${esc(u&&u.m)}</span>`).join('<i>•</i>');
+  return `<div class="ticker"><div class="tk-in" style="animation-duration:${Math.max(20,items.reduce((a,u)=>a+String((u&&u.m)||"").length,0)/6)}s">${txt}<i>•</i>${txt}</div></div>`; }
 function wxChip(){ const w=S.snap&&S.snap.weather; if(!w) return ""; const [ic,l]=WX(w.c); const d=w.days[0]; return `<div class="wx-chip" title="${esc(l)}"><span>${ic}</span><b class="num">${Math.round(w.t)}°</b>${d?`<small class="num">H ${Math.round(d.hi)}° · L ${Math.round(d.lo)}°</small>`:""}</div>`; }
 let lastShellKey="", lastTicker="";
-function renderBoard(){
+function drawBoard(){
   document.body.classList.add("tv");
-  const sl = activeSlides(); if (S.slide>=sl.length) S.slide=0;
+  const sl = activeSlides(); if (!Number.isFinite(+S.slide) || S.slide>=sl.length || S.slide<0) S.slide=0;
+  const cur = sl[S.slide] || sl[0];
   // light path: only swap the slide + progress dots (keeps the ticker scrolling and the DOM small)
   const shellKey = [S.cfg.logoId, !!(S.portalLogo&&S.portalLogo.mark), S.canEdit].join("|");
   if (document.querySelector("#tv") && shellKey===lastShellKey){
-    const stage=document.querySelector(".tv-stage"); stage.innerHTML=`<section class="slide on">${slideHTML(sl[S.slide])}</section>`;
-    const dots=document.querySelector(".dots"); dots.style.setProperty("--dur",S.cfg.rotateSec+"s"); dots.innerHTML=sl.map((_,i)=>`<i class="${i<S.slide?"done":i===S.slide?"cur":""}"></i>`).join("");
-    document.querySelector("#tv").classList.toggle("paused",S.paused); document.querySelector("#tvPause").textContent=S.paused?"Play":"Pause";
-    const wr=document.querySelector(".tv-right"); if(wr){ const w=wxChip(); const cur=wr.querySelector(".wx-chip"); if(cur) cur.outerHTML=w||""; else if(w) wr.insertAdjacentHTML("afterbegin",w); }
+    const stage=document.querySelector(".tv-stage"); if(!stage) throw new Error("missing stage");
+    stage.innerHTML=`<section class="slide on">${slideHTML(cur)}</section>`;
+    const dots=document.querySelector(".dots");
+    if (dots){ dots.style.setProperty("--dur",S.cfg.rotateSec+"s"); dots.innerHTML=sl.map((_,i)=>`<i class="${i<S.slide?"done":i===S.slide?"cur":""}"></i>`).join(""); }
+    const tv=document.querySelector("#tv"); if(tv) tv.classList.toggle("paused",S.paused);
+    const pause=document.querySelector("#tvPause"); if(pause) pause.textContent=S.paused?"Play":"Pause";
+    const wr=document.querySelector(".tv-right"); if(wr){ const w=wxChip(); const chip=wr.querySelector(".wx-chip"); if(chip) chip.outerHTML=w||""; else if(w) wr.insertAdjacentHTML("afterbegin",w); }
     const th=tickerHTML(); if (th!==lastTicker){ lastTicker=th; const slot=document.querySelector("#tkslot"); if(slot) slot.innerHTML=th; }
-    armScroll(); tick(); schedule(); return;
+    try { armScroll(); } catch (e) { slideDur=0; }
+    try { tick(); } catch (e) {}
+    return;
   }
   lastShellKey=shellKey; lastTicker=tickerHTML();
   $("#app").innerHTML = `<div class="tv-shell ${S.paused?"paused":""}" id="tv">
@@ -338,7 +349,37 @@ function renderBoard(){
   $("#tvPause").onclick=()=>{S.paused=!S.paused; renderBoard();};
   $("#tvFs").onclick=()=>{ const d=document.documentElement; if(document.fullscreenElement) document.exitFullscreen(); else if(d.requestFullscreen) d.requestFullscreen().catch(()=>{}); };
   if ($("#tvAdmin")) $("#tvAdmin").onclick=()=>{location.hash="admin";};
-  armScroll(); tick(); schedule();
+  try { armScroll(); } catch (e) { slideDur=0; }
+  try { tick(); } catch (e) {}
+}
+function drawFallback(){
+  lastShellKey="";
+  document.body.classList.add("tv");
+  $("#app").innerHTML = `<div class="tv-shell" id="tv"><div class="tv-stage"><section class="slide on"><div class="empty-tv"><div><b>Skipping a bad slide</b>The board will keep rotating.</div></div></section></div></div>`;
+}
+function slideTotal(){
+  try { const n=activeSlides().length; return n>0?n:1; } catch (e) { return 1; }
+}
+// Drawing one slide used to be the only place the timer was armed. A throw in the
+// announcement, flip, contest, or ticker builders left the TV on the slide already up.
+function renderBoard(){
+  try {
+    const n=slideTotal();
+    if (!Number.isFinite(+S.slide) || S.slide<0 || S.slide>=n) S.slide=0;
+    let painted=false;
+    for (let i=0;i<n;i++){
+      try { drawBoard(); painted=true; break; }
+      catch (err) {
+        console.warn("KPI board skipped a slide", err&&err.message);
+        lastShellKey="";
+        S.slide=(S.slide+1)%n;
+      }
+    }
+    if (!painted) { try { drawFallback(); } catch (e) {} }
+  } finally {
+    lastAdvance=Date.now();
+    try { schedule(); } catch (e) {}
+  }
 }
 let slideDur=0;
 function armScroll(){
@@ -355,8 +396,28 @@ function armScroll(){
   });
   if (slideDur){ const dots=document.querySelector(".dots"); if(dots) dots.style.setProperty("--dur", Math.max(S.cfg.rotateSec, slideDur)+"s"); }
 }
-function go(d){ lastAdvance=Date.now(); const n=activeSlides().length; const nx=(S.slide+d+n)%n; if (d>0 && nx===0) S.cycle=(S.cycle||0)+1; S.slide=nx; renderBoard(); }
-function schedule(){ clearTimeout(slideTimer); if(!S.paused && route()==="board") slideTimer=setTimeout(()=>go(1), Math.max(S.cfg.rotateSec, slideDur)*1000); }
+function rotateMs(){
+  let base=15;
+  try { const n=+S.cfg.rotateSec; if (isFinite(n) && n>0) base=n; } catch (e) {}
+  const scroll=+slideDur;
+  const sec=Math.max(base, isFinite(scroll)&&scroll>0?scroll:0);
+  return Math.min(Math.max(sec,5), 180)*1000;
+}
+function go(d){
+  const step=d||1;
+  try {
+    const n=slideTotal();
+    const cur=Number.isFinite(+S.slide)?+S.slide:0;
+    const nx=((cur+step)%n+n)%n;
+    if (step>0 && nx===0) S.cycle=(S.cycle||0)+1;
+    S.slide=nx;
+  } catch (e) {}
+  renderBoard();
+}
+function schedule(){
+  clearTimeout(slideTimer); slideTimer=null;
+  if(!S.paused && route()==="board") slideTimer=setTimeout(()=>{ slideTimer=null; go(1); }, rotateMs());
+}
 function tick(){
   const c=$("#clock"); if(c){ const d=new Date(); const tz={timeZone:TIMEZONE}; c.innerHTML=`${d.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit", ...tz})}<small>${d.toLocaleDateString("en-US",{weekday:"long",month:"long",day:"numeric", ...tz})}</small>`; }
   const u=$("#upd"); if(!u) return;
@@ -863,11 +924,17 @@ async function loadHeadshotNames(apiKey){
 }
 let lastAdvance=Date.now();
 function reliability(){
-  // keep rotating even if something throws
-  window.addEventListener("error", ()=>{ if(route()==="board") schedule(); });
-  window.addEventListener("unhandledrejection", e=>{ e.preventDefault&&e.preventDefault(); if(route()==="board") schedule(); });
+  // Resource errors (a missing photo) must not restart the countdown.
+  // A script error only re-arms the timer when one is not already waiting.
+  const onErr=(e)=>{
+    if (e && e.target && e.target!==window) return;
+    if (route()!=="board" || S.paused || slideTimer) return;
+    try { schedule(); } catch (_) {}
+  };
+  window.addEventListener("error", onErr);
+  window.addEventListener("unhandledrejection", e=>{ e.preventDefault&&e.preventDefault(); onErr(e); });
   // watchdog: if slides stop moving, restart the rotation
-  setInterval(()=>{ if(route()==="board" && !S.paused && Date.now()-lastAdvance > (Math.max(S.cfg.rotateSec,slideDur)*1000)*2+10000){ try{ go(1); }catch(_){ location.reload(); } } }, 20000);
+  setInterval(()=>{ if(route()==="board" && !S.paused && (!slideTimer || Date.now()-lastAdvance > rotateMs()*2+10000)){ try{ go(1); }catch(_){ location.reload(); } } }, 20000);
   // nightly reload at ~3:30 AM clears memory so the TV can run for weeks
   const np=Sc.nyParts(new Date()); let nextReload=Sc.nyDate(np.y, np.m, np.d, 3, 30, 0); if(nextReload<=new Date()) nextReload=Sc.addNyDays(nextReload, 1);
   setTimeout(()=>location.reload(), nextReload-Date.now());

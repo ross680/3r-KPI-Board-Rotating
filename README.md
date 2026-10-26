@@ -108,15 +108,29 @@ If the tab has no messages, the board shows five sample lines (boiler season, me
 
 One real message is added on top of whatever is on the tab, from October 26, 2026 through November 16, 2026: "Welcome to the team, Justin and Eric!" It is high priority, on the slide and the ticker. The slide is blue, with the first names. A headshot is added only when one file in the tech photo folder matches that first name. The slide does not add a last name.
 
-`Contest`: one row per month. Header:
+`Races` (or `Contest`): one row per race. Header:
 
 ```
-Month	Title	Metric	Prize 1	Prize 2	Prize 3	Rules or notes	Who's eligible
+Race	Metric	Goal	Prize	Start
 ```
 
-`Month` is `YYYY-MM`. `Metric` is one the board already computes per person: `flips`, `revenue`, `sold`, `memberships`, `reviews`, `installs`, `close`, `points`, `jobs`, `avg`, `leads`, or `callbacks`. `Who's eligible` is `techs`, `sales`, `apprentices`, or `all`. The slide is in the rotation only during that month in New York. Standings use that month's numbers, the same name matching as the leaderboard, and ties break by revenue, then by name. The top 5 with a score above zero are shown, and the leader is highlighted. If nobody has a number yet, the slide says "Contest starts now".
+`Metric` is `memberships`, `flips`, or `reviews`. `Start` is a New York date. The slide is titled RACE TO THE TOP and stays in the rotation from the earliest start date onward. The defaults in `js/settings.js`, used when neither tab has a race row, are three races that all start October 26, 2026 and each pay $500: first tech to 10 memberships, first tech to 10 flips, and first tech to 15 reviews. A row you type replaces the race with the same metric. The other defaults stay.
 
-If the tab is missing or empty, November 2026 uses the fallback in `js/settings.js`: title "Flip Frenzy", metric `flips`, eligible `techs`, first prize `$500`, and the note "Prize: $500 to the flip leader". A row you type for that month replaces the fallback, including the prize and the note.
+Each card shows the goal, the prize, the start date, and the top 3 techs with a bar toward the goal. The first person to reach the goal gets a WINNER banner. People on the hidden-tech list are left off.
+
+Progress keeps going after the month changes. Membership month-to-date and review month-to-date are not used, because those columns reset.
+
+- Flips come from dated rows on the Flips tab, on or after the start date. A row dated October 25 does not count. A row dated October 26 or November 2 does. A month-only count for October does not count, because that month started before the race. A month-only count for November does.
+- Memberships and reviews are counted from ServiceTitan rows dated on or after the start: `ST Memberships` uses Created, and `ST Reviews` uses Published. The same person matching as the rest of the board applies.
+
+To drive a tech from the Leaderboard year-to-date columns instead, add a second table on the Races tab. Those columns are H `mem_ytd` and I `rv_ytd` when row 2 is the header. The baseline is the number that was in that column at the start of the race, before new memberships or reviews. Progress is the current column minus that baseline. A blank cell leaves that tech on the dated count. A baseline of 0 counts the whole column.
+
+```
+Tech	mem_ytd	rv_ytd
+Nick	12	4
+```
+
+The same baselines can be typed on Board_Config as `baseline_mem` and `baseline_rv`, with `Name=number` pairs separated by commas. A Races tab baseline wins when both are set for the same person. On the live sheet those two Leaderboard columns are 0 today, so leave the baseline blank unless the column is the number you want the race to follow.
 
 `Flips` is filled in by hand. The board does not count a ServiceTitan opportunity, estimate, or lead as a flip.
 
@@ -152,7 +166,9 @@ The Flip Tracker slide ranks this month's flips, shows converted flips and the c
 | `logoPlate` | `no` turns off the white plate behind the logo |
 | `slidesOff` | Comma-separated slide keys to hide: `goal`, `trend`, `all`, `lb`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `sales` |
 | `flip_goal` | Company flip goal for the month. Replaces the 20 in `js/settings.js`. |
-| `hidden_techs` | Comma-separated names left off individual slides, grades, the flip tracker, contest standings, and flip alerts. Defaults to `Franco`. A blank value shows everyone again. Their jobs and dollars stay in the company, team, monthly, and goal totals. A name matches any person who has each of its words, ignoring case, so `Franco` also covers `Franco DosSantos`. |
+| `hidden_techs` | Comma-separated names left off individual slides, grades, the flip tracker, the races, and flip alerts. Defaults to `Franco`. A blank value shows everyone again. Their jobs and dollars stay in the company, team, monthly, and goal totals. A name matches any person who has each of its words, ignoring case, so `Franco` also covers `Franco DosSantos`. |
+| `baseline_mem` | `Name=number` pairs. Membership race progress becomes Leaderboard `mem_ytd` minus this baseline. |
+| `baseline_rv` | `Name=number` pairs. Review race progress becomes Leaderboard `rv_ytd` minus this baseline. |
 | `w_<metric>` / `t_<metric>` | Technician weight and monthly target |
 | `aw_<metric>` / `at_<metric>` | Apprentice weight and target |
 | `sw_<metric>` / `slt_<metric>` | Sales weight and target |

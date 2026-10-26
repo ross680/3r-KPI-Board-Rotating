@@ -656,6 +656,215 @@
       return text && !/^tbd$/i.test(text);
     });
   }
+  function canonRaceMetric(v) {
+    var s = String(v || "").trim().toLowerCase();
+    if (s === "memberships" || s === "membership" || s === "mem") return "memberships";
+    if (s === "flips" || s === "flip") return "flips";
+    if (s === "reviews" || s === "review" || s === "rv") return "reviews";
+    return "";
+  }
+  function defaultRaceList() {
+    return (SETTINGS.DEFAULT_RACES || []).map(function (r) { return Object.assign({}, r); });
+  }
+  function cellText(r, h, names) {
+    var idx = pickCol(h, names);
+    if (idx == null) return "";
+    return String(r[idx] == null ? "" : r[idx]).trim();
+  }
+  function cellNumber(r, h, names) {
+    var idx = pickCol(h, names);
+    if (idx == null) return null;
+    var raw = r[idx];
+    if (raw == null || String(raw).trim() === "") return null;
+    var n = num(raw);
+    return isFinite(n) ? n : null;
+  }
+  function isRaceHeader(map) {
+    return map.metric != null && (map.goal != null || map.start != null || map["start date"] != null || map.prize != null);
+  }
+  function isBaselineHeader(map) {
+    var who = map.tech != null || map.name != null || map.technician != null;
+    var mem = map.mem_ytd != null || map["mem baseline"] != null || map["membership baseline"] != null || map.memberships != null;
+    var rv = map.rv_ytd != null || map["rv baseline"] != null || map["review baseline"] != null || map.reviews != null;
+    return who && (mem || rv) && map.metric == null;
+  }
+  function parseNamedNumbers(raw) {
+    var out = [];
+    String(raw == null ? "" : raw).split(/[,;|]/).forEach(function (part) {
+      var bit = String(part || "").trim();
+      if (!bit) return;
+      var m = bit.match(/^(.*?)[=:](.+)$/);
+      if (!m) return;
+      var name = m[1].trim();
+      if (!name) return;
+      var n = num(m[2]);
+      if (!isFinite(n)) return;
+      out.push({ name: name, value: n });
+    });
+    return out;
+  }
+  function parseRaces(rows, names, base) {
+    var byMetric = {};
+    var seed = base && base.list && base.list.length ? base.list : defaultRaceList();
+    seed.forEach(function (r) { byMetric[r.metric] = Object.assign({}, r); });
+    var baselines = {
+      memberships: Object.assign({}, base && base.baselines && base.baselines.memberships),
+      reviews: Object.assign({}, base && base.baselines && base.baselines.reviews)
+    };
+    var mode = "", h = {};
+    (rows || []).forEach(function (r) {
+      if (!r || !String(r.join ? r.join("") : "").trim()) return;
+      var map = headerMap(r);
+      if (isRaceHeader(map)) { mode = "race"; h = map; return; }
+      if (isBaselineHeader(map)) { mode = "base"; h = map; return; }
+      if (mode === "race") {
+        var metric = canonRaceMetric(cellText(r, h, ["metric"]));
+        var goal = cellNumber(r, h, ["goal", "target"]);
+        if (!metric || !(goal > 0)) return;
+        var title = cellText(r, h, ["race", "title", "name"]);
+        var prize = cellText(r, h, ["prize", "prize 1", "prize1"]) || "$500";
+        var start = ymdOrBlank(cellText(r, h, ["start", "start date", "starts"])) || "2026-10-26";
+        byMetric[metric] = {
+          metric: metric,
+          title: (title || ("First to " + goal + " " + metric)).slice(0, 80),
+          goal: goal,
+          prize: prize.slice(0, 40),
+          start: start
+        };
+      } else if (mode === "base") {
+        var techName = cellText(r, h, ["tech", "name", "technician"]);
+        if (!techName || techName.charAt(0) === "←" || techName.charAt(0) === "#") return;
+        var mem = cellNumber(r, h, ["mem_ytd", "mem baseline", "membership baseline", "memberships", "mem"]);
+        var rv = cellNumber(r, h, ["rv_ytd", "rv baseline", "review baseline", "reviews", "rv"]);
+        var k = names && names.resolve ? (names.resolve(techName, "Races") || key(techName)) : key(techName);
+        if (!k) return;
+        if (mem != null) baselines.memberships[k] = mem;
+        if (rv != null) baselines.reviews[k] = rv;
+      }
+    });
+    var order = ["memberships", "flips", "reviews"];
+    var list = [];
+    order.forEach(function (m) { if (byMetric[m]) list.push(byMetric[m]); });
+    Object.keys(byMetric).forEach(function (m) {
+      if (order.indexOf(m) < 0) list.push(byMetric[m]);
+    });
+    return { list: list, baselines: baselines };
+  }
+  function resolveTechLabel(snap, label) {
+    var techs = (snap && snap.techs) || {};
+    var direct = key(label);
+    if (direct && techs[direct]) return techs[direct].k || direct;
+    var want = firstToken(label);
+    if (!want || nameTokens(label).length !== 1) return null;
+    var hits = [];
+    Object.keys(techs).forEach(function (id) {
+      if (firstToken(techs[id].full) === want) hits.push(techs[id].k || id);
+    });
+    return hits.length === 1 ? hits[0] : null;
+  }
+  function monthStartYmd(monthKey) {
+    var bits = String(monthKey || "").split("-");
+    if (bits.length < 2 || !+bits[1]) return "";
+    return bits[0] + "-" + pad2(+bits[1]) + "-01";
+  }
+  function raceEventsFor(tech, race, snap, now, baselines) {
+    var start = race.start || "2026-10-26";
+    var today = nyYMD(now);
+    var times = [];
+    if (race.metric === "flips") {
+      asList(snap.feed && snap.feed.flips).forEach(function (e) {
+        if (!e || e.techKey !== tech.k) return;
+        var count = e.count || 1;
+        if (e.at) {
+          var ymd = nyYMD(e.at);
+          if (ymd < start || ymd > today) return;
+          for (var i = 0; i < count; i++) times.push(+e.at);
+          return;
+        }
+        var monthStart = monthStartYmd(e.month);
+        if (!monthStart || monthStart < start) return;
+        var stamp = toDate(monthStart);
+        for (var j = 0; j < count; j++) times.push(stamp ? +stamp : 0);
+      });
+    } else {
+      var bag = (baselines && baselines[race.metric]) || {};
+      if (Object.prototype.hasOwnProperty.call(bag, tech.k)) {
+        var ytd = race.metric === "memberships" ? (+tech.lbMemYtd || 0) : (+tech.lbRvYtd || 0);
+        var value = Math.max(0, ytd - bag[tech.k]);
+        var hit = value >= race.goal ? +now : null;
+        return { value: value, hitAt: hit, source: "baseline" };
+      }
+      var events = race.metric === "memberships" ? snap.memEvents : snap.rvEvents;
+      (events || []).forEach(function (e) {
+        if (!e || e.k !== tech.k || !e.ymd || e.ymd < start || e.ymd > today) return;
+        times.push(e.at || 0);
+      });
+    }
+    times.sort(function (a, b) { return a - b; });
+    var reached = times.length >= race.goal ? times[race.goal - 1] : null;
+    return { value: times.length, hitAt: reached, source: "dated" };
+  }
+  function raceStandings(snap, ctx) {
+    if (!snap) return null;
+    var now = (ctx && ctx.now) || nyNow();
+    var today = nyYMD(now);
+    var pack = snap.races && snap.races.list ? snap.races : parseRaces([], null);
+    var baselines = {
+      memberships: Object.assign({}, pack.baselines && pack.baselines.memberships),
+      reviews: Object.assign({}, pack.baselines && pack.baselines.reviews)
+    };
+    var cfg = (ctx && ctx.cfg) || {};
+    (cfg.memBaselines || []).forEach(function (item) {
+      var k = resolveTechLabel(snap, item.name);
+      if (k && !Object.prototype.hasOwnProperty.call(baselines.memberships, k)) baselines.memberships[k] = item.value;
+    });
+    (cfg.rvBaselines || []).forEach(function (item) {
+      var k = resolveTechLabel(snap, item.name);
+      if (k && !Object.prototype.hasOwnProperty.call(baselines.reviews, k)) baselines.reviews[k] = item.value;
+    });
+    var people = Object.keys(snap.techs || {}).map(function (k) { return snap.techs[k]; }).filter(function (t) {
+      if (!t) return false;
+      if (techIsHidden(t, ctx || { snap: snap })) return false;
+      if (!roleMatches(roleOf(t, ctx || { snap: snap, techs: {} }), "techs")) return false;
+      var meta = ((ctx && ctx.techs) || {})[t.k] || {};
+      if (meta.show === false) return false;
+      if (t.status === "inactive" && meta.show !== true) return false;
+      return true;
+    });
+    var anyStarted = false;
+    var races = (pack.list || []).map(function (race) {
+      var started = !!(race.start && race.start <= today);
+      if (started) anyStarted = true;
+      var scored = people.map(function (t) {
+        var prog = started ? raceEventsFor(t, race, snap, now, baselines) : { value: 0, hitAt: null, source: "dated" };
+        var meta = ((ctx && ctx.techs) || {})[t.k] || {};
+        return {
+          key: t.k,
+          name: displayName(t, snap.techs, meta),
+          value: prog.value,
+          hitAt: prog.hitAt,
+          source: prog.source
+        };
+      }).filter(function (r) { return r.value > 0; });
+      scored.sort(function (a, b) {
+        return b.value - a.value || (a.hitAt == null ? 1 : 0) - (b.hitAt == null ? 1 : 0) || (a.hitAt || 0) - (b.hitAt || 0) || String(a.name).localeCompare(String(b.name));
+      });
+      var finished = scored.filter(function (r) { return r.value >= race.goal && r.hitAt != null; });
+      finished.sort(function (a, b) { return a.hitAt - b.hitAt || String(a.name).localeCompare(String(b.name)); });
+      return {
+        metric: race.metric,
+        title: race.title,
+        goal: race.goal,
+        prize: race.prize || "$500",
+        start: race.start,
+        started: started,
+        source: scored.some(function (r) { return r.source === "baseline"; }) ? "baseline" : "dated",
+        winner: finished.length ? finished[0] : null,
+        rows: scored.slice(0, 3)
+      };
+    });
+    return { active: anyStarted, title: "RACE TO THE TOP", races: races };
+  }
   function daysLeftInMonth(now) {
     var p = nyParts(now || nyNow());
     return daysInMonth(p.y, p.m) - p.d + 1;
@@ -911,8 +1120,9 @@
     now = now || nyNow();
     var useAnn = wbHas(wb, "Announcements");
     var useContest = wbHas(wb, "Contest");
+    var useRaces = wbHas(wb, "Races");
     var useFlips = wbHas(wb, "Flips");
-    if ((useAnn || useContest || useFlips) && !names) {
+    if ((useAnn || useContest || useRaces || useFlips) && !names) {
       names = createNameIndex();
       Object.keys(snap.techs || {}).forEach(function (k) {
         if (snap.techs[k] && snap.techs[k].full) names.see(snap.techs[k].full);
@@ -934,9 +1144,11 @@
         annLive = legacy.filter(function (a) { return announcementActive(a, now); });
       } else annLive = activeAnnouncements([], now);
     }
-    var contest = snap.contest || null;
-    if (useContest) contest = contestForMonth(sheetRows(wb, "Contest"), now);
-    else if (!snap.feed || !snap.feed.ready) contest = contestForMonth([], now);
+    if (useRaces || useContest || !snap.races) {
+      var pack = parseRaces(useRaces ? sheetRows(wb, "Races") : [], names);
+      if (useContest) pack = parseRaces(sheetRows(wb, "Contest"), names, pack);
+      snap.races = pack;
+    }
     var flips = { layout: (snap.feed && snap.feed.flipLayout) || "none", entries: asList(snap.feed && snap.feed.flips) };
     if (useFlips) flips = readFlipEntries(sheetRows(wb, "Flips"), names);
     if (!Array.isArray(flips.entries)) flips.entries = [];
@@ -952,7 +1164,7 @@
     snap.feed = { ready: true, flips: flips.entries, flipLayout: flips.layout };
     snap.annLive = annLive;
     snap.anns = announcementSlots(annLive);
-    snap.contest = contest;
+    snap.contest = null;
     return snap;
   }
 
@@ -1173,6 +1385,8 @@
     var byStId = {}; Object.keys(stById).forEach(function (id) { byStId[id] = stById[id]; });
     var nameKey = function (id) { var x = byStId[String(id)]; return x ? names.resolve(x.name, "ST Techs") : null; };
     var auto = {mem:false, rv:false, cb:false};
+    var memEvents = [];
+    var rvEvents = [];
     var coMem = zeros(), coRv = zeros(), coMemL30 = 0, coRvL30 = 0;
     var memRows = sheetRows(wb, "ST Memberships");
     var memRes = headerIndex(memRows, function (r) { return String(r[0]).trim().toLowerCase() === "membership id"; });
@@ -1185,6 +1399,7 @@
         if (SETTINGS.RULES.excludeMembershipRenewals && SETTINGS.RULES.renewalPattern.test(String(r[h.type] || ""))) return;
         var dp = nyParts(d);
         var k = nameKey(r[h["sold by id"]]) || names.resolve(r[h["sold by"]], "ST Memberships");
+        if (k) memEvents.push({ k: k, at: d.getTime(), ymd: nyYMD(d) });
         if (dp.y === Y) {
           coMem[dp.m]++; if (k && T[k]) T[k].memM[dp.m]++;
         }
@@ -1234,6 +1449,7 @@
           f.people.forEach(function (p) { if (T[p.key]) credited[p.key] = true; });
         });
         Object.keys(credited).forEach(function (k) {
+          rvEvents.push({ k: k, at: d.getTime(), ymd: nyYMD(d) });
           if (dp.y === Y && T[k]) T[k].rvM[dp.m]++;
           if (d >= l30 && T[k]) T[k].rvL30++;
         });
@@ -1275,6 +1491,7 @@
       t.cb = cbRec[t.k] || zeros(); t.inst = instRec[t.k] || zeros();
       if (!instRec[t.k] && b.inst_mtd) t.inst[M] = b.inst_mtd;
       t.mem = {mtd:b.mem_mtd || 0, ytd:b.mem_ytd || 0}; t.rv = {mtd:b.rv_mtd || 0, ytd:b.rv_ytd || 0};
+      t.lbMemYtd = b.mem_ytd || 0; t.lbRvYtd = b.rv_ytd || 0;
       if (auto.mem && t.memM) t.mem = {mtd:t.memM[M], ytd:t.memM.slice(0, M + 1).reduce(function (a, b) { return a + b; }, 0), m:t.memM, l30:t.memL30 || 0};
       if (auto.rv && t.rvM) t.rv = {mtd:t.rvM[M], ytd:t.rvM.slice(0, M + 1).reduce(function (a, b) { return a + b; }, 0), m:t.rvM, l30:t.rvL30 || 0};
       if (auto.cb && t.cbM) { t.cb = t.cbM; t.cbL30 = t.cbL30 || 0; }
@@ -1322,7 +1539,8 @@
     auto.instBy = useAppt ? "appointment" : "worked";
     flags.sort(function (a, b) { return b.d.localeCompare(a.d); });
     var snapOut = {v:2, builtAt: now.getTime(), auto:auto, flags:flags.slice(0, 200), dataThrough: maxDate ? nyYMD(maxDate) : "", month:M, year:Y, jobRows:jobRows, estRows:estRows,
-      goals:goals, ytdGoals:ytdGoals, actuals:actuals, techs:T, co:co, reviews:reviewsOut, anns:[], annLive:null, contest:null, feed:null, updates:updates, leaderSums:leaderSums, weather:weather, ambiguous:names.ambiguous};
+      goals:goals, ytdGoals:ytdGoals, actuals:actuals, techs:T, co:co, reviews:reviewsOut, anns:[], annLive:null, contest:null, feed:null, updates:updates, leaderSums:leaderSums, weather:weather, ambiguous:names.ambiguous,
+      memEvents:memEvents, rvEvents:rvEvents};
     return attachFeed(snapOut, wb, now, names);
   }
 
@@ -1628,6 +1846,10 @@
       var hiddenRaw = c.hidden_techs != null ? c.hidden_techs : (c.hiddenTechs != null ? c.hiddenTechs : "");
       cfg.hiddenTechs = String(hiddenRaw).split(/[,|;]/).map(function (x) { return x.trim(); }).filter(Boolean);
     }
+    var memBaseRaw = c.baseline_mem != null ? c.baseline_mem : c.mem_baseline;
+    if (memBaseRaw != null) cfg.memBaselines = parseNamedNumbers(memBaseRaw);
+    var rvBaseRaw = c.baseline_rv != null ? c.baseline_rv : (c.baseline_reviews != null ? c.baseline_reviews : c.review_baseline);
+    if (rvBaseRaw != null) cfg.rvBaselines = parseNamedNumbers(rvBaseRaw);
     String(c.slidesOff || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean).forEach(function (k) { cfg.slides[k] = false; });
     var applySet = function (set, cfgMap, wp, tp) {
       set.forEach(function (m) {
@@ -1669,7 +1891,7 @@
     announcementActive:announcementActive, activeAnnouncements:activeAnnouncements, announcementSlots:announcementSlots,
     readAnnouncements:readAnnouncements, welcomeFaces:welcomeFaces,
     readFlipEntries:readFlipEntries, flipBoard:flipBoard, flipAlerts:flipAlerts, tickerItems:tickerItems,
-    contestForMonth:contestForMonth, contestPrizes:contestPrizes, contestStandings:contestStandings, daysLeftInMonth:daysLeftInMonth,
+    contestForMonth:contestForMonth, contestPrizes:contestPrizes, contestStandings:contestStandings, raceStandings:raceStandings, daysLeftInMonth:daysLeftInMonth,
     percentToGoal:percentToGoal, monthPace:monthPace, yearPace:yearPace, paceStatus:paceStatus, periodStart:periodStart,
     periodLabel:periodLabel, monthName:monthName, isStale:isStale, chooseDataMode:chooseDataMode,
     applySheetConfig:applySheetConfig, parseTechMeta:parseTechMeta, shiftLimitMinutes:shiftLimitMinutes

@@ -93,7 +93,9 @@ function activeSlides(){
   if (ok("all")) out.push({k:"all"});
   if (ok("lb")) out.push({k:"lb"});
   if (ok("flips")) out.push({k:"flips"});
-  if (ok("contest") && snap && snap.contest) out.push({k:"contest"});
+  try {
+    if (ok("contest") && snap && Sc.raceStandings(snap, boardCtx()).active) out.push({k:"contest"});
+  } catch (e) {}
   if (ok("stats") && snap) out.push({k:"stats"});
   if (ok("spot")) out.push({k:"spot"});
   try {
@@ -284,27 +286,21 @@ function flipSlideHTML(snap, now){
     </div>
     ${list}`;
 }
-function contestSlideHTML(snap, now){
-  const stand=Sc.contestStandings(snap.contest, boardCtx());
-  if (!stand) return "";
-  const c=stand.contest;
-  const prizes=Sc.contestPrizes(c);
-  const days=stand.daysLeft<=1?"Last day":stand.daysLeft+" days left";
-  const who=({techs:"Technicians",tech:"Technicians",sales:"Sales",apprentices:"Apprentices",all:"Everyone"})[String(c.eligible||"").toLowerCase()]||c.eligible||"Everyone";
-  const show=v=>{
-    const m=String(c.metric||"");
-    if (m==="flips"||m==="flip") return String(v);
-    if (/revenue|sold|avg|sale/.test(m)) return money(v, true);
-    if (/close|rate/.test(m)) return pct(v);
-    return String(v);
+function contestSlideHTML(snap){
+  const stand=Sc.raceStandings(snap, boardCtx());
+  if (!stand || !stand.active) return "";
+  const when=ymd=>{
+    const d=Sc.toDate(ymd);
+    return d?d.toLocaleDateString("en-US",{month:"short", day:"numeric", timeZone:SETTINGS.TIMEZONE}):(ymd||"");
   };
-  const unit=c.metric==="flips"?"flips":c.metric;
-  const body=stand.hasData?`<div class="scrollbox"><div class="ld scrollin">${stand.rows.map((r,i)=>`<div class="ld-r ${i===0?"top":""}"><div class="rk num">${i+1}</div>${av(r.key,r.name)}<div class="nm">${esc(r.name)}${i===0?"<small>Current leader</small>":""}</div><div class="ld-bar"><i style="width:${stand.rows[0].value?(r.value/stand.rows[0].value*100):0}%"></i></div><div class="c">${bigSmall(show(r.value), unit)}</div></div>`).join("")}</div></div>`
-    :`<div class="empty-tv"><div><b>Contest starts now</b>Standings show up after the first ${esc(unit)} this month.</div></div>`;
-  return `<div class="kicker">${esc(monthName())} contest · ${esc(days)} · ${esc(who)}</div><div class="big-h">${esc(c.title)}</div>
-    ${c.notes?`<div class="contest-notes">${esc(c.notes)}</div>`:""}
-    ${prizes.length?`<div class="prizes${prizes.length===1?" one":prizes.length===2?" two":""}">${prizes.map(([n,v])=>`<div class="prize"><div class="l">${n}</div><div class="v">${esc(v)}</div></div>`).join("")}</div>`:""}
-    ${body}`;
+  const cards=(stand.races||[]).map(race=>{
+    const rows=race.rows||[];
+    const body=rows.length?rows.map(r=>`<div class="race-row"><div class="nm">${esc(r.name)}</div><div class="race-bar"><i style="width:${race.goal?Math.min(100,r.value/race.goal*100):0}%"></i></div><div class="n num">${r.value}<small>/${race.goal}</small></div></div>`).join("")
+      :`<div class="race-empty">${race.started?"No one yet":"Starts "+esc(when(race.start))}</div>`;
+    const win=race.winner?`<div class="race-winner">WINNER · ${esc(race.winner.name)}</div>`:"";
+    return `<section class="race-card${race.winner?" won":""}"><div class="race-prize">${esc(race.prize||"$500")}</div><h3>${esc(race.title)}</h3><div class="race-meta">Goal ${race.goal} · since ${esc(when(race.start))}</div>${win}${body}</section>`;
+  }).join("");
+  return `<div class="kicker">Three races · $500 each · counting from Oct 26</div><div class="big-h race">RACE TO THE TOP</div><div class="race-grid">${cards}</div>`;
 }
 function tickerHTML(){
   let items=[];

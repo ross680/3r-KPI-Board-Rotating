@@ -346,6 +346,21 @@ body.tv .hdr{display:none}
 .prize .v{font-stretch:120%;font-weight:900;font-size:3.8vh;line-height:1.05}
 .prize.tbd .v{color:#9FB1B8}
 .contest-notes{font-size:2.4vh;color:#B9C6CC;font-weight:600;margin:-.6vh 0 1.6vh;max-width:80vw}
+.big-h.race{font-size:5.2vh;margin:.2vh 0 1.2vh}
+.race-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.2vw;flex:1;min-height:0}
+.race-card{border:1px solid #23313A;background:rgba(18,25,28,.85);border-radius:1.6vh;padding:1.8vh 1.2vw;min-width:0;display:flex;flex-direction:column}
+.race-card.won{border-color:#F2B01E}
+.race-prize{font-stretch:120%;font-weight:900;font-size:3.2vh;line-height:1}
+.race-card h3{font-stretch:115%;font-weight:900;font-size:2.5vh;line-height:1.05;margin:.6vh 0 .3vh}
+.race-meta{font-size:1.7vh;font-weight:700;color:#9FB1B8;margin-bottom:1.2vh}
+.race-winner{background:#F2B01E;color:#12191C;font-stretch:110%;font-weight:900;font-size:2.2vh;letter-spacing:.04em;border-radius:.8vh;padding:.7vh .8vw;margin-bottom:1.2vh}
+.race-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.3fr) auto;gap:.7vw;align-items:center;margin-top:1vh}
+.race-row .nm{font-weight:800;font-size:2.1vh;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.race-row .n{font-stretch:115%;font-weight:900;font-size:2.2vh}
+.race-row .n small{font-size:.7em;color:#9FB1B8;font-weight:700}
+.race-bar{height:1.4vh;background:#23313A;border-radius:1vh;overflow:hidden}
+.race-bar i{display:block;height:100%;background:linear-gradient(90deg,var(--blue-d),var(--blue))}
+.race-empty{color:#9FB1B8;font-size:1.9vh;font-weight:700;margin-top:1vh}
 @media (max-aspect-ratio:1/1){
   .welcome-card b{font-size:4.4vh}
   .welcome-row{gap:2vw}

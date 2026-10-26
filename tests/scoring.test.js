@@ -1078,6 +1078,10 @@ describe("manual flips", function () {
     assert.equal(s.feed.flipLayout, "none");
     assert.deepEqual(s.feed.flips, []);
     assert.equal(s.contest, null);
+    const raceNow = Sc.raceStandings(s, ctx(s));
+    assert.equal(raceNow.active, true);
+    assert.equal(raceNow.title, "RACE TO THE TOP");
+    assert.deepEqual(raceNow.races.map(function (r) { return r.metric; }), ["memberships", "flips", "reviews"]);
     assert.equal(Sc.flipBoard(s, OCT26, {}).company.mtd, 0);
     const sam = Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s));
     assert.equal(sam.flips, 0);
@@ -1086,7 +1090,8 @@ describe("manual flips", function () {
     const tick = Sc.tickerItems(s, OCT26);
     assert.ok(tick.some(function (t) { return t.m === "Welcome to the team, Justin and Eric!"; }));
     const nov = snap(sheets, Sc.nyDate(2026, 10, 15, 12, 0, 0));
-    assert.equal(nov.contest && nov.contest.title, "Flip Frenzy");
+    assert.equal(nov.contest, null);
+    assert.equal(Sc.raceStandings(nov, ctx(nov, { now: Sc.nyDate(2026, 10, 15, 12, 0, 0) })).active, true);
     assert.equal(nov.feed.flipLayout, "none");
     assert.equal(Sc.flipBoard(nov, Sc.nyDate(2026, 10, 15, 12, 0, 0), {}).company.mtd, 0);
     s.feed.flips = {};
@@ -1106,89 +1111,154 @@ describe("manual flips", function () {
   });
 });
 
-describe("flip contest", function () {
-  it("stays off in October and turns on for November, including the daylight-saving boundary", function () {
-    assert.equal(snap({}).contest, null);
-    assert.equal(Sc.contestForMonth([], new Date("2026-11-01T03:30:00.000Z")), null);
-    const on = Sc.contestForMonth([], new Date("2026-11-01T04:30:00.000Z"));
-    assert.equal(on.title, "Flip Frenzy");
-    assert.equal(on.metric, "flips");
-    assert.equal(on.prize1, "$500");
-    assert.equal(on.prize2, "");
-    assert.equal(on.prize3, "");
-    assert.equal(on.notes, "Prize: $500 to the flip leader");
-    assert.deepEqual(Sc.contestPrizes(on), [["1st", "$500"]]);
-    assert.deepEqual(Sc.contestPrizes({ prize1: "TBD", prize2: "", prize3: "Hat" }), [["3rd", "Hat"]]);
-    const nov = Sc.nyDate(2026, 10, 15, 12, 0, 0);
-    const typed = snap({
+describe("race to the top", function () {
+  function raceAt(snapshot, now) {
+    return Sc.raceStandings(snapshot, ctx(snapshot, { now: now }));
+  }
+  function one(stand, metric) {
+    return stand.races.filter(function (r) { return r.metric === metric; })[0];
+  }
+
+  it("starts on Oct 26 and stays on after the month changes", function () {
+    const before = snap({}, Sc.nyDate(2026, 9, 25, 23, 0, 0));
+    assert.equal(raceAt(before, Sc.nyDate(2026, 9, 25, 23, 0, 0)).active, false);
+    const open = raceAt(snap({}), OCT26);
+    assert.equal(open.active, true);
+    assert.equal(open.title, "RACE TO THE TOP");
+    assert.deepEqual(open.races.map(function (r) { return [r.metric, r.goal, r.prize, r.start]; }), [
+      ["memberships", 10, "$500", "2026-10-26"],
+      ["flips", 10, "$500", "2026-10-26"],
+      ["reviews", 15, "$500", "2026-10-26"]
+    ]);
+    const earlyNov = new Date("2026-11-01T03:30:00.000Z");
+    const lateNov = new Date("2026-11-01T04:30:00.000Z");
+    assert.equal(raceAt(snap({}, earlyNov), earlyNov).active, true);
+    assert.equal(raceAt(snap({}, lateNov), lateNov).active, true);
+    const old = snap({
       "Contest": [
         ["Month", "Title", "Metric", "Prize 1", "Prize 2", "Prize 3", "Rules or notes", "Who's eligible"],
         ["2026-11", "Custom Cup", "revenue", "Grill", "", "", "Service techs", "techs"]
       ]
-    }, nov);
-    assert.equal(typed.contest.title, "Custom Cup");
-    assert.equal(typed.contest.prize1, "Grill");
-    assert.equal(typed.contest.prize2, "");
-    const otherMonth = snap({
-      "Contest": [
-        ["Month", "Title", "Metric", "Prize 1", "Prize 2", "Prize 3", "Rules or notes", "Who's eligible"],
-        ["2026-12", "December", "flips", "", "", "", "", "techs"]
-      ]
-    }, nov);
-    assert.equal(otherMonth.contest, null);
+    }, OCT26);
+    assert.equal(old.contest, null);
+    assert.equal(raceAt(old, OCT26).title, "RACE TO THE TOP");
+    assert.equal(JSON.stringify(Settings.DEFAULT_RACES).indexOf("Flip Frenzy"), -1);
+    assert.equal(JSON.stringify(Settings.DEFAULT_RACES).indexOf("flip leader"), -1);
   });
 
-  it("ranks techs by flips, then revenue, then name, and skips apprentices and sales", function () {
-    const nov = Sc.nyDate(2026, 10, 2, 12, 0, 0);
+  it("lets a Contest or Races row replace one race and keeps the other defaults", function () {
+    const s = snap({
+      "Contest": [
+        ["Race", "Metric", "Goal", "Prize", "Start"],
+        ["Membership sprint", "memberships", 4, "$500", "2026-10-26"]
+      ]
+    }, OCT26);
+    const stand = raceAt(s, OCT26);
+    assert.equal(one(stand, "memberships").title, "Membership sprint");
+    assert.equal(one(stand, "memberships").goal, 4);
+    assert.equal(one(stand, "flips").goal, 10);
+    assert.equal(one(stand, "reviews").goal, 15);
+  });
+
+  it("counts flips from the start date through November and names the first to the goal", function () {
+    const nov = Sc.nyDate(2026, 10, 2, 15, 0, 0);
+    const flips = [["Date", "Tech", "Customer / Job #", "Type", "Converted", "Sold $", "Notes"]];
+    function add(date, tech) { flips.push([date, tech, "", "replacement", "", "", ""]); }
+    for (var i = 0; i < 9; i++) add("10/27/2026 " + (9 + i) + ":00", "Jo Cole");
+    add("10/28/2026 9:00 AM", "Jo Cole");
+    add("10/25/2026 9:00 AM", "Sam Rivera");
+    for (var j = 0; j < 12; j++) add("11/02/2026 " + (8 + (j % 4)) + ":00", "Sam Rivera");
     const s = snap({
       "ST Techs": [
         TECH_H,
         ["Jo Cole", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "J1", ""],
         ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""],
-        ["Amy Cole", "Apprentices", "TRUE", "2020-01-01", "08:00", "A1", ""],
-        ["Sue Sales", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "SS", ""]
+        ["Amy Cole", "Apprentices", "TRUE", "2020-01-01", "08:00", "A1", ""]
       ],
-      "ST Jobs": [
-        JOB_H,
-        job({ id: "1", tech: "Jo Cole", completed: "11/02/2026", rev: 100 }),
-        job({ id: "2", tech: "Amy Cole", completed: "11/02/2026", rev: 999 })
-      ],
-      "Flips": [
+      "Flips": flips.concat([
         ["Tech", "Month", "Count"],
-        ["Jo Cole", "2026-11", 2],
-        ["Sam Rivera", "2026-11", 2],
-        ["Amy Cole", "2026-11", 9],
-        ["Sue Sales", "2026-11", 8]
+        ["Amy Cole", "2026-10", 9],
+        ["Amy Cole", "2026-11", 4]
+      ])
+    }, nov);
+    const board = one(raceAt(s, nov), "flips");
+    assert.equal(board.winner.name, "Jo");
+    assert.equal(board.rows[0].name, "Sam");
+    assert.equal(board.rows[0].value, 12);
+    assert.equal(board.rows.filter(function (r) { return r.name === "Jo"; })[0].value, 10);
+    assert.equal(board.rows.some(function (r) { return r.name === "Amy"; }), false);
+    const octOnly = snap({
+      "Flips": [
+        ["Date", "Tech", "Customer / Job #", "Type", "Converted", "Sold $", "Notes"],
+        ["10/25/2026", "Sam Rivera", "", "", "", "", ""],
+        ["10/26/2026", "Sam Rivera", "", "", "", "", ""],
+        ["11/02/2026", "Sam Rivera", "", "", "", "", ""]
       ]
     }, nov);
-    const c = ctx(s, {
-      now: nov,
-      techs: { [Sc.key("Sue Sales")]: { role: "sales", show: true } }
-    });
-    const stand = Sc.contestStandings(s.contest, c);
-    assert.equal(stand.contest.title, "Flip Frenzy");
-    assert.equal(stand.hasData, true);
-    assert.equal(stand.daysLeft, 29);
-    assert.deepEqual(stand.rows.map(function (r) { return r.name; }), ["Jo", "Sam"]);
-    assert.equal(stand.leader.name, "Jo");
-    const quiet = snap({
-      "ST Techs": [TECH_H, ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""]]
-    }, nov);
-    assert.equal(Sc.contestStandings(quiet.contest, ctx(quiet, { now: nov })).hasData, false);
+    assert.equal(one(raceAt(octOnly, nov), "flips").rows[0].value, 2);
+    assert.equal(Sc.flipBoard(octOnly, nov, {}).company.mtd, 1);
   });
 
-  it("breaks a remaining tie by display name", function () {
+  it("counts memberships and reviews from Oct 26, and a baseline uses the YTD column instead", function () {
     const nov = Sc.nyDate(2026, 10, 2, 12, 0, 0);
+    const mem = [["Membership ID", "Created", "Type", "Sold By ID", "Sold By"]];
+    mem.push(["1", "10/20/2026", "New", "", "Sam Rivera"]);
+    mem.push(["2", "10/26/2026", "New", "", "Sam Rivera"]);
+    mem.push(["3", "11/02/2026", "New", "", "Sam Rivera"]);
+    mem.push(["4", "11/05/2026", "New", "", "Sam Rivera"]);
+    const rv = [["Published", "Rating", "Review", "Platform", "Technician ID", "Technician"]];
+    rv.push(["10/20/2026", 5, "Great work from the team today", "Google", "", "Sam Rivera"]);
+    rv.push(["10/26/2026", 5, "Came out the same day and fixed it", "Google", "", "Sam Rivera"]);
+    rv.push(["11/01/2026", 5, "Clear price and a clean install", "Google", "", "Jo Cole"]);
     const s = snap({
       "ST Techs": [
         TECH_H,
         ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""],
-        ["Amy Cole", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "A2", ""]
+        ["Jo Cole", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "J1", ""]
       ],
-      "Flips": [["Tech", "Month", "Count"], ["Sam Rivera", "2026-11", 1], ["Amy Cole", "2026-11", 1]]
+      "Leaderboard": [
+        LB_H,
+        ["Sam Rivera", "active", 3, 2, 0, 14, 8, 0, 0],
+        ["Jo Cole", "active", 1, 1, 0, 6, 4, 0, 0]
+      ],
+      "ST Memberships": mem,
+      "ST Reviews": rv
     }, nov);
-    const names = Sc.contestStandings(s.contest, ctx(s, { now: nov })).rows.map(function (r) { return r.name; });
-    assert.deepEqual(names, ["Amy", "Sam"]);
+    const dated = raceAt(s, nov);
+    assert.equal(one(dated, "memberships").rows[0].value, 2);
+    assert.equal(one(dated, "reviews").rows.filter(function (r) { return r.name === "Sam"; })[0].value, 1);
+    assert.equal(one(dated, "reviews").rows.filter(function (r) { return r.name === "Jo"; })[0].value, 1);
+    const withBase = snap({
+      "ST Techs": [
+        TECH_H,
+        ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""],
+        ["Jo Cole", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "J1", ""]
+      ],
+      "Leaderboard": [
+        LB_H,
+        ["Sam Rivera", "active", 3, 2, 0, 14, 8, 0, 0],
+        ["Jo Cole", "active", 1, 1, 0, 6, 4, 0, 0]
+      ],
+      "ST Memberships": mem,
+      "ST Reviews": rv,
+      "Races": [
+        ["Tech", "mem_ytd", "rv_ytd"],
+        ["Sam Rivera", 9, 3]
+      ]
+    }, nov);
+    const based = raceAt(withBase, nov);
+    assert.equal(one(based, "memberships").source, "baseline");
+    assert.equal(one(based, "memberships").rows.filter(function (r) { return r.name === "Sam"; })[0].value, 5);
+    assert.equal(one(based, "reviews").rows.filter(function (r) { return r.name === "Sam"; })[0].value, 5);
+    assert.equal(one(based, "reviews").rows.filter(function (r) { return r.name === "Jo"; })[0].value, 1);
+    const fromCfg = raceAt(s, nov);
+    fromCfg.races = null;
+    const cfgStand = Sc.raceStandings(s, ctx(s, {
+      now: nov,
+      cfg: Sc.applySheetConfig({ baseline_mem: "Sam Rivera=9", baseline_rv: "Sam Rivera=3" })
+    }));
+    assert.equal(one(cfgStand, "memberships").rows.filter(function (r) { return r.name === "Sam"; })[0].value, 5);
+    assert.equal(one(cfgStand, "reviews").rows.filter(function (r) { return r.name === "Sam"; })[0].value, 5);
   });
 });
 
@@ -1298,7 +1368,7 @@ describe("hidden techs", function () {
     assert.deepEqual(Settings.defaultCfg().hiddenTechs, ["Franco"]);
   });
 
-  it("leaves Franco out of Flip Frenzy standings while his flips stay in the company total", function () {
+  it("leaves Franco out of the race while his flips stay in the company total", function () {
     const nov = Sc.nyDate(2026, 10, 2, 12, 0, 0);
     const s = snap({
       "ST Techs": [
@@ -1312,11 +1382,16 @@ describe("hidden techs", function () {
         ["Sam Rivera", "2026-11", 2]
       ]
     }, nov);
-    const stand = Sc.contestStandings(s.contest, ctx(s, { now: nov }));
-    assert.equal(stand.leader.name, "Sam");
-    assert.equal(hasFranco(stand.rows), false);
-    const open = Sc.contestStandings(s.contest, ctx(s, { now: nov, cfg: Sc.applySheetConfig({ hidden_techs: "" }) }));
-    assert.equal(open.leader.name, "Franco");
+    const stand = Sc.raceStandings(s, ctx(s, { now: nov }));
+    const flips = stand.races.filter(function (r) { return r.metric === "flips"; })[0];
+    assert.equal(flips.rows[0].name, "Sam");
+    assert.equal(flips.rows[0].value, 2);
+    assert.equal(hasFranco(flips.rows), false);
+    assert.equal(flips.winner, null);
+    const open = Sc.raceStandings(s, ctx(s, { now: nov, cfg: Sc.applySheetConfig({ hidden_techs: "" }) }));
+    const openFlips = open.races.filter(function (r) { return r.metric === "flips"; })[0];
+    assert.equal(openFlips.rows[0].name, "Franco");
+    assert.equal(openFlips.rows[0].value, 5);
     assert.equal(Sc.flipBoard(s, nov, {}).company.mtd, 7);
     assert.equal(hasFranco(Sc.flipBoard(s, nov, {}).rows), false);
   });
@@ -1327,10 +1402,11 @@ describe("board copy", function () {
     const blob = JSON.stringify({
       announcements: Settings.DEFAULT_ANNOUNCEMENTS,
       welcome: Settings.WELCOME_ANNOUNCEMENT,
-      contest: Settings.DEFAULT_CONTEST
+      races: Settings.DEFAULT_RACES
     });
     assert.equal(/brews|sonia/i.test(blob), false);
-    assert.equal(Settings.DEFAULT_CONTEST.notes, "Prize: $500 to the flip leader");
-    assert.equal(Settings.DEFAULT_CONTEST.prize1, "$500");
+    assert.equal(/flip frenzy|flip leader/i.test(blob), false);
+    assert.equal(Settings.DEFAULT_RACES[1].prize, "$500");
+    assert.equal(Settings.DEFAULT_RACES[1].start, "2026-10-26");
   });
 });

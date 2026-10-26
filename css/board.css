@@ -311,3 +311,8 @@ body.tv .hdr{display:none}
   .ld-r{grid-template-columns:4vh 6vh minmax(0,1fr) 18vw}.ld-bar{display:none}
   .wx-chip small{display:none}
 }
+
+/* Grade when there is nothing to score, and the stale-data flag. Hidden until needed. */
+.gNA{background:#5E747D}
+#upd.stale{color:#FFB020}
+.stale-flag{display:inline-block;background:#E08A1E;color:#1a1000;font-weight:900;letter-spacing:.04em;padding:.25vh .7vw;border-radius:.5vh;margin-right:.8vw}

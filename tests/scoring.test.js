@@ -2,6 +2,8 @@
 
 const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
+const fs = require("fs");
+const path = require("path");
 const Sc = require("../js/scoring.js");
 const Settings = require("../js/settings.js");
 
@@ -598,5 +600,25 @@ describe("goals, pace, stale data, and sheet settings", function () {
     assert.equal(s.year, 2026);
     assert.deepEqual(s.techs, {});
     assert.equal(s.dataThrough, "");
+  });
+});
+
+describe("page files", function () {
+  it("splits the page, flags stale data, and keeps the API key out of the page", function () {
+    const root = path.join(__dirname, "..");
+    const html = fs.readFileSync(path.join(root, "index.html"), "utf8");
+    const app = fs.readFileSync(path.join(root, "js/app.js"), "utf8");
+    const css = fs.readFileSync(path.join(root, "css/board.css"), "utf8");
+    const settings = fs.readFileSync(path.join(root, "js/settings.js"), "utf8");
+    assert.equal(html.includes("AIza"), false);
+    assert.equal(app.includes("AIza"), false);
+    assert.equal(settings.includes("SHEET_KEY_FALLBACK"), true);
+    assert.equal(html.includes('href="css/board.css"'), true);
+    assert.equal(html.includes('src="js/settings.js"'), true);
+    assert.equal(html.includes('src="js/scoring.js"'), true);
+    assert.equal(html.includes('src="js/app.js"'), true);
+    assert.equal(app.includes("DATA IS STALE"), true);
+    assert.equal(css.includes(".stale-flag"), true);
+    assert.equal(app.includes("function sheetKey"), true);
   });
 });

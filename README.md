@@ -1,6 +1,6 @@
 # 3R KPI Board
 
-Rotating KPI board for the shop TVs at 3R Plumbing and Mechanical. It loops through the monthly goal, revenue trend, team scoreboard, tech leaderboard, flip tracker, monthly contest, stat sheet, tech spotlight, leads, year-to-date goals, Norwell weather, reviews, announcements, a ticker, and the sales board.
+Rotating KPI board for the shop TVs at 3R Plumbing and Mechanical. It loops through the monthly goal, revenue trend, team scoreboard, tech leaderboard, flip tracker, monthly contest, stat sheet, tech spotlight, team celebrations, leads, year-to-date goals, Norwell weather, reviews, announcements, a ticker, and the sales board.
 
 The site is static. GitHub Pages serves it as-is. There is no build step and nothing to compile. Shop TVs load classic scripts, not JavaScript modules.
 
@@ -108,6 +108,27 @@ If the tab has no messages, the board shows five sample lines (boiler season, me
 
 One real message is added on top of whatever is on the tab, from October 26, 2026 through November 16, 2026: "Welcome to the team, Justin and Eric!" It is high priority, on the slide and the ticker. The slide is blue, with the first names. A headshot is added only when one file in the tech photo folder matches that first name. The slide does not add a last name.
 
+`Team Spotlight` is a separate tab. A missing tab, or a tab with no rows to show, is skipped. The rest of the board keeps rotating. Header row:
+
+```
+Type	Name	Date	Detail	Photo URL	Show From	Show Until	Active
+```
+
+`Type` is `New Hire`, `Birthday`, `Anniversary`, `Tech of the Month`, or `Shoutout`. `Date` is the event date: a birthday or anniversary month and day (`10/27` or `10/27/1994`), or a hire date (`10/20/2026`). `Detail` is a short line under the name. `Photo URL` is optional. A Google Drive share link (`https://drive.google.com/file/d/FILE_ID/view`, `open?id=`, or `uc?id=`) is turned into `https://drive.google.com/thumbnail?id=FILE_ID&sz=w480`, the same direct image the welcome slide uses. Anything else that is already an `https` image is used as-is. No photo, and no matching headshot already on the board, shows an initials circle.
+
+`Active` blank or `TRUE` can show. `FALSE` hides the row. `Show From` and `Show Until` are optional America/New_York dates, and the end date is included. Leave both blank and the board picks the window:
+
+| Type | When it shows |
+| --- | --- |
+| Birthday | From 3 days before the month and day through 2 days after it, every year. A Dec 31 birthday is still up on Jan 2. |
+| Anniversary | Same month-and-day window. Years of service come from the year on `Date`, so a hire date of Oct 27, 2023 reads `3 YEARS WITH 3R` in that window in 2026. |
+| New Hire | 21 days starting on `Date` (the hire date and the next 20 days). |
+| Tech of the Month, Shoutout | The whole time `Active` is blank or `TRUE`. |
+
+One slide per person: a big name, a photo or initials, a type badge, and a short line such as `HAPPY BIRTHDAY, JUSTIN!`, `WELCOME TO THE TEAM`, or `TECH OF THE MONTH`. Two or more new hires that are up together share one slide. Birthday and Tech of the Month get a small CSS confetti layer (18 pieces). It is thrown away with the slide, and it pauses while the board is paused or the page is hidden. People on the hidden-tech list, including Franco, are left off.
+
+The slides are woven in after every few KPI slides (about every 3). Each KPI slide still stays up for the normal rotate time. `slidesOff` accepts `celebrate` to hide the section.
+
 `Races` (or `Contest`): one row per race. Header:
 
 ```
@@ -160,9 +181,9 @@ The Flip Tracker slide ranks this month's flips, shows converted flips and the c
 | `coSource` | `auto` (from jobs) or `actuals` |
 | `tvGrades` | `no` hides letter grades on the TV. Admin still shows them. |
 | `logoPlate` | `no` turns off the white plate behind the logo |
-| `slidesOff` | Comma-separated slide keys to hide: `goal`, `trend`, `all`, `lb`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `sales` |
+| `slidesOff` | Comma-separated slide keys to hide: `goal`, `trend`, `all`, `lb`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
 | `flip_goal` | Company flip goal for the month. Replaces the 20 in `js/settings.js`. |
-| `hidden_techs` | Comma-separated names left off individual slides, grades, the flip tracker, the races, and flip alerts. Defaults to `Franco`. A blank value shows everyone again. Their jobs and dollars stay in the company, team, monthly, and goal totals. A name matches any person who has each of its words, ignoring case, so `Franco` also covers `Franco DosSantos`. |
+| `hidden_techs` | Comma-separated names left off individual slides, grades, the flip tracker, the races, flip alerts, and the team spotlight. Defaults to `Franco`. A blank value shows everyone again. Their jobs and dollars stay in the company, team, monthly, and goal totals. A name matches any person who has each of its words, ignoring case, so `Franco` also covers `Franco DosSantos`. |
 | `w_<metric>` / `t_<metric>` | Technician weight and monthly target |
 | `aw_<metric>` / `at_<metric>` | Apprentice weight and target |
 | `sw_<metric>` / `slt_<metric>` | Sales weight and target |

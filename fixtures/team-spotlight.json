@@ -1,0 +1,15 @@
+{
+  "note": "Local sample for tests and the spotlight screenshot. This file is not written to the KPI sheet.",
+  "rows": [
+    ["Type", "Name", "Date", "Detail", "Photo URL", "Show From", "Show Until", "Active"],
+    ["Birthday", "Justin Rivera", "10/27/1994", "Hope the trucks stay quiet.", "", "", "", "TRUE"],
+    ["New Hire", "Eric Santos", "10/20/2026", "Install crew", "", "", "", ""],
+    ["New Hire", "Maya Chen", "10/22/2026", "Service apprentice", "", "", "", "TRUE"],
+    ["Anniversary", "Sam Rivera", "10/27/2023", "", "", "", "", "TRUE"],
+    ["Tech of the Month", "Alex Costa", "10/1/2026", "Highest close rate in October", "https://drive.google.com/file/d/1iqIdyLC6tR_iZ5in0dEswGsgjMfZVRLQ/view?usp=sharing", "", "", "TRUE"],
+    ["Shoutout", "Jo Parker", "", "Caught a leaking boiler before it flooded.", "", "", "", ""],
+    ["Birthday", "Franco DosSantos", "10/27/1988", "Hidden from the TV", "", "", "", "TRUE"],
+    ["Birthday", "Pat Lee", "1/2/1990", "Out of the birthday window", "", "", "", "TRUE"],
+    ["New Hire", "Casey Ng", "10/26/2026", "Inactive row", "", "", "", "FALSE"]
+  ]
+}

@@ -199,6 +199,7 @@
     {k:"wx",    label:"Weather (needs the sheet script)"},
     {k:"rv",    label:"Google reviews"},
     {k:"ann",   label:"Announcements"},
+    {k:"celebrate", label:"Team spotlight"},
     {k:"flips", label:"Flip tracker"},
     {k:"contest", label:"Race to the top"},
     {k:"sales", label:"Sales board"}
@@ -209,7 +210,7 @@
   var PHOTO_FOLDER = "11gVMpNygKLHh7vHBqly2c3lj9WwNef_j";
 
   // Tab names must match the sheet exactly. "Automation Estimates" has no leading space.
-  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Announcements","Contest","Races","Flips","Memberships","Review Tracker","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","ST Reviews","ST Callbacks","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
+  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Announcements","Team Spotlight","Contest","Races","Flips","Memberships","Review Tracker","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","ST Reviews","ST Callbacks","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
 
   function defaultCfg() {
     return {

@@ -1113,6 +1113,9 @@
     snap.annLive = annLive;
     snap.anns = announcementSlots(annLive);
     snap.contest = null;
+    var prevSpot = Array.isArray(snap.spotlight) ? snap.spotlight : [];
+    if (wb && wbHas(wb, "Team Spotlight")) snap.spotlight = readTeamSpotlight(sheetRows(wb, "Team Spotlight"));
+    else snap.spotlight = prevSpot;
     return snap;
   }
 
@@ -1811,6 +1814,241 @@
     applySet(SALES_METRICS, cfg.salesMetrics, "sw_", "slt_");
     return cfg;
   }
+  /* Team Spotlight tab. Rows stay on the snapshot; the TV decides who is on screen today. */
+  function drivePhotoUrl(raw) {
+    var s = String(raw == null ? "" : raw).trim();
+    if (!s) return "";
+    if (/^data:image\//i.test(s)) return s;
+    var id = "";
+    var file = s.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
+    if (file) id = file[1];
+    if (!id && /drive\.google\.com/i.test(s)) {
+      var q = s.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
+      if (q) id = q[1];
+    }
+    if (!id && /^[a-zA-Z0-9_-]{25,}$/.test(s)) id = s;
+    if (id) return "https://drive.google.com/thumbnail?id=" + id + "&sz=w480";
+    if (/^https?:\/\//i.test(s)) return s;
+    return "";
+  }
+  function spotlightType(v) {
+    var s = String(v || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+    if (s === "new hire" || s === "newhire" || s === "hire") return "hire";
+    if (s === "birthday" || s === "bday") return "birthday";
+    if (s === "anniversary" || s === "anniv") return "anniversary";
+    if (s === "tech of the month" || s === "tech of month" || s === "technician of the month") return "tech";
+    if (s === "shoutout" || s === "shout out") return "shoutout";
+    return "";
+  }
+  function spotlightShown(v) {
+    if (v === true || v === 1) return true;
+    if (v === false || v === 0) return false;
+    if (v == null) return true;
+    var s = String(v).trim();
+    if (!s) return true;
+    return !/^(false|no|n|0|off)$/i.test(s);
+  }
+  function spotlightDate(v) {
+    if (v == null || String(v).trim() === "") return null;
+    if (typeof v === "number" && isFinite(v)) {
+      var excel = toDate(v);
+      if (!excel) return null;
+      var ep = nyParts(excel);
+      return { y: ep.y, m: ep.m, d: ep.d, hasYear: true };
+    }
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      var dp = nyParts(v);
+      return { y: dp.y, m: dp.m, d: dp.d, hasYear: true };
+    }
+    var s = String(v).trim();
+    var md = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+    if (md) {
+      var month = +md[1] - 1, day = +md[2];
+      if (month < 0 || month > 11 || day < 1 || day > 31) return null;
+      return { y: null, m: month, d: day, hasYear: false };
+    }
+    var parsed = toDate(s);
+    if (!parsed) return null;
+    var p = nyParts(parsed);
+    return { y: p.y, m: p.m, d: p.d, hasYear: true };
+  }
+  function clampDom(y, m, d) {
+    var dim = daysInMonth(y, m);
+    var day = d > dim ? dim : d;
+    if (day < 1) day = 1;
+    return nyDate(y, m, day, 12, 0, 0);
+  }
+  function dayOnOrBetween(now, start, end) {
+    var t = nyDayIndex(now);
+    return nyDayIndex(start) <= t && t <= nyDayIndex(end);
+  }
+  function readTeamSpotlight(rows) {
+    rows = rows || [];
+    var headerAt = -1, h = {};
+    for (var i = 0; i < Math.min(rows.length, 8); i++) {
+      var map = headerMap(rows[i]);
+      if (map.type != null && map.name != null) { headerAt = i; h = map; break; }
+    }
+    if (headerAt < 0) return [];
+    var out = [];
+    rows.slice(headerAt + 1).forEach(function (r) {
+      if (!r) return;
+      var type = spotlightType(cellText(r, h, ["type"]));
+      var name = cleanPersonName(cellText(r, h, ["name"])).slice(0, 80);
+      if (!type || !name) return;
+      if (!spotlightShown(cellAt(r, pickCol(h, ["active"])))) return;
+      var date = spotlightDate(cellAt(r, pickCol(h, ["date"])));
+      out.push({
+        type: type,
+        name: name,
+        first: firstName(name),
+        detail: cellText(r, h, ["detail", "sub"]).slice(0, 180),
+        photo: drivePhotoUrl(cellAt(r, pickCol(h, ["photo url", "photo", "image", "headshot"]))),
+        date: date,
+        showFrom: ymdOrBlank(cellAt(r, pickCol(h, ["show from", "from"]))),
+        showUntil: ymdOrBlank(cellAt(r, pickCol(h, ["show until", "until", "show to"])))
+      });
+    });
+    return out;
+  }
+  function serviceYears(date, now) {
+    if (!date || !date.hasYear || date.y == null) return null;
+    var n = nyParts(now);
+    var bestY = null, bestDist = 1e9;
+    for (var off = -1; off <= 1; off++) {
+      var y = n.y + off;
+      var occ = clampDom(y, date.m, date.d);
+      var dist = Math.abs(nyDayIndex(occ) - nyDayIndex(now));
+      if (dist < bestDist) { bestDist = dist; bestY = y; }
+    }
+    var years = bestY - date.y;
+    return years > 0 ? years : null;
+  }
+  function spotlightInWindow(item, now) {
+    var from = item.showFrom || "";
+    var until = item.showUntil || "";
+    if (from || until) {
+      var today = nyDayIndex(now);
+      if (from) {
+        var s = toDate(from);
+        if (s && nyDayIndex(s) > today) return false;
+      }
+      if (until) {
+        var e = toDate(until);
+        if (e && nyDayIndex(e) < today) return false;
+      }
+      return true;
+    }
+    if (item.type === "tech" || item.type === "shoutout") return true;
+    if (!item.date) return false;
+    if (item.type === "birthday" || item.type === "anniversary") {
+      var n = nyParts(now);
+      for (var off = -1; off <= 1; off++) {
+        var occ = clampDom(n.y + off, item.date.m, item.date.d);
+        if (dayOnOrBetween(now, addNyDays(occ, -3), addNyDays(occ, 2))) return true;
+      }
+      return false;
+    }
+    if (item.type === "hire") {
+      if (!item.date.hasYear) return false;
+      var start = clampDom(item.date.y, item.date.m, item.date.d);
+      return dayOnOrBetween(now, start, addNyDays(start, 20));
+    }
+    return false;
+  }
+  function spotlightHidden(name, ctx) {
+    if (nameIsHidden(name, hiddenList(ctx))) return true;
+    var techs = (ctx && ctx.snap && ctx.snap.techs) || {};
+    var tokens = nameTokens(name);
+    if (tokens.length !== 1) {
+      var ids = Object.keys(techs);
+      for (var i = 0; i < ids.length; i++) {
+        var tech = techs[ids[i]];
+        if (!tech) continue;
+        if ((key(tech.full) === key(name) || nameIsHidden(tech.full, [name])) && techIsHidden(tech, ctx)) return true;
+      }
+      return false;
+    }
+    var hits = [];
+    Object.keys(techs).forEach(function (id) {
+      var t = techs[id];
+      if (t && firstToken(t.full) === tokens[0]) hits.push(t);
+    });
+    return hits.length === 1 && techIsHidden(hits[0], ctx);
+  }
+  function spotlightCopy(item, now) {
+    var first = String(item.first || firstName(item.name) || "").toUpperCase();
+    var years = item.type === "anniversary" ? serviceYears(item.date, now) : null;
+    var badge = "Shoutout", line = item.detail || "SHOUTOUT", confetti = false;
+    if (item.type === "birthday") {
+      badge = "Birthday";
+      line = "HAPPY BIRTHDAY, " + first + "!";
+      confetti = true;
+    } else if (item.type === "hire") {
+      badge = "New Hire";
+      line = "WELCOME TO THE TEAM";
+    } else if (item.type === "anniversary") {
+      badge = "Anniversary";
+      line = years ? (years + (years === 1 ? " YEAR" : " YEARS") + " WITH 3R") : ("HAPPY ANNIVERSARY, " + first + "!");
+    } else if (item.type === "tech") {
+      badge = "Tech of the Month";
+      line = "TECH OF THE MONTH";
+      confetti = true;
+    }
+    return { badge: badge, line: line, years: years, confetti: confetti };
+  }
+  function activeSpotlight(entries, ctx) {
+    var now = (ctx && ctx.now) || nyNow();
+    var list = [];
+    (entries || []).forEach(function (item) {
+      if (!item || !item.name || !item.type) return;
+      if (spotlightHidden(item.name, ctx)) return;
+      if (!spotlightInWindow(item, now)) return;
+      list.push(Object.assign({}, item, spotlightCopy(item, now)));
+    });
+    return list;
+  }
+  function spotlightDeck(items) {
+    items = items || [];
+    var hires = [];
+    items.forEach(function (it) { if (it && it.type === "hire") hires.push(it); });
+    var slides = [];
+    var grouped = false;
+    items.forEach(function (it) {
+      if (!it) return;
+      if (it.type === "hire" && hires.length >= 2) {
+        if (!grouped) { slides.push({ kind: "hires", items: hires }); grouped = true; }
+        return;
+      }
+      slides.push({ kind: "one", items: [it] });
+    });
+    return slides;
+  }
+  /* Drop a celebration in after a few KPI slides. KPI slides keep their own duration. */
+  function weaveSpotlight(kpi, spots) {
+    kpi = Array.isArray(kpi) ? kpi.slice() : [];
+    spots = Array.isArray(spots) ? spots : [];
+    if (!spots.length) return kpi;
+    if (!kpi.length) return spots.slice();
+    var gap = 3;
+    if (Math.floor(kpi.length / gap) < spots.length) gap = Math.max(1, Math.floor(kpi.length / spots.length));
+    var natural = Math.floor(kpi.length / gap);
+    var limit = Math.max(spots.length, Math.min(natural, spots.length * 2));
+    var out = [];
+    var placed = 0;
+    for (var i = 0; i < kpi.length; i++) {
+      out.push(kpi[i]);
+      if ((i + 1) % gap === 0 && placed < limit) {
+        out.push(spots[placed % spots.length]);
+        placed++;
+      }
+    }
+    while (placed < spots.length) {
+      out.push(spots[placed % spots.length]);
+      placed++;
+    }
+    return out;
+  }
   function parseTechMeta(rows) {
     var meta = {};
     (rows || []).slice(1).forEach(function (r) {
@@ -1835,6 +2073,8 @@
     roster:roster, salesRoster:salesRoster, buildSnapshot:buildSnapshot, attachFeed:attachFeed,
     announcementActive:announcementActive, activeAnnouncements:activeAnnouncements, announcementSlots:announcementSlots,
     readAnnouncements:readAnnouncements, welcomeFaces:welcomeFaces,
+    drivePhotoUrl:drivePhotoUrl, readTeamSpotlight:readTeamSpotlight, activeSpotlight:activeSpotlight,
+    spotlightDeck:spotlightDeck, weaveSpotlight:weaveSpotlight,
     readFlipEntries:readFlipEntries, flipBoard:flipBoard, flipAlerts:flipAlerts, tickerItems:tickerItems,
     contestForMonth:contestForMonth, contestPrizes:contestPrizes, contestStandings:contestStandings, raceStandings:raceStandings, daysLeftInMonth:daysLeftInMonth,
     percentToGoal:percentToGoal, monthPace:monthPace, yearPace:yearPace, paceStatus:paceStatus, periodStart:periodStart,

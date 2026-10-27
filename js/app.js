@@ -109,7 +109,17 @@ function activeSlides(){
   try {
     if (ok("sales") && snap && salesRoster(true).length) out.splice(Math.min(3,out.length),0,{k:"sales"});
   } catch (e) {}
-  return out.length?out:[{k:"goal"}];
+  let spots=[];
+  try {
+    if (ok("celebrate") && snap) {
+      const deck=Sc.spotlightDeck(Sc.activeSpotlight(snap.spotlight, boardCtx()));
+      spots=deck.map((_,i)=>({k:"celebrate", i}));
+    }
+  } catch (e) {}
+  try {
+    const woven=Sc.weaveSpotlight(out, spots);
+    return woven.length?woven:[{k:"goal"}];
+  } catch (e) { return out.length?out:[{k:"goal"}]; }
 }
 const bigSmall = (big, small) => `<b class="num">${big}</b><span class="num">${small}</span>`;
 function slideHTML(sl){
@@ -244,6 +254,12 @@ function slideHTML(sl){
   }
   if (sl.k==="flips") return flipSlideHTML(snap, now);
   if (sl.k==="contest") return contestSlideHTML(snap, now);
+  if (sl.k==="celebrate"){
+    try {
+      const deck=Sc.spotlightDeck(Sc.activeSpotlight(snap.spotlight, boardCtx()));
+      return celebrateHTML(deck[sl.i]);
+    } catch (e) { return ""; }
+  }
   if (sl.k==="ann"){
     const a=snap.anns[sl.i]; if(!a) return "";
     if (a.welcome) return welcomeHTML(a);
@@ -252,6 +268,45 @@ function slideHTML(sl){
     return `<div class="ann">${icon?`<div class="ic">${esc(icon)}</div>`:""}${badge?`<div class="${badgeCls}">${esc(badge)}</div>`:""}<div class="msg">${esc(msg)}</div>${detail?`<div class="sub">${esc(detail)}</div>`:""}</div>`;
   }
   return "";
+}
+const CONFETTI_N = 18;
+function confettiHTML(){
+  let html='<div class="confetti" aria-hidden="true">';
+  for (let i=0;i<CONFETTI_N;i++) html+=`<i style="--i:${i}"></i>`;
+  return html+"</div>";
+}
+function spotlightAv(item){
+  const name=item&&item.name||"";
+  const initialsAttr=esc(initials(name));
+  const img=(url, zoom)=>`<div class="av${zoom?" zoom":""}"><img src="${esc(url)}" alt="" data-i="${initialsAttr}" onerror="this.parentNode.textContent=this.dataset.i"></div>`;
+  if (item&&item.photo) return img(item.photo, /drive\.google\.com\/thumbnail/.test(item.photo));
+  const techs=(S.snap&&S.snap.techs)||{};
+  const full=Sc.key(name);
+  if (techs[full]) return av(full, name);
+  const first=String(Sc.firstName(name)||"").toLowerCase();
+  const hits=Object.keys(techs).filter(id=>techs[id]&&String(Sc.firstName(techs[id].full||"")).toLowerCase()===first);
+  if (first && hits.length===1) return av(hits[0], name);
+  try {
+    const meta=Object.assign({}, S.techs);
+    if (S.snap&&S.snap.photoFiles) meta.photos=S.snap.photoFiles;
+    const faces=Sc.welcomeFaces([Sc.firstName(name)], techs, meta);
+    const photo=faces[0]&&faces[0].photo;
+    if (photo && hits.length<=1) return img(photo, /drive\.google\.com\/thumbnail/.test(photo));
+  } catch (e) {}
+  return `<div class="av">${initialsAttr}</div>`;
+}
+function celebrateHTML(slide){
+  if (!slide || !Array.isArray(slide.items) || !slide.items.length) return "";
+  if (slide.kind==="hires"){
+    const cards=slide.items.map(it=>`<div class="welcome-card">${spotlightAv(it)}<b>${esc(it.name)}</b>${it.detail?`<small>${esc(it.detail)}</small>`:""}</div>`).join("");
+    return `<div class="ann welcome celebrate"><div class="badge hire">New Hires</div><div class="msg">WELCOME TO THE TEAM</div><div class="welcome-row">${cards}</div></div>`;
+  }
+  const it=slide.items[0];
+  if (!it) return "";
+  const conf=it.confetti?confettiHTML():"";
+  const sub=it.detail && it.detail!==it.line ? `<div class="celebrate-sub">${esc(it.detail)}</div>` : "";
+  const lineCls=it.type==="shoutout"?"celebrate-line shout":"celebrate-line";
+  return `<div class="celebrate">${conf}<div class="celebrate-body"><div class="kicker">Team spotlight</div><div class="badge ${esc(it.type)}">${esc(it.badge||"")}</div><div class="spot">${spotlightAv(it)}<div class="celebrate-copy"><div class="nm">${esc(it.name)}</div><div class="${lineCls}">${esc(it.line||"")}</div>${sub}</div></div></div></div>`;
 }
 function welcomeHTML(a){
   const meta=Object.assign({}, S.techs);
@@ -892,7 +947,7 @@ function restoreCached(){ try{ const c=JSON.parse(localStorage.getItem("3r-board
 async function mergeManualTabs(snap){
   const apiKey=sheetKey(); if(!apiKey||!snap) return;
   const id=(S.cfg&&S.cfg.sheetId)||DEFAULT_SHEET;
-  const names=["Announcements","Contest","Races","Flips",SETTINGS.MEMBERSHIP_TAB,SETTINGS.REVIEW_TRACKER_TAB,"Board_Config"];
+  const names=["Announcements","Team Spotlight","Contest","Races","Flips",SETTINGS.MEMBERSHIP_TAB,SETTINGS.REVIEW_TRACKER_TAB,"Board_Config"];
   try{
     const tabs=await Promise.all(names.map(t=>fetchTab(id,t,apiKey).catch(()=>null)));
     const wb={__rows:{}};
@@ -937,7 +992,13 @@ function reliability(){
   setTimeout(()=>location.reload(), nextReload-Date.now());
   // keep the screen awake: Wake Lock where supported, plus a tiny silent looping video (works on most smart-TV browsers)
   const wake=async()=>{ try{ if("wakeLock" in navigator && document.visibilityState==="visible") await navigator.wakeLock.request("screen"); }catch(_){} };
-  wake(); document.addEventListener("visibilitychange", ()=>{ wake(); if(document.visibilityState==="visible") keep.play().catch(()=>{}); });
+  wake();
+  document.body.classList.toggle("page-hidden", document.visibilityState==="hidden");
+  document.addEventListener("visibilitychange", ()=>{
+    document.body.classList.toggle("page-hidden", document.visibilityState==="hidden");
+    wake();
+    if(document.visibilityState==="visible") keep.play().catch(()=>{});
+  });
   const keep=document.createElement("video"); keep.muted=true; keep.loop=true; keep.playsInline=true; keep.setAttribute("playsinline",""); keep.setAttribute("muted","");
   keep.style.cssText="position:fixed;width:1px;height:1px;opacity:.01;left:0;bottom:0;pointer-events:none";
   keep.innerHTML='<source src="data:video/webm;base64,GkXfo59ChoEBQveBAULygQRC84EIQoKEd2VibUKHgQJChYECGFOAZwEAAAAAAALeEU2bdLpNu4tTq4QVSalmU6yBoU27i1OrhBZUrmtTrIHYTbuMU6uEElTDZ1OsggEeTbuMU6uEHFO7a1OsggLI7AEAAAAAAABZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAVSalmsirXsYMPQkBNgI1MYXZmNjAuMTYuMTAwV0GNTGF2ZjYwLjE2LjEwMESJiEDDiAAAAAAAFlSua8GuAQAAAAAAADjXgQFzxYiw2HJLY9Bt4pyBACK1nIN1bmSIgQCGhVZfVlA4g4EBI+ODhDuaygDgibCBELqBEJqBAhJUw2f8c3OgY8CAZ8iaRaOHRU5DT0RFUkSHjUxhdmY2MC4xNi4xMDBzc9ZjwItjxYiw2HJLY9Bt4mfIoUWjh0VOQ09ERVJEh5RMYXZjNjAuMzEuMTAyIGxpYnZweGfIoUWjiERVUkFUSU9ORIeTMDA6MDA6MTAuMDAwMDAwMDAwAB9DtnVAr+eBAKOjgQAAgBACAJ0BKhAAEAAARwiFhYiZhIgCAgAMDWAA/v+rUICjmYED6ACxAQABEBAAGAAwP/QMAAAA/v+rUICjmYEH0ACxAQABEBAAGAAwP/QMAAAA/v+rUICjmYELuACxAQABEBAAGAAwP/QMAAAA/v+rUICjmYEPoACxAQABEBAAGAAwP/QMAAAA/v+rUICjmYETiACxAQABEBAAGAAwP/QMAAAA/v+rUIAfQ7Z17+eCF3CjmYEAAACxAQABEBAAGAAwP/QMAAAA/v+rUICjmIED6ACRAQABEBAUYADA/9AwAAD+/6tQgKOZgQfQALEBAAEQEAAYADA/9AwAAAD+/6tQgKOZgQu4ALEBAAEQEAAYADA/9AwAAAD+/6tQgBxTu2uRu4+zgQC3iveBAfGCAZ/wgQM=" type="video/webm"><source src="data:video/mp4;base64,AAAAIGZ0eXBpc29tAAACAGlzb21pc28yYXZjMW1wNDEAAANLbW9vdgAAAGxtdmhkAAAAAAAAAAAAAAAAAAAD6AAAJxAAAQAAAQAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAnV0cmFrAAAAXHRraGQAAAADAAAAAAAAAAAAAAABAAAAAAAAJxAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAABAAAAAABAAAAAQAAAAAAAkZWR0cwAAABxlbHN0AAAAAAAAAAEAACcQAAAAAAABAAAAAAHtbWRpYQAAACBtZGhkAAAAAAAAAAAAAAAAAABAAAACgABVxAAAAAAALWhkbHIAAAAAAAAAAHZpZGUAAAAAAAAAAAAAAABWaWRlb0hhbmRsZXIAAAABmG1pbmYAAAAUdm1oZAAAAAEAAAAAAAAAAAAAACRkaW5mAAAAHGRyZWYAAAAAAAAAAQAAAAx1cmwgAAAAAQAAAVhzdGJsAAAAuHN0c2QAAAAAAAAAAQAAAKhhdmMxAAAAAAAAAAEAAAAAAAAAAAAAAAAAAAAAABAAEABIAAAASAAAAAAAAAABFUxhdmM2MC4zMS4xMDIgbGlieDI2NAAAAAAAAAAAAAAAGP//AAAALmF2Y0MBQsAK/+EAFmdCwArZHsBEAAADAAQAAAMACDxImSABAAVoy4PLIAAAABBwYXNwAAAAAQAAAAEAAAAUYnRydAAAAAAAAAJHAAACRwAAABhzdHRzAAAAAAAAAAEAAAAKAABAAAAAABRzdHNzAAAAAAAAAAEAAAABAAAAHHN0c2MAAAAAAAAAAQAAAAEAAAAKAAAAAQAAADxzdHN6AAAAAAAAAAAAAAAKAAAChgAAAAoAAAAKAAAACQAAAAkAAAAJAAAACQAAAAkAAAAJAAAACQAAABRzdGNvAAAAAAAAAAEAAAN7AAAAYnVkdGEAAABabWV0YQAAAAAAAAAhaGRscgAAAAAAAAAAbWRpcmFwcGwAAAAAAAAAAAAAAAAtaWxzdAAAACWpdG9vAAAAHWRhdGEAAAABAAAAAExhdmY2MC4xNi4xMDAAAAAIZnJlZQAAAuFtZGF0AAACcAYF//9s3EXpvebZSLeWLNgg2SPu73gyNjQgLSBjb3JlIDE2NCByMzEwOCAzMWUxOWY5IC0gSC4yNjQvTVBFRy00IEFWQyBjb2RlYyAtIENvcHlsZWZ0IDIwMDMtMjAyMyAtIGh0dHA6Ly93d3cudmlkZW9sYW4ub3JnL3gyNjQuaHRtbCAtIG9wdGlvbnM6IGNhYmFjPTAgcmVmPTMgZGVibG9jaz0xOjA6MCBhbmFseXNlPTB4MToweDExMSBtZT1oZXggc3VibWU9NyBwc3k9MSBwc3lfcmQ9MS4wMDowLjAwIG1peGVkX3JlZj0xIG1lX3JhbmdlPTE2IGNocm9tYV9tZT0xIHRyZWxsaXM9MSA4eDhkY3Q9MCBjcW09MCBkZWFkem9uZT0yMSwxMSBmYXN0X3Bza2lwPTEgY2hyb21hX3FwX29mZnNldD0tMiB0aHJlYWRzPTEgbG9va2FoZWFkX3RocmVhZHM9MSBzbGljZWRfdGhyZWFkcz0wIG5yPTAgZGVjaW1hdGU9MSBpbnRlcmxhY2VkPTAgYmx1cmF5X2NvbXBhdD0wIGNvbnN0cmFpbmVkX2ludHJhPTAgYmZyYW1lcz0wIHdlaWdodHA9MCBrZXlpbnQ9MjUwIGtleWludF9taW49MSBzY2VuZWN1dD00MCBpbnRyYV9yZWZyZXNoPTAgcmNfbG9va2FoZWFkPTQwIHJjPWNyZiBtYnRyZWU9MSBjcmY9MjMuMCBxY29tcD0wLjYwIHFwbWluPTAgcXBtYXg9NjkgcXBzdGVwPTQgaXBfcmF0aW89MS40MCBhcT0xOjEuMDAAgAAAAA5liIQF////D0UAAVefgAAAAAZBmjgL+oAAAAAGQZpUAv6gAAAABUGaYBf1AAAABUGagBf1AAAABUGaoBf1AAAABUGawBf1AAAABUGa4Bf1AAAABUGbABb1AAAABUGbIBX1" type="video/mp4">';

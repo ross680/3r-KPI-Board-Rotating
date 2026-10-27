@@ -1,6 +1,6 @@
 {
   "private": true,
   "scripts": {
-    "test": "node --test tests/scoring.test.js"
+    "test": "node --test tests/scoring.test.js tests/spotlight.test.js"
   }
 }

@@ -366,4 +366,27 @@ body.tv .hdr{display:none}
   .welcome-row{gap:2vw}
   .prizes{grid-template-columns:1fr}
   .flip-tiles{grid-template-columns:repeat(2,1fr)}
+  .celebrate-line{font-size:3.6vh}
+  .celebrate .spot .nm{font-size:6vh}
 }
+
+/* Team spotlight. Confetti is a fixed set of CSS bits, removed with the slide. */
+.celebrate{position:relative;flex:1;display:flex;flex-direction:column;justify-content:center;min-height:0;overflow:hidden}
+.celebrate-body{position:relative;z-index:2;min-width:0}
+.celebrate .badge{display:inline-block;margin-top:1.2vh;background:var(--blue);color:#001;font-weight:800;font-size:2.2vh;padding:.7vh 1.2vw;border-radius:.8vh}
+.celebrate .badge.birthday,.celebrate .badge.tech{background:#F2B01E;color:#1a1000}
+.celebrate-copy{min-width:0}
+.celebrate-line{font-stretch:120%;font-weight:900;font-size:5.4vh;line-height:1.02;letter-spacing:-.03em;margin-top:1.6vh;color:#E7F6FC;max-width:68vw}
+.celebrate-line.shout{font-stretch:108%;font-weight:800;font-size:4vh;color:#fff;max-width:62vw}
+.celebrate-sub{font-size:2.6vh;color:#B9C6CC;margin-top:1.6vh;font-weight:600;max-width:58vw}
+.welcome-card small{display:block;margin-top:1.2vh;font-size:2vh;font-weight:600;color:#B9C6CC;letter-spacing:0}
+.confetti{position:absolute;inset:0;overflow:hidden;pointer-events:none;z-index:1}
+.confetti i{position:absolute;top:calc((var(--i) * 5.6%) - 4%);left:calc(var(--i) * 5.55%);width:1.5vh;height:2.3vh;border-radius:.3vh;animation:confetti-fall calc(6.4s + var(--i) * .12s) linear infinite;animation-delay:calc(var(--i) * -.37s)}
+.confetti i:nth-child(5n+1){background:#26A4CB}
+.confetti i:nth-child(5n+2){background:#F2B01E;width:1.35vh;height:1.35vh;border-radius:50%}
+.confetti i:nth-child(5n+3){background:#E7F6FC}
+.confetti i:nth-child(5n+4){background:#7ED0EA;height:2.8vh}
+.confetti i:nth-child(5n){background:#fff}
+.tv-shell.paused .confetti i,body.page-hidden .confetti i{animation-play-state:paused}
+@media (prefers-reduced-motion:reduce){.confetti{display:none}}
+@keyframes confetti-fall{0%{transform:translate3d(0,0,0) rotate(0deg)}100%{transform:translate3d(2vh,72vh,0) rotate(200deg)}}

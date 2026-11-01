@@ -1551,4 +1551,59 @@ describe("call center", function () {
     assert.ok(Settings.SHEET_TABS.includes("Call Center"));
     assert.equal(Settings.defaultCfg().slides.calls, true);
   });
+
+  it("reads weekly and daily inbound calls and does not reuse yesterday or Actuals", function () {
+    const weekly = ["Week of", "Booked", "Bookable", "Abandoned", "Callbacks owed", "Callbacks completed", "Inbound"];
+    const v = calls({
+      "Actuals": [["key", "value"], ["ca", 714], ["cb", 57], ["br", 80]],
+      "Call Center": [
+        ["Weekly rows, then a daily section."],
+        weekly,
+        ["10/19/2026", 10, 20, 1, "", "", 30],
+        ["10/26/2026", 21, 28, 5, "", "", 40],
+        [],
+        ["One row per day. Inbound is every call that came in."],
+        ["Date", "Inbound", "Abandoned"],
+        ["10/25/2026", 9, 2],
+        ["10/26/2026", 6, 1]
+      ]
+    });
+    assert.equal(v.inboundWeek, 40);
+    assert.equal(v.inboundDay, 6);
+    assert.equal(v.currentDay, true);
+    assert.equal(v.dayOf, "2026-10-26");
+    assert.equal(v.abandoned, 5);
+    assert.equal(v.abandonedDay, 1);
+    assert.equal(Math.round(v.rate * 100), 75);
+    assert.equal(v.weekOf, "2026-10-26");
+
+    const blankToday = calls({
+      "Call Center": [
+        weekly,
+        ["10/26/2026", "", "", "", "", "", ""],
+        ["Date", "Inbound", "Abandoned"],
+        ["10/25/2026", 9, 2],
+        ["10/26/2026", "", ""]
+      ]
+    });
+    assert.equal(blankToday.inboundDay, null);
+    assert.equal(blankToday.inboundWeek, null);
+    assert.equal(blankToday.abandonedDay, null);
+    assert.equal(blankToday.currentDay, true);
+    assert.equal(blankToday.show, false);
+
+    const yesterday = calls({
+      "Call Center": [
+        ["Date", "Inbound", "Abandoned"],
+        ["10/25/2026", 9, 2]
+      ]
+    });
+    assert.equal(yesterday.currentDay, false);
+    assert.equal(yesterday.dayOf, "2026-10-25");
+    assert.equal(yesterday.inboundDay, 9);
+    assert.equal(yesterday.abandonedDay, 2);
+    assert.equal(yesterday.inboundWeek, null);
+    assert.equal(yesterday.rate, null);
+    assert.equal(yesterday.show, true);
+  });
 });

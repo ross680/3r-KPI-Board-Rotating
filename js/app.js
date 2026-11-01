@@ -344,19 +344,27 @@ function callSlideHTML(snap, now){
   if (v.owed!=null && v.completedReq!=null){ reqV=v.completedReq+" of "+v.owed; reqS=v.requestRate!=null?pct(v.requestRate)+" completed":"owed and completed"; }
   else if (v.owed!=null){ reqV=String(v.owed); reqS="owed · completed is blank"; }
   else if (v.completedReq!=null){ reqV=String(v.completedReq); reqS="completed · owed is blank"; }
-  const abdV=v.abandoned==null?"No data":String(v.abandoned);
-  const abdS=v.abandoned==null?"Abandoned column on the Call Center tab":"this week";
-  const bookedV=v.booked==null?"No data":String(v.booked);
-  const bookedS=v.bookable==null?"Bookable inbound is blank":"of "+v.bookable+" bookable";
+  const dayWhen=v.dayOf ? (Sc.toDate(v.dayOf)||null) : null;
+  const dayTxt=dayWhen?dayWhen.toLocaleDateString("en-US",{month:"short", day:"numeric", timeZone:SETTINGS.TIMEZONE}):"";
+  const inDayV=v.inboundDay==null?"No data":String(v.inboundDay);
+  const inDayS=v.inboundDay==null?"Date and Inbound on the Call Center tab":(v.currentDay?"today":dayTxt||"latest day on the tab");
+  const inWkV=v.inboundWeek==null?"No data":String(v.inboundWeek);
+  const inWkS=v.inboundWeek==null?"Inbound column on the weekly row":"every call that came in";
+  let abdV="No data", abdS="Abandoned on the Call Center tab, daily or weekly";
+  if (v.abandoned!=null && v.abandonedDay!=null){ abdV=String(v.abandoned); abdS=v.abandonedDay+" today · this week"; }
+  else if (v.abandoned!=null){ abdV=String(v.abandoned); abdS="this week"; }
+  else if (v.abandonedDay!=null){ abdV=String(v.abandonedDay); abdS=v.currentDay?"today":(dayTxt||"latest day on the tab"); }
+  if (v.owed!=null || v.completedReq!=null) jobBits.push(reqV+" callback requests");
+  const jobS2=jobBits.length?jobBits.join(" · "):jobS;
   const tile=(l,val,s)=>`<div class="tile"><div class="l">${l}</div><div class="v num${val==="No data"?" words":""}">${esc(val)}</div><div class="s">${esc(s)}</div></div>`;
   return `<div class="kicker">${esc(kicker)}</div><div class="big-h tight">Calls</div>
     <div class="goal-big"><div class="${v.rate==null?"goal-num words":"goal-num num"}">${esc(big)}</div><div class="goal-of">${ofHtml}</div></div>
     ${bar}
     <div class="tiles">
-      ${tile("Booked", bookedV, bookedS)}
+      ${tile("Inbound today", inDayV, inDayS)}
+      ${tile("Inbound this week", inWkV, inWkS)}
       ${tile("Abandoned", abdV, abdS)}
-      ${tile("Callback jobs", jobV, jobS)}
-      ${tile("Callback requests", reqV, reqS)}
+      ${tile("Callback jobs", jobV, jobS2)}
     </div>`;
 }
 function flipSlideHTML(snap, now){
@@ -690,7 +698,7 @@ function paneBoard(){
     <p class="small" style="margin-top:0">Source: <b>3R Rotating KPI Board</b> Google Sheet. The board re-reads it every 5 minutes while an admin has this page open, then pushes the numbers to every screen showing the board.</p>
     <div class="note ${S.sync.state==="ok"?"ok":S.sync.state==="error"?"bad":""}">${esc(S.sync.msg)}${S.snapAt?` Last pushed ${esc(ago(S.snapAt))}.`:""}${S.snap?` ${S.snap.jobRows} job rows, ${S.snap.estRows} estimate rows.`:""}</div>
     <div class="row" style="margin-top:12px"><button class="btn" type="button" id="syncNow" ${S.mcp?"":"disabled"}>Refresh from sheet now</button></div>
-    <p class="muted small" style="margin-top:12px">Revenue, jobs, avg ticket, close rate, gross margin, hours and leads come from ST Jobs, or Automation Jobs if that tab is the one filled in. Sold and open estimates come from ST Estimates or Automation Estimates. Callbacks on the scorecard come from ST Callbacks when that tab has rows, otherwise Call Back Record. Those are ServiceTitan callback jobs, not CSR callback requests. Installs are install job types over 4 hours. Membership and review grades come from ST Memberships and ST Reviews when those tabs are filled, otherwise the Leaderboard tab. Goals come from Goals and YTD Goals. The race counts rows typed on the Flips, Memberships, and Review Tracker tabs. A Contest or Races row can change a race goal, prize, or start date. The Reviews tab is the quote list. Weekly booking rate, abandoned calls, and callback requests come from the Call Center tab. Leave that slide's cells blank until Pivotl's weekly report has the numbers. The Actuals tab is not the booking rate.</p>
+    <p class="muted small" style="margin-top:12px">Revenue, jobs, avg ticket, close rate, gross margin, hours and leads come from ST Jobs, or Automation Jobs if that tab is the one filled in. Sold and open estimates come from ST Estimates or Automation Estimates. Callbacks on the scorecard come from ST Callbacks when that tab has rows, otherwise Call Back Record. Those are ServiceTitan callback jobs, not CSR callback requests. Installs are install job types over 4 hours. Membership and review grades come from ST Memberships and ST Reviews when those tabs are filled, otherwise the Leaderboard tab. Goals come from Goals and YTD Goals. The race counts rows typed on the Flips, Memberships, and Review Tracker tabs. A Contest or Races row can change a race goal, prize, or start date. The Reviews tab is the quote list. Weekly booking rate, weekly and daily inbound calls, and abandoned calls come from the Call Center tab. Inbound is every call that came in, not calls answered on Actuals. Leave those cells blank until Pivotl's report has the numbers.</p>
   </div>`;
 }
 

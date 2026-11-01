@@ -883,40 +883,83 @@
     var n = num(v);
     return isFinite(n) ? n : null;
   }
+  function callCells(r) {
+    return (r || []).map(function (c) { return String(c == null ? "" : c).trim().toLowerCase(); });
+  }
+  function isDailyHeader(r) {
+    var cells = callCells(r);
+    if (cells.indexOf("week of") >= 0) return false;
+    if (cells.indexOf("date") < 0) return false;
+    return cells.some(function (c) { return c === "inbound" || c === "inbound calls" || c === "total inbound"; });
+  }
   /* Pivotl's weekly booking rate is booked ÷ bookable inbound calls.
-     A blank cell is missing. Zero is a real zero. Actuals cb/br/ca are not this tab. */
+     Inbound is every call that came in. A blank cell is missing. Zero is a real zero.
+     Actuals ca/cb/br are not these columns. */
   function readCallCenter(rows, now) {
     now = now || nyNow();
-    var found = headerIndex(rows || [], function (r) {
-      var cells = (r || []).map(function (c) { return String(c == null ? "" : c).trim().toLowerCase(); });
+    rows = rows || [];
+    var found = headerIndex(rows, function (r) {
+      var cells = callCells(r);
       return cells.indexOf("week of") >= 0 && cells.some(function (c) { return c === "bookable" || c.indexOf("bookable ") === 0; });
     });
-    if (found.i < 0) return null;
-    var h = found.h;
-    var weekCol = h["week of"];
-    var bookedCol = h.booked != null ? h.booked : h["inbound booked"];
-    var bookableCol = h.bookable != null ? h.bookable : h["bookable inbound"];
-    var abandonedCol = h.abandoned != null ? h.abandoned : h["abandoned calls"];
-    var owedCol = h["callbacks owed"] != null ? h["callbacks owed"] : h.owed;
-    var doneCol = h["callbacks completed"] != null ? h["callbacks completed"] : h["callbacks done"];
-    var monday = nyYMD(weekStartNy(now));
-    var current = null, latest = null;
-    rows.slice(found.i + 1).forEach(function (r) {
-      if (!r) return;
-      var d = toDate(r[weekCol]); if (!d || d > now) return;
-      var item = {
-        weekOf: nyYMD(d),
-        current: nyYMD(d) === monday,
-        booked: bookedCol == null ? null : blankCount(r[bookedCol]),
-        bookable: bookableCol == null ? null : blankCount(r[bookableCol]),
-        abandoned: abandonedCol == null ? null : blankCount(r[abandonedCol]),
-        owed: owedCol == null ? null : blankCount(r[owedCol]),
-        completed: doneCol == null ? null : blankCount(r[doneCol])
-      };
-      if (item.current) current = item;
-      if (!latest || item.weekOf > latest.weekOf) latest = item;
-    });
-    return current || latest;
+    var week = null;
+    if (found.i >= 0) {
+      var h = found.h;
+      var weekCol = h["week of"];
+      var bookedCol = h.booked != null ? h.booked : h["inbound booked"];
+      var bookableCol = h.bookable != null ? h.bookable : h["bookable inbound"];
+      var abandonedCol = h.abandoned != null ? h.abandoned : h["abandoned calls"];
+      var owedCol = h["callbacks owed"] != null ? h["callbacks owed"] : h.owed;
+      var doneCol = h["callbacks completed"] != null ? h["callbacks completed"] : h["callbacks done"];
+      var inboundCol = h.inbound != null ? h.inbound : (h["inbound calls"] != null ? h["inbound calls"] : h["total inbound"]);
+      var monday = nyYMD(weekStartNy(now));
+      var current = null, latest = null;
+      for (var wi = found.i + 1; wi < rows.length; wi++) {
+        var wr = rows[wi];
+        if (isDailyHeader(wr)) break;
+        if (!wr) continue;
+        var wd = toDate(wr[weekCol]); if (!wd || wd > now) continue;
+        var item = {
+          weekOf: nyYMD(wd),
+          current: nyYMD(wd) === monday,
+          booked: bookedCol == null ? null : blankCount(wr[bookedCol]),
+          bookable: bookableCol == null ? null : blankCount(wr[bookableCol]),
+          abandoned: abandonedCol == null ? null : blankCount(wr[abandonedCol]),
+          inbound: inboundCol == null ? null : blankCount(wr[inboundCol]),
+          owed: owedCol == null ? null : blankCount(wr[owedCol]),
+          completed: doneCol == null ? null : blankCount(wr[doneCol])
+        };
+        if (item.current) current = item;
+        if (!latest || item.weekOf > latest.weekOf) latest = item;
+      }
+      week = current || latest;
+    }
+    var dayFound = headerIndex(rows, isDailyHeader);
+    var day = null;
+    if (dayFound.i >= 0) {
+      var dh = dayFound.h;
+      var dateCol = dh.date;
+      var dayInCol = dh.inbound != null ? dh.inbound : (dh["inbound calls"] != null ? dh["inbound calls"] : dh["total inbound"]);
+      var dayAbCol = dh.abandoned != null ? dh.abandoned : dh["abandoned calls"];
+      var today = nyYMD(now);
+      var dayCurrent = null, dayLatest = null;
+      for (var di = dayFound.i + 1; di < rows.length; di++) {
+        var dr = rows[di];
+        if (!dr) continue;
+        if (isDailyHeader(dr) || callCells(dr).indexOf("week of") >= 0) break;
+        var dd = toDate(dr[dateCol]); if (!dd || dd > now) continue;
+        var dayItem = {
+          date: nyYMD(dd),
+          current: nyYMD(dd) === today,
+          inbound: dayInCol == null ? null : blankCount(dr[dayInCol]),
+          abandoned: dayAbCol == null ? null : blankCount(dr[dayAbCol])
+        };
+        if (dayItem.current) dayCurrent = dayItem;
+        if (!dayLatest || dayItem.date > dayLatest.date) dayLatest = dayItem;
+      }
+      day = dayCurrent || dayLatest;
+    }
+    return { week: week, day: day };
   }
   /* ServiceTitan callback jobs (a job opened on an original job). Not a CSR callback request. */
   function countCallbackJobs(rows, now) {
@@ -946,17 +989,24 @@
       var rawMonth = snap.co.y.jobs[snap.month];
       if (rawMonth != null && isFinite(+rawMonth)) monthCompleted = +rawMonth;
     }
+    var day = cc.day || null;
     var rate = week && week.bookable > 0 && week.booked != null ? week.booked / week.bookable : null;
     var requestRate = week && week.owed > 0 && week.completed != null ? week.completed / week.owed : null;
     var weekRate = jobs.known && jobs.weekCompleted > 0 ? jobs.week / jobs.weekCompleted : null;
     var monthRate = jobs.known && monthCompleted > 0 ? jobs.month / monthCompleted : null;
-    var hasManual = !!(week && (week.booked != null || week.bookable != null || week.abandoned != null || week.owed != null || week.completed != null));
+    var hasWeek = !!(week && (week.booked != null || week.bookable != null || week.abandoned != null || week.inbound != null || week.owed != null || week.completed != null));
+    var hasDay = !!(day && (day.inbound != null || day.abandoned != null));
     return {
       target: target,
       rate: rate,
       booked: week ? week.booked : null,
       bookable: week ? week.bookable : null,
       abandoned: week ? week.abandoned : null,
+      abandonedDay: day ? day.abandoned : null,
+      inboundWeek: week ? week.inbound : null,
+      inboundDay: day ? day.inbound : null,
+      dayOf: day ? day.date : "",
+      currentDay: !!(day && day.current),
       weekOf: week ? week.weekOf : "",
       currentWeek: !!(week && week.current),
       owed: week ? week.owed : null,
@@ -969,7 +1019,7 @@
       jobMonthRate: monthRate,
       weekCompleted: jobs.known ? jobs.weekCompleted : null,
       monthCompleted: jobs.known ? monthCompleted : null,
-      show: hasManual || !!jobs.known
+      show: hasWeek || hasDay || !!jobs.known
     };
   }
   function flipBoard(snap, now, meta, ctx) {
@@ -1209,14 +1259,16 @@
       reviews: reviewLog.entries, reviewLayout: reviewLog.layout
     };
     if (useCalls) {
-      if (!snap.callCenter) snap.callCenter = { target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET, week: null, jobs: { known: false, week: 0, month: 0, weekCompleted: null, monthCompleted: null } };
-      snap.callCenter.week = readCallCenter(sheetRows(wb, callTab), now);
+      if (!snap.callCenter) snap.callCenter = { target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET, week: null, day: null, jobs: { known: false, week: 0, month: 0, weekCompleted: null, monthCompleted: null } };
+      var parsedCalls = readCallCenter(sheetRows(wb, callTab), now);
+      snap.callCenter.week = parsedCalls.week;
+      snap.callCenter.day = parsedCalls.day;
       snap.callCenter.target = SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET;
     }
     if (useCbJobs) {
       var counted = countCallbackJobs(sheetRows(wb, "ST Callbacks"), now);
       if (counted) {
-        if (!snap.callCenter) snap.callCenter = { target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET, week: null, jobs: {} };
+        if (!snap.callCenter) snap.callCenter = { target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET, week: null, day: null, jobs: {} };
         var prevJobs = snap.callCenter.jobs || {};
         snap.callCenter.jobs = {
           known: true,
@@ -1613,11 +1665,13 @@
     flags.sort(function (a, b) { return b.d.localeCompare(a.d); });
     var cbCounts = countCallbackJobs(sheetRows(wb, "ST Callbacks"), now);
     var callTab = SETTINGS.CALL_CENTER_TAB || "Call Center";
+    var callParsed = readCallCenter(sheetRows(wb, callTab), now);
     var snapOut = {v:2, builtAt: now.getTime(), auto:auto, flags:flags.slice(0, 200), dataThrough: maxDate ? nyYMD(maxDate) : "", month:M, year:Y, jobRows:jobRows, estRows:estRows,
       goals:goals, ytdGoals:ytdGoals, actuals:actuals, techs:T, co:co, reviews:reviewsOut, anns:[], annLive:null, contest:null, feed:null, updates:updates, leaderSums:leaderSums, weather:weather, ambiguous:names.ambiguous,
       callCenter: {
         target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET,
-        week: readCallCenter(sheetRows(wb, callTab), now),
+        week: callParsed.week,
+        day: callParsed.day,
         jobs: {
           known: !!cbCounts,
           week: cbCounts ? cbCounts.week : 0,

@@ -193,7 +193,7 @@
   var FLIP_ALERT_HOURS = 6;
   var SLIDES = [
     {k:"goal",  label:"Monthly goal (install + service split)"},
-    {k:"calls", label:"Call center (booking rate, callbacks, abandoned)"},
+    {k:"calls", label:"Call center (inbound, booking rate, callbacks, abandoned)"},
     {k:"trend", label:"Revenue by month"},
     {k:"all",   label:"Team scoreboard (every metric, one screen)"},
     {k:"lb",    label:"Tech leaderboard"},

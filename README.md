@@ -64,13 +64,23 @@ The sheet has to be shared so anyone with the link can view it. Tab names must m
 - YTD Goals: `rev_ytd`, `sold_ytd`, `mem_ytd`, `rv_ytd`
 - Actuals: `rev`, `sr` (sold revenue), `cb` (calls booked, not callbacks)
 
-`Call Center` is typed from Pivotl's weekly report. It is not filled from Actuals, ServiceTitan jobs, or WhatConverts. Row 1 is the instruction. Row 2 is the header:
+`Call Center` is typed from Pivotl's weekly report, or from the phone report Pivotl uses. It is not filled from Actuals, ServiceTitan jobs, or WhatConverts. Actuals `ca` is calls answered for the month, and `cb` is calls booked. Neither one is total inbound calls. Row 1 is the instruction. Row 2 is the weekly header:
 
 ```
-Week of	Booked	Bookable	Abandoned	Callbacks owed	Callbacks completed
+Week of	Booked	Bookable	Abandoned	Callbacks owed	Callbacks completed	Inbound
 ```
 
-`Week of` is the Monday of that week in America/New_York. One row per week. `Booked` and `Bookable` are inbound calls. Booking rate is Booked ÷ Bookable, and the target is 80% (`BOOKING_RATE_TARGET` in `js/settings.js`). That is not Calls Booked ÷ Calls Answered, which is what `br` on Actuals means. `Abandoned` is abandoned calls that week. `Callbacks owed` and `Callbacks completed` are customer callback requests from the CSR log or Pivotl, only when that report has them. Leave a cell blank when the number is missing. A blank is not zero. The slide stays out of the rotation until this tab has a number or `ST Callbacks` has rows. Booking rate, abandoned calls, and callback requests show "No data" until their cells are filled.
+`Week of` is the Monday of that week in America/New_York. One row per week. `Booked` and `Bookable` are the calls that count in the booking rate: Booked ÷ Bookable, target 80% (`BOOKING_RATE_TARGET` in `js/settings.js`). `Inbound` on that row is every inbound call that came in that week, including booked, unbooked, and abandoned. `Abandoned` on that row is abandoned calls for the week.
+
+Below the weekly rows, a daily section has its own header:
+
+```
+Date	Inbound	Abandoned
+```
+
+`Date` is the America/New_York day. `Inbound` is every inbound call that came in that day. `Abandoned` is abandoned calls that day. One row per day. Leave a cell blank when the report does not break the number out. A blank is not zero. The slide shows "No data" for inbound today, inbound this week, and abandoned until those cells are filled. A row for today that is blank does not fall back to yesterday.
+
+`Callbacks owed` and `Callbacks completed` are customer callback requests from the CSR log or Pivotl, only when that report has them. They show under callback jobs when filled.
 
 `ST Callbacks` is a different count: ServiceTitan callback jobs (`callback job id`, `created`, `status`, `original job id`). Canceled rows are skipped. The call-center slide shows how many were created this week and this month, and the week's count divided by completed jobs that week when both exist. The job's own recall flag is not this count. `Call Back Record` is the old monthly grid used for grades when `ST Callbacks` is empty. It is not the weekly call-center slide.
 

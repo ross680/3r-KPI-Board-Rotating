@@ -877,6 +877,101 @@
     var end = nyDate(endP.y, endP.m, endP.d, 23, 59, 59);
     return date >= start && date <= end;
   }
+  function blankCount(v) {
+    if (v == null) return null;
+    if (typeof v === "string" && v.trim() === "") return null;
+    var n = num(v);
+    return isFinite(n) ? n : null;
+  }
+  /* Pivotl's weekly booking rate is booked ÷ bookable inbound calls.
+     A blank cell is missing. Zero is a real zero. Actuals cb/br/ca are not this tab. */
+  function readCallCenter(rows, now) {
+    now = now || nyNow();
+    var found = headerIndex(rows || [], function (r) {
+      var cells = (r || []).map(function (c) { return String(c == null ? "" : c).trim().toLowerCase(); });
+      return cells.indexOf("week of") >= 0 && cells.some(function (c) { return c === "bookable" || c.indexOf("bookable ") === 0; });
+    });
+    if (found.i < 0) return null;
+    var h = found.h;
+    var weekCol = h["week of"];
+    var bookedCol = h.booked != null ? h.booked : h["inbound booked"];
+    var bookableCol = h.bookable != null ? h.bookable : h["bookable inbound"];
+    var abandonedCol = h.abandoned != null ? h.abandoned : h["abandoned calls"];
+    var owedCol = h["callbacks owed"] != null ? h["callbacks owed"] : h.owed;
+    var doneCol = h["callbacks completed"] != null ? h["callbacks completed"] : h["callbacks done"];
+    var monday = nyYMD(weekStartNy(now));
+    var current = null, latest = null;
+    rows.slice(found.i + 1).forEach(function (r) {
+      if (!r) return;
+      var d = toDate(r[weekCol]); if (!d || d > now) return;
+      var item = {
+        weekOf: nyYMD(d),
+        current: nyYMD(d) === monday,
+        booked: bookedCol == null ? null : blankCount(r[bookedCol]),
+        bookable: bookableCol == null ? null : blankCount(r[bookableCol]),
+        abandoned: abandonedCol == null ? null : blankCount(r[abandonedCol]),
+        owed: owedCol == null ? null : blankCount(r[owedCol]),
+        completed: doneCol == null ? null : blankCount(r[doneCol])
+      };
+      if (item.current) current = item;
+      if (!latest || item.weekOf > latest.weekOf) latest = item;
+    });
+    return current || latest;
+  }
+  /* ServiceTitan callback jobs (a job opened on an original job). Not a CSR callback request. */
+  function countCallbackJobs(rows, now) {
+    now = now || nyNow();
+    var res = headerIndex(rows || [], function (r) { return String((r && r[0]) || "").trim().toLowerCase() === "callback job id"; });
+    if (res.i < 0) return null;
+    var pNow = nyParts(now);
+    var week = 0, month = 0;
+    rows.slice(res.i + 1).forEach(function (r) {
+      var h = res.h;
+      var d = toDate(r[h.created]); if (!d || d > now) return;
+      if (/cancel/i.test(String(r[h.status] || ""))) return;
+      var dp = nyParts(d);
+      if (dp.y === pNow.y && dp.m === pNow.m) month++;
+      if (inThisWeek(d, now)) week++;
+    });
+    return { week: week, month: month };
+  }
+  function callCenterView(snap, now) {
+    now = now || nyNow();
+    var cc = (snap && snap.callCenter) || {};
+    var target = cc.target != null && isFinite(+cc.target) ? +cc.target : (SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET);
+    var week = cc.week || null;
+    var jobs = cc.jobs || {};
+    var monthCompleted = jobs.monthCompleted;
+    if (monthCompleted == null && jobs.known && snap && snap.co && snap.co.y && snap.co.y.jobs && snap.month != null) {
+      var rawMonth = snap.co.y.jobs[snap.month];
+      if (rawMonth != null && isFinite(+rawMonth)) monthCompleted = +rawMonth;
+    }
+    var rate = week && week.bookable > 0 && week.booked != null ? week.booked / week.bookable : null;
+    var requestRate = week && week.owed > 0 && week.completed != null ? week.completed / week.owed : null;
+    var weekRate = jobs.known && jobs.weekCompleted > 0 ? jobs.week / jobs.weekCompleted : null;
+    var monthRate = jobs.known && monthCompleted > 0 ? jobs.month / monthCompleted : null;
+    var hasManual = !!(week && (week.booked != null || week.bookable != null || week.abandoned != null || week.owed != null || week.completed != null));
+    return {
+      target: target,
+      rate: rate,
+      booked: week ? week.booked : null,
+      bookable: week ? week.bookable : null,
+      abandoned: week ? week.abandoned : null,
+      weekOf: week ? week.weekOf : "",
+      currentWeek: !!(week && week.current),
+      owed: week ? week.owed : null,
+      completedReq: week ? week.completed : null,
+      requestRate: requestRate,
+      jobsKnown: !!jobs.known,
+      jobWeek: jobs.known ? jobs.week : null,
+      jobMonth: jobs.known ? jobs.month : null,
+      jobWeekRate: weekRate,
+      jobMonthRate: monthRate,
+      weekCompleted: jobs.known ? jobs.weekCompleted : null,
+      monthCompleted: jobs.known ? monthCompleted : null,
+      show: hasManual || !!jobs.known
+    };
+  }
   function flipBoard(snap, now, meta, ctx) {
     now = now || nyNow();
     meta = meta || {};
@@ -1056,6 +1151,9 @@
     var useFlips = wbHas(wb, "Flips");
     var useMem = wbHas(wb, SETTINGS.MEMBERSHIP_TAB);
     var useReviews = wbHas(wb, SETTINGS.REVIEW_TRACKER_TAB);
+    var callTab = SETTINGS.CALL_CENTER_TAB || "Call Center";
+    var useCalls = wbHas(wb, callTab);
+    var useCbJobs = wbHas(wb, "ST Callbacks");
     if ((useAnn || useContest || useRaces || useFlips || useMem || useReviews) && !names) {
       names = createNameIndex();
       Object.keys(snap.techs || {}).forEach(function (k) {
@@ -1110,6 +1208,25 @@
       memberships: memberships.entries, membershipLayout: memberships.layout,
       reviews: reviewLog.entries, reviewLayout: reviewLog.layout
     };
+    if (useCalls) {
+      if (!snap.callCenter) snap.callCenter = { target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET, week: null, jobs: { known: false, week: 0, month: 0, weekCompleted: null, monthCompleted: null } };
+      snap.callCenter.week = readCallCenter(sheetRows(wb, callTab), now);
+      snap.callCenter.target = SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET;
+    }
+    if (useCbJobs) {
+      var counted = countCallbackJobs(sheetRows(wb, "ST Callbacks"), now);
+      if (counted) {
+        if (!snap.callCenter) snap.callCenter = { target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET, week: null, jobs: {} };
+        var prevJobs = snap.callCenter.jobs || {};
+        snap.callCenter.jobs = {
+          known: true,
+          week: counted.week,
+          month: counted.month,
+          weekCompleted: prevJobs.weekCompleted == null ? null : prevJobs.weekCompleted,
+          monthCompleted: prevJobs.monthCompleted == null ? null : prevJobs.monthCompleted
+        };
+      }
+    }
     snap.annLive = annLive;
     snap.anns = announcementSlots(annLive);
     snap.contest = null;
@@ -1170,6 +1287,7 @@
     };
     var co = {y:newBucket(), l30:newFlat()};
     var maxDate = null, jobRows = 0, estRows = 0; var flags = [];
+    var doneWeek = 0, doneMonth = 0, jobsScanned = false;
     var add = function (targets, d, f) {
       if (!d) return;
       var dp = nyParts(d);
@@ -1197,7 +1315,7 @@
       apptHrs[id] = (apptHrs[id] || 0) + num(r[aph["appointment hours"]]);
     });
     var useAppt = api >= 0;
-    if (ji >= 0) jr.slice(ji + 1).forEach(function (r) {
+    if (ji >= 0) { jobsScanned = true; jr.slice(ji + 1).forEach(function (r) {
       var status = String(col(r, "status")).trim().toLowerCase(); if (!status) return; jobRows++;
       var created = toDate(col(r, "created date"));
       if (status !== "canceled" && status !== "cancelled") add([co], created, function (o, m) { inc(o, m, "booked", 1); });
@@ -1208,6 +1326,8 @@
       var d = toDate(col(r, "completion date")); if (!d) return;
       if (!maxDate || d > maxDate) maxDate = d;
       var dp = nyParts(d);
+      if (d <= now && dp.y === Y && dp.m === M) doneMonth++;
+      if (inThisWeek(d, now)) doneWeek++;
       var t = tech(col(r, "primary technician"), "ST Jobs");
       var rev = num(col(r, "jobs total revenue") || col(r, "jobs total"));
       var opp = bool(col(r, "opportunity")), conv = bool(col(r, "converted")), recall = bool(col(r, "recall"));
@@ -1227,7 +1347,7 @@
         inc(o, m, "rev", rev); inc(o, m, "jobs", 1); if (rev > SETTINGS.RULES.paidRevenueAbove) inc(o, m, "paid", 1); if (opp) inc(o, m, "opp", 1); if (opp && conv) inc(o, m, "conv", 1);
         if (recall) inc(o, m, "recall", 1); inc(o, m, "gm", gm); inc(o, m, "hrs", hrs); inc(o, m, "soldHrs", soldHrs); if (warr) inc(o, m, "warr", 1); inc(o, m, isInst ? "instRev" : "svcRev", rev);
       });
-    });
+    }); }
 
     var er = firstRows(wb, ["ST Estimates", "Automation Estimates"]);
     var ehRes = headerIndex(er, function (r) { return r.some(function (c) { return String(c).trim().toLowerCase() === "estimate status"; }); });
@@ -1491,8 +1611,21 @@
     auto.inst = useAppt || jh["total hours worked"] != null;
     auto.instBy = useAppt ? "appointment" : "worked";
     flags.sort(function (a, b) { return b.d.localeCompare(a.d); });
+    var cbCounts = countCallbackJobs(sheetRows(wb, "ST Callbacks"), now);
+    var callTab = SETTINGS.CALL_CENTER_TAB || "Call Center";
     var snapOut = {v:2, builtAt: now.getTime(), auto:auto, flags:flags.slice(0, 200), dataThrough: maxDate ? nyYMD(maxDate) : "", month:M, year:Y, jobRows:jobRows, estRows:estRows,
-      goals:goals, ytdGoals:ytdGoals, actuals:actuals, techs:T, co:co, reviews:reviewsOut, anns:[], annLive:null, contest:null, feed:null, updates:updates, leaderSums:leaderSums, weather:weather, ambiguous:names.ambiguous};
+      goals:goals, ytdGoals:ytdGoals, actuals:actuals, techs:T, co:co, reviews:reviewsOut, anns:[], annLive:null, contest:null, feed:null, updates:updates, leaderSums:leaderSums, weather:weather, ambiguous:names.ambiguous,
+      callCenter: {
+        target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET,
+        week: readCallCenter(sheetRows(wb, callTab), now),
+        jobs: {
+          known: !!cbCounts,
+          week: cbCounts ? cbCounts.week : 0,
+          month: cbCounts ? cbCounts.month : 0,
+          weekCompleted: jobsScanned ? doneWeek : null,
+          monthCompleted: jobsScanned ? doneMonth : null
+        }
+      }};
     return attachFeed(snapOut, wb, now, names);
   }
 
@@ -2076,6 +2209,7 @@
     drivePhotoUrl:drivePhotoUrl, readTeamSpotlight:readTeamSpotlight, activeSpotlight:activeSpotlight,
     spotlightDeck:spotlightDeck, weaveSpotlight:weaveSpotlight,
     readFlipEntries:readFlipEntries, flipBoard:flipBoard, flipAlerts:flipAlerts, tickerItems:tickerItems,
+    readCallCenter:readCallCenter, countCallbackJobs:countCallbackJobs, callCenterView:callCenterView,
     contestForMonth:contestForMonth, contestPrizes:contestPrizes, contestStandings:contestStandings, raceStandings:raceStandings, daysLeftInMonth:daysLeftInMonth,
     percentToGoal:percentToGoal, monthPace:monthPace, yearPace:yearPace, paceStatus:paceStatus, periodStart:periodStart,
     periodLabel:periodLabel, monthName:monthName, isStale:isStale, chooseDataMode:chooseDataMode,

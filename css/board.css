@@ -144,6 +144,7 @@ body.tv .hdr{display:none}
 /* goal slide */
 .goal-big{display:flex;align-items:flex-end;gap:2vw;flex-wrap:wrap}
 .goal-num{font-stretch:125%;font-weight:900;font-size:17vh;line-height:.82;letter-spacing:-.045em}
+.goal-num.words,.tile .v.words{font-size:6.4vh;letter-spacing:-.03em;line-height:1}
 .goal-of{font-stretch:105%;font-weight:700;font-size:3.2vh;color:#B9C6CC;padding-bottom:1.4vh}
 .goal-of b{color:#fff}
 .gbar{position:relative;height:7vh;background:#12191C;border:1px solid #23313A;border-radius:1.2vh;margin:3.4vh 0 1.2vh;overflow:visible}

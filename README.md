@@ -1,6 +1,6 @@
 # 3R KPI Board
 
-Rotating KPI board for the shop TVs at 3R Plumbing and Mechanical. It loops through the monthly goal, revenue trend, team scoreboard, tech leaderboard, flip tracker, monthly contest, stat sheet, tech spotlight, team celebrations, leads, year-to-date goals, Norwell weather, reviews, announcements, a ticker, and the sales board.
+Rotating KPI board for the shop TVs at 3R Plumbing and Mechanical. It loops through the monthly goal, call center, revenue trend, team scoreboard, tech leaderboard, flip tracker, monthly contest, stat sheet, tech spotlight, team celebrations, leads, year-to-date goals, Norwell weather, reviews, announcements, a ticker, and the sales board.
 
 The site is static. GitHub Pages serves it as-is. There is no build step and nothing to compile. Shop TVs load classic scripts, not JavaScript modules.
 
@@ -63,6 +63,16 @@ The sheet has to be shared so anyone with the link can view it. Tab names must m
 - Goals: `monthly_rev`, `memberships`, `weekly`, `install_rev`, `service_rev`
 - YTD Goals: `rev_ytd`, `sold_ytd`, `mem_ytd`, `rv_ytd`
 - Actuals: `rev`, `sr` (sold revenue), `cb` (calls booked, not callbacks)
+
+`Call Center` is typed from Pivotl's weekly report. It is not filled from Actuals, ServiceTitan jobs, or WhatConverts. Row 1 is the instruction. Row 2 is the header:
+
+```
+Week of	Booked	Bookable	Abandoned	Callbacks owed	Callbacks completed
+```
+
+`Week of` is the Monday of that week in America/New_York. One row per week. `Booked` and `Bookable` are inbound calls. Booking rate is Booked ÷ Bookable, and the target is 80% (`BOOKING_RATE_TARGET` in `js/settings.js`). That is not Calls Booked ÷ Calls Answered, which is what `br` on Actuals means. `Abandoned` is abandoned calls that week. `Callbacks owed` and `Callbacks completed` are customer callback requests from the CSR log or Pivotl, only when that report has them. Leave a cell blank when the number is missing. A blank is not zero. The slide stays out of the rotation until this tab has a number or `ST Callbacks` has rows. Booking rate, abandoned calls, and callback requests show "No data" until their cells are filled.
+
+`ST Callbacks` is a different count: ServiceTitan callback jobs (`callback job id`, `created`, `status`, `original job id`). Canceled rows are skipped. The call-center slide shows how many were created this week and this month, and the week's count divided by completed jobs that week when both exist. The job's own recall flag is not this count. `Call Back Record` is the old monthly grid used for grades when `ST Callbacks` is empty. It is not the weekly call-center slide.
 
 `Leaderboard`: `name`, `status`, `mem_mtd`, `rv_mtd`, `inst_mtd`, `mem_ytd`, `rv_ytd`, `rev_ytd`, `sold_ytd`. A status of `inactive` is left out of the leaderboard sums unless a ServiceTitan tab has replaced that number.
 
@@ -181,7 +191,7 @@ The Flip Tracker slide ranks this month's flips, shows converted flips and the c
 | `coSource` | `auto` (from jobs) or `actuals` |
 | `tvGrades` | `no` hides letter grades on the TV. Admin still shows them. |
 | `logoPlate` | `no` turns off the white plate behind the logo |
-| `slidesOff` | Comma-separated slide keys to hide: `goal`, `trend`, `all`, `lb`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
+| `slidesOff` | Comma-separated slide keys to hide: `goal`, `calls`, `trend`, `all`, `lb`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
 | `flip_goal` | Company flip goal for the month. Replaces the 20 in `js/settings.js`. |
 | `hidden_techs` | Comma-separated names left off individual slides, grades, the flip tracker, the races, flip alerts, and the team spotlight. Defaults to `Franco`. A blank value shows everyone again. Their jobs and dollars stay in the company, team, monthly, and goal totals. A name matches any person who has each of its words, ignoring case, so `Franco` also covers `Franco DosSantos`. |
 | `w_<metric>` / `t_<metric>` | Technician weight and monthly target |

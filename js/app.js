@@ -89,6 +89,9 @@ const dayName = iso => { const today=Sc.nyYMD(Sc.nyNow()); if(iso===today) retur
 function activeSlides(){
   const out=[]; const on=S.cfg.slides||{}; const snap=S.snap; const ok=k=>on[k]!==false;
   if (ok("goal")) out.push({k:"goal"});
+  try {
+    if (ok("calls") && snap && Sc.callCenterView(snap, Sc.nyNow()).show) out.push({k:"calls"});
+  } catch (e) {}
   if (ok("trend") && snap && snap.jobRows) out.push({k:"trend"});
   if (ok("all")) out.push({k:"all"});
   if (ok("lb")) out.push({k:"lb"});
@@ -252,6 +255,7 @@ function slideHTML(sl){
       <div class="scrollbox"><div class="scrollin">${R.map((r,i)=>`<div class="st-r ${i===0&&r.m.sold?"top":""}" style="grid-template-columns:${gc}"><div class="rk num">${i+1}</div><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}${r.side==="sales"?"<em>Sales</em>":r.side==="apprentice"?"<em>Apprentice</em>":"<em>Tech</em>"}</b></div>
         <div class="c">${bigSmall(money(r.m.sold,true),money(r.y.sold,true))}</div><div class="c">${bigSmall(r.m.soldN,r.y.soldN)}</div><div class="c">${bigSmall(r.m.estN?pct(r.m.estClose):"—",r.y.estN?pct(r.y.estClose):"—")}</div><div class="c">${bigSmall(r.m.soldN?money(r.m.avgSale,true):"—",r.y.soldN?money(r.y.avgSale,true):"—")}</div><div class="c">${bigSmall(r.m.estN,r.y.estN)}</div><div class="c">${bigSmall(r.m.openN,money(r.m.openAmt,true))}</div><div class="c">${bigSmall(r.m.mem,r.y.mem)}</div></div>`).join("")}</div></div></div>`;
   }
+  if (sl.k==="calls") return callSlideHTML(snap, now);
   if (sl.k==="flips") return flipSlideHTML(snap, now);
   if (sl.k==="contest") return contestSlideHTML(snap, now);
   if (sl.k==="celebrate"){
@@ -318,6 +322,50 @@ function welcomeHTML(a){
     return `<div class="welcome-card"><div class="av"><img src="${esc(src)}" alt=""></div><b>${esc(f.name)}</b></div>`;
   }).join("");
   return `<div class="ann welcome">${a.icon?`<div class="ic">${esc(a.icon)}</div>`:""}<div class="badge">${esc(a.badge||"Welcome")}</div><div class="msg">${esc(a.message)}</div>${a.detail?`<div class="sub">${esc(a.detail)}</div>`:""}<div class="welcome-row">${cards}</div></div>`;
+}
+function callSlideHTML(snap, now){
+  const v=Sc.callCenterView(snap, now);
+  const when=v.weekOf ? (Sc.toDate(v.weekOf)||null) : null;
+  const whenTxt=when?when.toLocaleDateString("en-US",{month:"short", day:"numeric", timeZone:SETTINGS.TIMEZONE}):"";
+  const kicker=v.weekOf ? (v.currentWeek?"This week · "+whenTxt:"Week of "+whenTxt)+" · booked ÷ bookable inbound calls" : "Call center · booked ÷ bookable inbound calls";
+  const big=v.rate==null?"No data":pct(v.rate);
+  const ofHtml=v.rate!=null ? `of <b>${pct(v.target)}</b> target<br>${v.booked} booked of ${v.bookable} bookable`
+    : v.bookable===0 ? "No bookable inbound calls on this week's Call Center row."
+    : `No booking numbers yet. Type Booked and Bookable on the Call Center tab.<br>Target <b>${pct(v.target)}</b>. This is not calls answered, and not the Actuals tab.`;
+  const bar=v.rate==null?"":`<div class="gbar"><i style="width:${Math.min(100,(v.target?v.rate/v.target:0)*100)}%"></i><div class="pct num">${pct(v.rate)}</div></div>`;
+  const jobV=v.jobsKnown?String(v.jobWeek):"No data";
+  const jobBits=[];
+  if (v.jobsKnown) jobBits.push("created since Monday");
+  if (v.jobsKnown && v.jobMonth!=null) jobBits.push(v.jobMonth+" this month");
+  if (v.jobWeekRate!=null) jobBits.push(pct(v.jobWeekRate)+" of jobs completed this week");
+  else if (v.jobsKnown && v.weekCompleted===0) jobBits.push("no completed jobs this week");
+  const jobS=jobBits.length?jobBits.join(" · "):"ServiceTitan callback jobs, not CSR requests";
+  let reqV="No data", reqS="Customer callback requests. Not a ServiceTitan callback job.";
+  if (v.owed!=null && v.completedReq!=null){ reqV=v.completedReq+" of "+v.owed; reqS=v.requestRate!=null?pct(v.requestRate)+" completed":"owed and completed"; }
+  else if (v.owed!=null){ reqV=String(v.owed); reqS="owed · completed is blank"; }
+  else if (v.completedReq!=null){ reqV=String(v.completedReq); reqS="completed · owed is blank"; }
+  const dayWhen=v.dayOf ? (Sc.toDate(v.dayOf)||null) : null;
+  const dayTxt=dayWhen?dayWhen.toLocaleDateString("en-US",{month:"short", day:"numeric", timeZone:SETTINGS.TIMEZONE}):"";
+  const inDayV=v.inboundDay==null?"No data":String(v.inboundDay);
+  const inDayS=v.inboundDay==null?"Date and Inbound on the Call Center tab":(v.currentDay?"today":dayTxt||"latest day on the tab");
+  const inWkV=v.inboundWeek==null?"No data":String(v.inboundWeek);
+  const inWkS=v.inboundWeek==null?"Inbound column on the weekly row":"every call that came in";
+  let abdV="No data", abdS="Abandoned on the Call Center tab, daily or weekly";
+  if (v.abandoned!=null && v.abandonedDay!=null){ abdV=String(v.abandoned); abdS=v.abandonedDay+" today · this week"; }
+  else if (v.abandoned!=null){ abdV=String(v.abandoned); abdS="this week"; }
+  else if (v.abandonedDay!=null){ abdV=String(v.abandonedDay); abdS=v.currentDay?"today":(dayTxt||"latest day on the tab"); }
+  if (v.owed!=null || v.completedReq!=null) jobBits.push(reqV+" callback requests");
+  const jobS2=jobBits.length?jobBits.join(" · "):jobS;
+  const tile=(l,val,s)=>`<div class="tile"><div class="l">${l}</div><div class="v num${val==="No data"?" words":""}">${esc(val)}</div><div class="s">${esc(s)}</div></div>`;
+  return `<div class="kicker">${esc(kicker)}</div><div class="big-h tight">Calls</div>
+    <div class="goal-big"><div class="${v.rate==null?"goal-num words":"goal-num num"}">${esc(big)}</div><div class="goal-of">${ofHtml}</div></div>
+    ${bar}
+    <div class="tiles">
+      ${tile("Inbound today", inDayV, inDayS)}
+      ${tile("Inbound this week", inWkV, inWkS)}
+      ${tile("Abandoned", abdV, abdS)}
+      ${tile("Callback jobs", jobV, jobS2)}
+    </div>`;
 }
 function flipSlideHTML(snap, now){
   const board=Sc.flipBoard(snap, now, S.techs, boardCtx());
@@ -650,7 +698,7 @@ function paneBoard(){
     <p class="small" style="margin-top:0">Source: <b>3R Rotating KPI Board</b> Google Sheet. The board re-reads it every 5 minutes while an admin has this page open, then pushes the numbers to every screen showing the board.</p>
     <div class="note ${S.sync.state==="ok"?"ok":S.sync.state==="error"?"bad":""}">${esc(S.sync.msg)}${S.snapAt?` Last pushed ${esc(ago(S.snapAt))}.`:""}${S.snap?` ${S.snap.jobRows} job rows, ${S.snap.estRows} estimate rows.`:""}</div>
     <div class="row" style="margin-top:12px"><button class="btn" type="button" id="syncNow" ${S.mcp?"":"disabled"}>Refresh from sheet now</button></div>
-    <p class="muted small" style="margin-top:12px">Revenue, jobs, avg ticket, close rate, gross margin, hours and leads come from ST Jobs, or Automation Jobs if that tab is the one filled in. Sold and open estimates come from ST Estimates or Automation Estimates. Callbacks come from ST Callbacks when that tab has rows, otherwise Call Back Record. Installs are install job types over 4 hours. Membership and review grades come from ST Memberships and ST Reviews when those tabs are filled, otherwise the Leaderboard tab. Goals come from Goals and YTD Goals. The race counts rows typed on the Flips, Memberships, and Review Tracker tabs. A Contest or Races row can change a race goal, prize, or start date. The Reviews tab is the quote list.</p>
+    <p class="muted small" style="margin-top:12px">Revenue, jobs, avg ticket, close rate, gross margin, hours and leads come from ST Jobs, or Automation Jobs if that tab is the one filled in. Sold and open estimates come from ST Estimates or Automation Estimates. Callbacks on the scorecard come from ST Callbacks when that tab has rows, otherwise Call Back Record. Those are ServiceTitan callback jobs, not CSR callback requests. Installs are install job types over 4 hours. Membership and review grades come from ST Memberships and ST Reviews when those tabs are filled, otherwise the Leaderboard tab. Goals come from Goals and YTD Goals. The race counts rows typed on the Flips, Memberships, and Review Tracker tabs. A Contest or Races row can change a race goal, prize, or start date. The Reviews tab is the quote list. Weekly booking rate, weekly and daily inbound calls, and abandoned calls come from the Call Center tab. Inbound is every call that came in, not calls answered on Actuals. Leave those cells blank until Pivotl's report has the numbers.</p>
   </div>`;
 }
 
@@ -947,7 +995,7 @@ function restoreCached(){ try{ const c=JSON.parse(localStorage.getItem("3r-board
 async function mergeManualTabs(snap){
   const apiKey=sheetKey(); if(!apiKey||!snap) return;
   const id=(S.cfg&&S.cfg.sheetId)||DEFAULT_SHEET;
-  const names=["Announcements","Team Spotlight","Contest","Races","Flips",SETTINGS.MEMBERSHIP_TAB,SETTINGS.REVIEW_TRACKER_TAB,"Board_Config"];
+  const names=["Announcements","Team Spotlight","Contest","Races","Flips",SETTINGS.MEMBERSHIP_TAB,SETTINGS.REVIEW_TRACKER_TAB,"Board_Config","Call Center","ST Callbacks"];
   try{
     const tabs=await Promise.all(names.map(t=>fetchTab(id,t,apiKey).catch(()=>null)));
     const wb={__rows:{}};

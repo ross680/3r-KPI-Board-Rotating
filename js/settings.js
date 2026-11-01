@@ -185,10 +185,15 @@
   var HIDDEN_TECHS = ["Franco"];
   // Company flips this month. Board_Config key flip_goal replaces this number.
   var FLIP_GOAL = 20;
+  // Pivotl weekly booking rate: booked ÷ bookable inbound calls. Not booked ÷ answered.
+  var BOOKING_RATE_TARGET = 0.8;
+  // Hand-typed weekly call metrics. The board does not invent a row when this tab is empty.
+  var CALL_CENTER_TAB = "Call Center";
   // Ticker line for a flip whose date includes a clock time inside this many hours.
   var FLIP_ALERT_HOURS = 6;
   var SLIDES = [
     {k:"goal",  label:"Monthly goal (install + service split)"},
+    {k:"calls", label:"Call center (inbound, booking rate, callbacks, abandoned)"},
     {k:"trend", label:"Revenue by month"},
     {k:"all",   label:"Team scoreboard (every metric, one screen)"},
     {k:"lb",    label:"Tech leaderboard"},
@@ -210,7 +215,7 @@
   var PHOTO_FOLDER = "11gVMpNygKLHh7vHBqly2c3lj9WwNef_j";
 
   // Tab names must match the sheet exactly. "Automation Estimates" has no leading space.
-  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Announcements","Team Spotlight","Contest","Races","Flips","Memberships","Review Tracker","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","ST Reviews","ST Callbacks","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
+  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Announcements","Team Spotlight","Contest","Races","Flips","Memberships","Review Tracker","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","ST Reviews","ST Callbacks","Call Center","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
 
   function defaultCfg() {
     return {
@@ -235,6 +240,7 @@
     DEFAULT_ANNOUNCEMENTS: DEFAULT_ANNOUNCEMENTS, WELCOME_ANNOUNCEMENT: WELCOME_ANNOUNCEMENT,
     DEFAULT_RACES: DEFAULT_RACES, MEMBERSHIP_TAB: MEMBERSHIP_TAB, REVIEW_TRACKER_TAB: REVIEW_TRACKER_TAB,
     FLIP_GOAL: FLIP_GOAL, FLIP_ALERT_HOURS: FLIP_ALERT_HOURS,
+    BOOKING_RATE_TARGET: BOOKING_RATE_TARGET, CALL_CENTER_TAB: CALL_CENTER_TAB,
     HIDDEN_TECHS: HIDDEN_TECHS,
     LOGO_FILE: LOGO_FILE, LOGO_PDF: LOGO_PDF, PHOTO_FOLDER: PHOTO_FOLDER,
     SHEET_TABS: SHEET_TABS, defaultCfg: defaultCfg

@@ -1456,3 +1456,154 @@ describe("board copy", function () {
     assert.equal(Settings.DEFAULT_RACES[1].start, "2026-10-26");
   });
 });
+
+describe("call center", function () {
+  const CALL_H = ["Week of", "Booked", "Bookable", "Abandoned", "Callbacks owed", "Callbacks completed"];
+  const NOTE = ["From Pivotl. Leave a cell blank when the number is missing."];
+  function calls(sheets, now) {
+    return Sc.callCenterView(snap(sheets, now || OCT26), now || OCT26);
+  }
+
+  it("reads this week's booked, bookable, and abandoned, and keeps a typed zero", function () {
+    const v = calls({
+      "Actuals": [["key", "value"], ["cb", 57], ["br", 80], ["ca", 714], ["bk", 0]],
+      "Call Center": [NOTE, CALL_H, ["10/19/2026", 10, 20, 1, "", ""], ["10/26/2026", 21, 28, 0, 4, 3]],
+      "ST Jobs": [JOB_H, job({ id: "J1", completed: "10/26/2026", rev: 100 }), job({ id: "J0", completed: "10/20/2026", rev: 80 }), job({ id: "J9", completed: "9/1/2026", rev: 50 })],
+      "ST Callbacks": [CB_H, ["C1", "2026-10-26", "Completed", "J1"], ["C0", "2026-10-20", "Open", "J0"], ["CX", "2026-10-26", "Canceled", "J1"]]
+    });
+    assert.equal(v.show, true);
+    assert.equal(v.currentWeek, true);
+    assert.equal(v.booked, 21);
+    assert.equal(v.bookable, 28);
+    assert.equal(Math.round(v.rate * 100), 75);
+    assert.equal(v.target, 0.8);
+    assert.equal(v.abandoned, 0);
+    assert.equal(v.owed, 4);
+    assert.equal(v.completedReq, 3);
+    assert.equal(v.requestRate, 0.75);
+    assert.equal(v.jobsKnown, true);
+    assert.equal(v.jobWeek, 1);
+    assert.equal(v.jobMonth, 2);
+    assert.equal(v.weekCompleted, 1);
+    assert.equal(v.monthCompleted, 2);
+    assert.equal(v.jobWeekRate, 1);
+  });
+
+  it("does not turn a blank into zero or fall back to an older week when this week is on the tab", function () {
+    const v = calls({
+      "Call Center": [NOTE, CALL_H, ["10/19/2026", 10, 20, 1, "", ""], ["10/26/2026", "", "", "", "", ""]]
+    });
+    assert.equal(v.currentWeek, true);
+    assert.equal(v.rate, null);
+    assert.equal(v.booked, null);
+    assert.equal(v.bookable, null);
+    assert.equal(v.abandoned, null);
+    assert.equal(v.show, false);
+  });
+
+  it("uses the latest earlier week when this Monday is missing", function () {
+    const v = calls({
+      "Call Center": [CALL_H, ["10/12/2026", 1, 4, 2, "", ""], ["10/19/2026", 10, 20, 1, "", ""]]
+    });
+    assert.equal(v.currentWeek, false);
+    assert.equal(v.weekOf, "2026-10-19");
+    assert.equal(v.rate, 0.5);
+    assert.equal(v.abandoned, 1);
+    assert.equal(v.show, true);
+  });
+
+  it("hides the slide when neither the Call Center tab nor ST Callbacks has rows", function () {
+    const v = calls({
+      "Actuals": [["cb", 57], ["br", 75], ["ca", 28]],
+      "ST Jobs": [JOB_H, job({ id: "J1", completed: "10/26/2026", rev: 100, recall: "TRUE" })]
+    });
+    assert.equal(v.show, false);
+    assert.equal(v.rate, null);
+    assert.equal(v.jobsKnown, false);
+  });
+
+  it("shows callback jobs with no booking rate when the Call Center tab is empty", function () {
+    const v = calls({
+      "ST Jobs": [JOB_H, job({ id: "J1", completed: "10/26/2026", rev: 100 })],
+      "ST Callbacks": [CB_H, ["C1", "2026-10-26", "Completed", "J1"]]
+    });
+    assert.equal(v.show, true);
+    assert.equal(v.rate, null);
+    assert.equal(v.abandoned, null);
+    assert.equal(v.jobWeek, 1);
+    assert.equal(v.jobWeekRate, 1);
+  });
+
+  it("keeps callback-job counts when a later read adds the Call Center tab", function () {
+    const s = snap({
+      "ST Jobs": [JOB_H, job({ id: "J1", completed: "10/26/2026", rev: 100 })],
+      "ST Callbacks": [CB_H, ["C1", "2026-10-26", "Completed", "J1"]]
+    }, OCT26);
+    assert.equal(s.callCenter.jobs.weekCompleted, 1);
+    Sc.attachFeed(s, wb({ "Call Center": [CALL_H, ["10/26/2026", 8, 10, "", "", ""]] }), OCT26);
+    const v = Sc.callCenterView(s, OCT26);
+    assert.equal(v.booked, 8);
+    assert.equal(v.bookable, 10);
+    assert.equal(v.rate, 0.8);
+    assert.equal(v.abandoned, null);
+    assert.equal(v.jobWeek, 1);
+    assert.equal(v.weekCompleted, 1);
+    assert.ok(Settings.SHEET_TABS.includes("Call Center"));
+    assert.equal(Settings.defaultCfg().slides.calls, true);
+  });
+
+  it("reads weekly and daily inbound calls and does not reuse yesterday or Actuals", function () {
+    const weekly = ["Week of", "Booked", "Bookable", "Abandoned", "Callbacks owed", "Callbacks completed", "Inbound"];
+    const v = calls({
+      "Actuals": [["key", "value"], ["ca", 714], ["cb", 57], ["br", 80]],
+      "Call Center": [
+        ["Weekly rows, then a daily section."],
+        weekly,
+        ["10/19/2026", 10, 20, 1, "", "", 30],
+        ["10/26/2026", 21, 28, 5, "", "", 40],
+        [],
+        ["One row per day. Inbound is every call that came in."],
+        ["Date", "Inbound", "Abandoned"],
+        ["10/25/2026", 9, 2],
+        ["10/26/2026", 6, 1]
+      ]
+    });
+    assert.equal(v.inboundWeek, 40);
+    assert.equal(v.inboundDay, 6);
+    assert.equal(v.currentDay, true);
+    assert.equal(v.dayOf, "2026-10-26");
+    assert.equal(v.abandoned, 5);
+    assert.equal(v.abandonedDay, 1);
+    assert.equal(Math.round(v.rate * 100), 75);
+    assert.equal(v.weekOf, "2026-10-26");
+
+    const blankToday = calls({
+      "Call Center": [
+        weekly,
+        ["10/26/2026", "", "", "", "", "", ""],
+        ["Date", "Inbound", "Abandoned"],
+        ["10/25/2026", 9, 2],
+        ["10/26/2026", "", ""]
+      ]
+    });
+    assert.equal(blankToday.inboundDay, null);
+    assert.equal(blankToday.inboundWeek, null);
+    assert.equal(blankToday.abandonedDay, null);
+    assert.equal(blankToday.currentDay, true);
+    assert.equal(blankToday.show, false);
+
+    const yesterday = calls({
+      "Call Center": [
+        ["Date", "Inbound", "Abandoned"],
+        ["10/25/2026", 9, 2]
+      ]
+    });
+    assert.equal(yesterday.currentDay, false);
+    assert.equal(yesterday.dayOf, "2026-10-25");
+    assert.equal(yesterday.inboundDay, 9);
+    assert.equal(yesterday.abandonedDay, 2);
+    assert.equal(yesterday.inboundWeek, null);
+    assert.equal(yesterday.rate, null);
+    assert.equal(yesterday.show, true);
+  });
+});

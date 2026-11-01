@@ -1,6 +1,6 @@
 # 3R KPI Board
 
-Rotating KPI board for the shop TVs at 3R Plumbing and Mechanical. It loops through the monthly goal, revenue trend, team scoreboard, tech leaderboard, flip tracker, monthly contest, stat sheet, tech spotlight, team celebrations, leads, year-to-date goals, Norwell weather, reviews, announcements, a ticker, and the sales board.
+Rotating KPI board for the shop TVs at 3R Plumbing and Mechanical. It loops through the monthly goal, call center, revenue trend, team scoreboard, tech leaderboard, flip tracker, monthly contest, stat sheet, tech spotlight, team celebrations, leads, year-to-date goals, Norwell weather, reviews, announcements, a ticker, and the sales board.
 
 The site is static. GitHub Pages serves it as-is. There is no build step and nothing to compile. Shop TVs load classic scripts, not JavaScript modules.
 
@@ -63,6 +63,26 @@ The sheet has to be shared so anyone with the link can view it. Tab names must m
 - Goals: `monthly_rev`, `memberships`, `weekly`, `install_rev`, `service_rev`
 - YTD Goals: `rev_ytd`, `sold_ytd`, `mem_ytd`, `rv_ytd`
 - Actuals: `rev`, `sr` (sold revenue), `cb` (calls booked, not callbacks)
+
+`Call Center` is typed from Pivotl's weekly report, or from the phone report Pivotl uses. It is not filled from Actuals, ServiceTitan jobs, or WhatConverts. Actuals `ca` is calls answered for the month, and `cb` is calls booked. Neither one is total inbound calls. Row 1 is the instruction. Row 2 is the weekly header:
+
+```
+Week of	Booked	Bookable	Abandoned	Callbacks owed	Callbacks completed	Inbound
+```
+
+`Week of` is the Monday of that week in America/New_York. One row per week. `Booked` and `Bookable` are the calls that count in the booking rate: Booked ÷ Bookable, target 80% (`BOOKING_RATE_TARGET` in `js/settings.js`). `Inbound` on that row is every inbound call that came in that week, including booked, unbooked, and abandoned. `Abandoned` on that row is abandoned calls for the week.
+
+Below the weekly rows, a daily section has its own header:
+
+```
+Date	Inbound	Abandoned
+```
+
+`Date` is the America/New_York day. `Inbound` is every inbound call that came in that day. `Abandoned` is abandoned calls that day. One row per day. Leave a cell blank when the report does not break the number out. A blank is not zero. The slide shows "No data" for inbound today, inbound this week, and abandoned until those cells are filled. A row for today that is blank does not fall back to yesterday.
+
+`Callbacks owed` and `Callbacks completed` are customer callback requests from the CSR log or Pivotl, only when that report has them. They show under callback jobs when filled.
+
+`ST Callbacks` is a different count: ServiceTitan callback jobs (`callback job id`, `created`, `status`, `original job id`). Canceled rows are skipped. The call-center slide shows how many were created this week and this month, and the week's count divided by completed jobs that week when both exist. The job's own recall flag is not this count. `Call Back Record` is the old monthly grid used for grades when `ST Callbacks` is empty. It is not the weekly call-center slide.
 
 `Leaderboard`: `name`, `status`, `mem_mtd`, `rv_mtd`, `inst_mtd`, `mem_ytd`, `rv_ytd`, `rev_ytd`, `sold_ytd`. A status of `inactive` is left out of the leaderboard sums unless a ServiceTitan tab has replaced that number.
 
@@ -181,7 +201,7 @@ The Flip Tracker slide ranks this month's flips, shows converted flips and the c
 | `coSource` | `auto` (from jobs) or `actuals` |
 | `tvGrades` | `no` hides letter grades on the TV. Admin still shows them. |
 | `logoPlate` | `no` turns off the white plate behind the logo |
-| `slidesOff` | Comma-separated slide keys to hide: `goal`, `trend`, `all`, `lb`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
+| `slidesOff` | Comma-separated slide keys to hide: `goal`, `calls`, `trend`, `all`, `lb`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
 | `flip_goal` | Company flip goal for the month. Replaces the 20 in `js/settings.js`. |
 | `hidden_techs` | Comma-separated names left off individual slides, grades, the flip tracker, the races, flip alerts, and the team spotlight. Defaults to `Franco`. A blank value shows everyone again. Their jobs and dollars stay in the company, team, monthly, and goal totals. A name matches any person who has each of its words, ignoring case, so `Franco` also covers `Franco DosSantos`. |
 | `w_<metric>` / `t_<metric>` | Technician weight and monthly target |

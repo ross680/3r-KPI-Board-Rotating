@@ -997,14 +997,34 @@ describe("manual flips", function () {
     return [o.date, o.tech, o.customer || "", o.type || "replacement", o.converted == null ? "" : o.converted, o.sold == null ? "" : o.sold, o.notes || ""];
   }
 
-  it("does not treat a ServiceTitan opportunity or lead as a flip", function () {
+  it("counts a ServiceTitan lead as a flip when the Flips tab is empty", function () {
     const s = snap({
-      "ST Jobs": [JOB_H, job({ id: "1", tech: "Sam Rivera", completed: "10/10/2026", rev: 100, opp: "Yes", conv: "Yes", lead: "Sam Rivera" })]
+      "ST Techs": [TECH_H, ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""]],
+      "ST Jobs": [
+        JOB_H,
+        job({ id: "1", tech: "Amy Cole", completed: "10/10/2026", rev: 100, opp: "Yes", conv: "Yes", lead: "Sam Rivera" }),
+        job({ id: "2", tech: "Sam Rivera", completed: "10/11/2026", rev: 50, opp: "Yes", status: "Canceled", lead: "Sam Rivera" }),
+        job({ id: "3", tech: "Sam Rivera", completed: "10/12/2026", rev: 80, opp: "Yes", conv: "Yes" })
+      ],
+      "ST Estimates": [
+        EST_H,
+        ["Open", "Amy Cole", "Amy Cole", 100, "10/10/2026", "", "", "Same job", "", "", "", "", "", "", "", "", "", "", "", "", "Sam Rivera"].concat([])
+      ]
     });
-    const st = Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s));
-    assert.equal(st.flips, 0);
-    assert.equal(st.leads, 1);
-    assert.equal(st.opp, 1);
+    const jobs = s;
+    const st = Sc.statsFor(person(jobs, "Sam Rivera"), "mtd", null, ctx(jobs));
+    assert.equal(st.flips, 1);
+    assert.equal(jobs.feed.flipSource, "servicetitan");
+    const plain = snap({
+      "ST Jobs": [JOB_H, job({ id: "9", tech: "Sam Rivera", completed: "10/10/2026", rev: 100, opp: "Yes", conv: "Yes" })]
+    });
+    assert.equal(Sc.statsFor(person(plain, "Sam Rivera"), "mtd", null, ctx(plain)).flips, 0);
+    const hand = snap({
+      "Flips": [FLIP_H, flipRow({ date: "10/26/2026", tech: "Sam Rivera" })],
+      "ST Jobs": [JOB_H, job({ id: "1", tech: "Sam Rivera", completed: "10/10/2026", rev: 100, lead: "Sam Rivera" })]
+    });
+    assert.equal(hand.feed.flipSource, "sheet");
+    assert.equal(Sc.statsFor(person(hand, "Sam Rivera"), "mtd", null, ctx(hand)).flips, 1);
   });
 
   it("counts a typed flip for the tech, with Y, Yes, 1, a blank, and sold dollars", function () {
@@ -1091,8 +1111,8 @@ describe("manual flips", function () {
     assert.equal(Object.prototype.hasOwnProperty.call(wb(sheets).__rows, "flips"), false);
     assert.equal(Object.prototype.hasOwnProperty.call(wb(sheets).__rows, "contest"), false);
     const s = snap(sheets);
-    assert.equal(s.feed.flipLayout, "none");
-    assert.deepEqual(s.feed.flips, []);
+    assert.equal(s.feed.flipLayout, "servicetitan");
+    assert.equal(s.feed.flips.length, 1);
     assert.deepEqual(s.feed.memberships, []);
     assert.deepEqual(s.feed.reviews, []);
     assert.equal(s.contest, null);
@@ -1100,9 +1120,9 @@ describe("manual flips", function () {
     assert.equal(raceNow.active, true);
     assert.equal(raceNow.title, "RACE TO THE TOP");
     assert.deepEqual(raceNow.races.map(function (r) { return r.metric; }), ["memberships", "flips", "reviews"]);
-    assert.equal(Sc.flipBoard(s, OCT26, {}).company.mtd, 0);
+    assert.equal(Sc.flipBoard(s, OCT26, {}).company.mtd, 1);
     const sam = Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s));
-    assert.equal(sam.flips, 0);
+    assert.equal(sam.flips, 1);
     assert.equal(sam.leads, 1);
     assert.equal(sam.opp, 1);
     const tick = Sc.tickerItems(s, OCT26);
@@ -1110,7 +1130,7 @@ describe("manual flips", function () {
     const nov = snap(sheets, Sc.nyDate(2026, 10, 15, 12, 0, 0));
     assert.equal(nov.contest, null);
     assert.equal(Sc.raceStandings(nov, ctx(nov, { now: Sc.nyDate(2026, 10, 15, 12, 0, 0) })).active, true);
-    assert.equal(nov.feed.flipLayout, "none");
+    assert.equal(nov.feed.flipLayout, "servicetitan");
     assert.equal(Sc.flipBoard(nov, Sc.nyDate(2026, 10, 15, 12, 0, 0), {}).company.mtd, 0);
     s.feed.flips = {};
     s.annLive = {};
@@ -1266,9 +1286,12 @@ describe("race to the top", function () {
       ]
     };
     const ignored = snap(sheets, nov);
-    assert.equal(one(raceAt(ignored, nov), "memberships").rows.length, 0);
+    const memAuto = one(raceAt(ignored, nov), "memberships");
+    assert.equal(memAuto.rows.length, 2);
+    assert.equal(memAuto.rows.filter(function (r) { return r.name === "Sam"; })[0].value, 1);
+    assert.equal(memAuto.rows.filter(function (r) { return r.name === "Jo"; })[0].value, 1);
+    assert.equal(ignored.feed.membershipSource, "servicetitan");
     assert.equal(one(raceAt(ignored, nov), "reviews").rows.length, 0);
-    assert.equal(ignored.feed.membershipLayout, "none");
     assert.equal(ignored.feed.reviewLayout, "none");
     assert.ok(ignored.reviews.some(function (r) { return /boiler/i.test(r.t); }));
     const s = snap(Object.assign({}, sheets, {
@@ -1617,6 +1640,101 @@ describe("call center", function () {
     assert.equal(yesterday.inboundWeek, null);
     assert.equal(yesterday.rate, null);
     assert.equal(yesterday.show, true);
+  });
+});
+
+describe("automatic flips, memberships, callbacks, and Google reviews", function () {
+  it("counts one flip when the job and its estimates name the same lead", function () {
+    const s = snap({
+      "ST Techs": [
+        TECH_H,
+        ["Marc Bettcher", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "M1", ""],
+        ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""]
+      ],
+      "ST Jobs": [[
+        "Job ID", "Status", "Created Date", "Lead Generated By", "Primary Technician"
+      ],
+        ["10", "Completed", "10/26/2026", "Bettcher Marc", "Sam Rivera"],
+        ["11", "Canceled", "10/27/2026", "Sam Rivera", "Sam Rivera"],
+        ["12", "Completed", "11/02/2026", "Sam Rivera", "Sam Rivera"]
+      ],
+      "ST Estimates": [[
+        "Estimate Status", "Parent Job ID", "Creation Date", "Lead Generated By", "Estimate Id"
+      ],
+        ["Open", "10", "10/26/2026", "Bettcher Marc", "E1"],
+        ["Sold", "10", "10/26/2026", "Bettcher Marc", "E2"],
+        ["Open", "99", "10/28/2026", "Sam Rivera", "E3"]
+      ],
+      "Bonus Flips": [
+        ["Job ID", "Date", "Tech"],
+        ["10", "10/26/2026", "Sam Rivera"],
+        ["77", "10/29/2026", "Sam Rivera"]
+      ]
+    });
+    const board = Sc.flipBoard(s, OCT26, {});
+    assert.equal(s.feed.bonusAdded, 1);
+    assert.equal(board.company.mtd, 3);
+    const marc = board.rows.filter(function (r) { return r.key === Sc.key("Marc Bettcher"); })[0];
+    assert.ok(marc);
+    assert.equal(marc.flips, 1);
+    assert.equal(Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s)).flips, 2);
+  });
+
+  it("keeps an unknown membership seller in the company total only", function () {
+    const s = snap({
+      "ST Techs": [TECH_H, ["Justin Romano", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "J1", ""]],
+      "ST Memberships": [
+        MEM_H,
+        ["1", "11/02/2026", "New", "J1", "Justin Romano"],
+        ["2", "11/12/2026", "New", "16129167", ""],
+        ["3", "11/01/2026", "Renewal", "J1", "Justin Romano"]
+      ]
+    }, Sc.nyDate(2026, 10, 17, 12, 0, 0));
+    const now = Sc.nyDate(2026, 10, 17, 12, 0, 0);
+    const justin = Sc.statsFor(person(s, "Justin Romano"), "mtd", null, ctx(s, { now: now }));
+    assert.equal(justin.mem, 1);
+    assert.equal(s.leaderSums.mem_mtd, 2);
+    assert.equal(s.memUnassigned.mtd, 1);
+    assert.equal(s.memUnassigned.ids["16129167"], 1);
+    assert.equal(Object.keys(s.techs).some(function (k) { return /16129167|unassigned/i.test(s.techs[k].full); }), false);
+  });
+
+  it("credits a callback to the original job's technician and ignores the hand-typed record", function () {
+    const s = snap({
+      "ST Techs": [TECH_H, ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""]],
+      "ST Jobs": [["Job ID", "Status", "Primary Technician", "Created Date", "Completion Date"],
+        ["10", "Completed", "Sam Rivera", "10/01/2026", "10/02/2026"],
+        ["11", "Completed", "Sam Rivera", "10/01/2026", "10/02/2026"]
+      ],
+      "ST Callbacks": [["Callback Job ID", "Created", "Original Job ID", "Status"],
+        ["1", "10/10/2026", "10", "Completed"],
+        ["2", "10/15/2026", "999", "Completed"],
+        ["3", "10/16/2026", "11", "Canceled"]
+      ],
+      "Call Back Record": [
+        ["CALL BACK RECORD"],
+        ["Tech Name", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov"],
+        ["Sam Rivera", 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 0]
+      ]
+    });
+    assert.equal(Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s)).cb, 1);
+    assert.equal(s.callbacks.month, 2);
+    assert.equal(s.callbacks.unassignedMonth, 1);
+  });
+
+  it("averages the Google Reviews tab and ignores a header with no rows", function () {
+    const live = Sc.readGoogleProfile([
+      ["Date", "Reviewer", "Rating", "Text", "Tech", "Location"],
+      ["11/01/2026", "Ann", 5, "Great", "Sam Rivera", "Pembroke"],
+      ["11/02/2026", "Bob", 4, "", "", "Norwell"]
+    ]);
+    assert.equal(live.live, true);
+    assert.equal(live.count, 2);
+    assert.equal(live.rating, 4.5);
+    assert.equal(live.asOf, "2026-11-02");
+    assert.equal(live.places.filter(function (p) { return p.name === "Pembroke"; })[0].count, 1);
+    assert.equal(Sc.readGoogleProfile([["Date", "Reviewer", "Rating", "Text", "Tech", "Location"]]), null);
+    assert.equal(Sc.readGoogleProfile([]), null);
   });
 });
 

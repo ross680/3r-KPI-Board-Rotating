@@ -108,13 +108,21 @@ Estimates written are dated on creation. Sold dollars are dated on sold-on, or o
 
 `ST Timesheets`: `employee`, `start`, `employee id`, `code`, `code type` (`ClockInOut` or `PaidTimeOff`), `hours`. A code containing "holiday" excuses that New York day for everyone. Any PTO hours excuse the whole day. Blank PTO hours count as 8. Attendance runs through yesterday only, weekdays Monday–Friday, New York. Days before the tech's start date are skipped.
 
-`ST Memberships`: `membership id`, `created`, `type` (renewals are excluded), `sold by id`, `sold by`.
+`ST Memberships`: `membership id`, `created`, `type` (renewals are excluded), `sold by id`, `sold by`. A sold-by id that is not on `ST Techs`, such as `16129167`, stays in the company total and is labeled Unassigned. It is not a row on the tech list.
 
 `ST Reviews`: `published`, `rating`, `review`, `platform`, `technician id`, `technician`. A review goes on the reviews slide when the text is longer than 30 characters and the rating is 4 or higher, or blank. The slide lists this month, the last 30 days, and the year for each tech, plus the company totals and the date of the newest review. The technician id, or the full name in the technician column, credits that person. The review text credits a first name only when exactly one known person has it. A shared first name is not credited, and the admin page lists the clash. Names shorter than 3 letters are not matched in the text. A review with no technician still counts once in the company total. The hand-typed `Reviews` tab is used only when `ST Reviews` has no quote rows.
 
-`ST Callbacks`: `callback job id`, `created`, `status` (canceled rows are skipped), `original job id`. The original job's primary technician gets the callback. The job's own recall flag is not the callback count.
+`ST Callbacks`: `callback job id`, `created`, `status` (canceled rows are skipped), `original job id`. The tab has no technician column. The board joins `original job id` to `ST Jobs` and credits that job's primary technician. That count is the grade. `Call Back Record` is used only when `ST Callbacks` is empty. A callback whose original job is missing from `ST Jobs` stays in the company total.
 
 `Reviews` (typed by hand, used when `ST Reviews` is empty): row 1 is a header, then column B by, C text, D stars, E date. This is the quote carousel. The race uses a separate tab named `Review Tracker`.
+
+`Google Reviews` is the company Google rating. It is separate from `ST Reviews`. Row 1 is this header, and each review is one new row under it:
+
+```
+Date	Reviewer	Rating	Text	Tech	Location
+```
+
+`Date` is the day the review was published, in America/New_York (`11/17/2026` or `2026-11-17`). `Reviewer` is the public name. `Rating` is 1 through 5. `Text` is the review, and it can be blank. `Tech` is the full name when the review names someone, otherwise blank. `Location` is `Pembroke` or `Norwell`. The board averages `Rating` and counts the rows. It does not read a pre-written total, so a Zapier Google Business Profile zap should append one row per review, including older reviews if the on-screen count should match Google. Until that tab has a row with a rating, the reviews slide shows a dated public snapshot from November 17, 2026 (Pembroke 4.8 from 445, Norwell 4.6 from 11) and labels it as not a live feed.
 
 `Announcements` still accepts the original columns, in this order: icon, badge, message, sub. A row whose first cell starts with a lightbulb is skipped. Those older rows stay full-screen slides. They do not jump onto the ticker.
 
@@ -161,7 +169,7 @@ Race	Metric	Goal	Prize	Start
 
 Each card shows the goal, the prize, the start date, and the top 3 techs with a bar toward the goal. The first person to reach the goal gets a WINNER banner, even when someone else later has a higher count. People on the hidden-tech list are left off.
 
-All three races count rows typed by hand, the same way the flip tracker does. ServiceTitan membership and review rows still feed the grades. They do not move the race. The Leaderboard month-to-date and year-to-date columns are not used.
+When the hand-typed tab for a race has no rows, the board counts ServiceTitan instead. Flips come from leads (one per job). Memberships come from `ST Memberships`. A typed row on `Flips`, `Memberships`, or `Review Tracker` replaces that automatic count. The review race still uses `Review Tracker` only. ServiceTitan reviews feed the grades and the reviews slide. The Leaderboard month-to-date and year-to-date columns are not used.
 
 The board does not create these tabs. Add them in the sheet and paste this header into row 1. It is the same header as `Flips`:
 
@@ -187,7 +195,7 @@ Tech	Month	Count
 
 `Month` is `YYYY-MM`. A count for October does not count in the race, because that month started before October 26. A count for November does, for the whole number in `Count`.
 
-`Flips` is filled in by hand. The board does not count a ServiceTitan opportunity, estimate, or lead as a flip. A name the board cannot match, such as "Mike" when two Mikes work here, still counts in the company flip total and shows on the flip tracker so it can be fixed. It does not go on the race until the full name is on the row.
+`Flips` is optional. When that tab has no rows, a flip is a non-canceled job with `Lead Generated By` filled in, dated on Lead Created or Created Date. Estimates with the same parent job id are the same flip, not a second one. An estimate whose parent job is not already counted is added. Canceled jobs are left out. `Bettcher Marc` matches Marc Bettcher. The bonus tracker sheet `Sales (SC-1)` can add a flip from `Flipped By (Tech)` when that job number is not already a lead. Commission columns are not read. A name the board cannot match still counts in the company flip total. A hand-typed `Flips` row replaces this automatic count.
 
 The Flip Tracker slide ranks this month's flips, shows converted flips and the conversion rate, sold dollars, today's flips, this week's flips (Monday through today, New York), and the company total against the monthly goal. The month-only sheet has no converted flag, no dollars, and no "today" or "this week" numbers. The goal starts at 20 in `js/settings.js` (`FLIP_GOAL`). Change it without a code edit by putting `flip_goal` on the Board_Config tab. A flip dated with a clock time in the last 6 hours adds a ticker line: "Flip alert: <tech> just flipped a call". A date with no time does not.
 
@@ -203,7 +211,7 @@ The Flip Tracker slide ranks this month's flips, shows converted flips and the c
 | `coSource` | `auto` (from jobs) or `actuals` |
 | `tvGrades` | `no` hides letter grades on the TV. Admin still shows them. |
 | `logoPlate` | `no` turns off the white plate behind the logo |
-| `slidesOff` | Comma-separated slide keys to hide: `goal`, `calls`, `trend`, `all`, `lb`, `unpaid`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
+| `slidesOff` | Comma-separated slide keys to hide: `goal`, `calls`, `trend`, `all`, `lb`, `unpaid`, `flips`, `mem`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
 | `flip_goal` | Company flip goal for the month. Replaces the 20 in `js/settings.js`. |
 | `hidden_techs` | Comma-separated names left off individual slides, grades, the flip tracker, the races, flip alerts, and the team spotlight. Defaults to `Franco`. A blank value shows everyone again. Their jobs and dollars stay in the company, team, monthly, and goal totals. A name matches any person who has each of its words, ignoring case, so `Franco` also covers `Franco DosSantos`. |
 | `w_<metric>` / `t_<metric>` | Technician weight and monthly target |

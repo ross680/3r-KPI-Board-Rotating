@@ -193,6 +193,17 @@
   var BOOKING_RATE_TARGET = 0.8;
   // Hand-typed weekly call metrics. The board does not invent a row when this tab is empty.
   var CALL_CENTER_TAB = "Call Center";
+  // Bonus tracker. Only the flip credit is read. Commission dollars are not requested.
+  var BONUS_SHEET = "1I95AdJt53VR8leDkXSGccUBSVRf9iL26WrSrLKXDZ44";
+  var BONUS_TAB = "Sales (SC-1)";
+  // Public Google snapshot observed Nov 17, 2026. The Google Reviews tab replaces it.
+  var GOOGLE_SNAPSHOT = {
+    asOf: "2026-11-17",
+    places: [
+      { name: "Pembroke", rating: 4.8, count: 445 },
+      { name: "Norwell", rating: 4.6, count: 11 }
+    ]
+  };
   // Ticker line for a flip whose date includes a clock time inside this many hours.
   var FLIP_ALERT_HOURS = 6;
   var SLIDES = [
@@ -211,6 +222,7 @@
     {k:"ann",   label:"Announcements"},
     {k:"celebrate", label:"Team spotlight"},
     {k:"flips", label:"Flip tracker"},
+    {k:"mem", label:"Memberships and callbacks"},
     {k:"contest", label:"Race to the top"},
     {k:"sales", label:"Sales board"}
   ];
@@ -220,7 +232,7 @@
   var PHOTO_FOLDER = "11gVMpNygKLHh7vHBqly2c3lj9WwNef_j";
 
   // Tab names must match the sheet exactly. "Automation Estimates" has no leading space.
-  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Announcements","Team Spotlight","Contest","Races","Flips","Memberships","Review Tracker","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","ST Reviews","ST Callbacks","Call Center","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
+  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Google Reviews","Announcements","Team Spotlight","Contest","Races","Flips","Memberships","Review Tracker","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","ST Reviews","ST Callbacks","Call Center","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
 
   function defaultCfg() {
     return {
@@ -246,6 +258,7 @@
     DEFAULT_RACES: DEFAULT_RACES, MEMBERSHIP_TAB: MEMBERSHIP_TAB, REVIEW_TRACKER_TAB: REVIEW_TRACKER_TAB,
     FLIP_GOAL: FLIP_GOAL, FLIP_ALERT_HOURS: FLIP_ALERT_HOURS,
     BOOKING_RATE_TARGET: BOOKING_RATE_TARGET, CALL_CENTER_TAB: CALL_CENTER_TAB,
+    BONUS_SHEET: BONUS_SHEET, BONUS_TAB: BONUS_TAB, GOOGLE_SNAPSHOT: GOOGLE_SNAPSHOT,
     HIDDEN_TECHS: HIDDEN_TECHS,
     LOGO_FILE: LOGO_FILE, LOGO_PDF: LOGO_PDF, PHOTO_FOLDER: PHOTO_FOLDER,
     SHEET_TABS: SHEET_TABS, defaultCfg: defaultCfg

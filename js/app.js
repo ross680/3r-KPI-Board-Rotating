@@ -97,6 +97,7 @@ function activeSlides(){
   if (ok("lb")) out.push({k:"lb"});
   if (ok("unpaid") && snap && snap.unpaid && snap.unpaid.totalN) out.push({k:"unpaid"});
   if (ok("flips")) out.push({k:"flips"});
+  if (ok("mem") && snap && snap.techs) out.push({k:"mem"});
   try {
     if (ok("contest") && snap && Sc.raceStandings(snap, boardCtx()).active) out.push({k:"contest"});
   } catch (e) {}
@@ -258,6 +259,7 @@ function slideHTML(sl){
       <div class="scrollbox"><div class="scrollin">${R.map((r,i)=>`<div class="st-r ${i===0&&r.m.sold?"top":""}" style="grid-template-columns:${gc}"><div class="rk num">${i+1}</div><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}${r.side==="sales"?"<em>Sales</em>":r.side==="apprentice"?"<em>Apprentice</em>":"<em>Tech</em>"}</b></div>
         <div class="c">${bigSmall(money(r.m.sold,true),money(r.y.sold,true))}</div><div class="c">${bigSmall(r.m.soldN,r.y.soldN)}</div><div class="c">${bigSmall(r.m.estN?pct(r.m.estClose):"—",r.y.estN?pct(r.y.estClose):"—")}</div><div class="c">${bigSmall(r.m.soldN?money(r.m.avgSale,true):"—",r.y.soldN?money(r.y.avgSale,true):"—")}</div><div class="c">${bigSmall(r.m.estN,r.y.estN)}</div><div class="c">${bigSmall(r.m.openN,money(r.m.openAmt,true))}</div><div class="c">${bigSmall(r.m.mem,r.y.mem)}</div></div>`).join("")}</div></div></div>`;
   }
+  if (sl.k==="mem") return fieldSlideHTML(snap);
   if (sl.k==="calls") return callSlideHTML(snap, now);
   if (sl.k==="flips") return flipSlideHTML(snap, now);
   if (sl.k==="contest") return contestSlideHTML(snap, now);
@@ -298,7 +300,7 @@ function reviewSlideHTML(snap){
   const body=rows.length?rows.map(r=>`<div class="rv-r"><div class="who">${av(r.k,r.name)}<b>${esc(r.name)}</b></div><div class="c num">${r.m}</div><div class="c num">${r.l30}</div><div class="c num">${r.y}</div></div>`).join(""):`<div class="empty-tv"><div><b>No techs on the board</b></div></div>`;
   const quoteHtml=quote?`<div class="rv-quote"><div class="st">${"★".repeat(Math.min(5,Math.round(quote.s||0)))}</div><p>${esc(quote.t.length>180?quote.t.slice(0,177)+"…":quote.t)}</p><div class="s">${esc(quote.who||quote.by)}${quote.d?" · "+esc(quote.d):""}</div></div>`:"";
   const gap=untagged?`${untagged} of ${total} reviews have no technician on the row. They count in the company total only.`:"Tagged from the ServiceTitan review export.";
-  return `<div class="kicker">Google reviews${throughTxt?" · latest "+esc(throughTxt):""}${stale?" · no dated reviews on ST Reviews":""}</div>
+  return `${googleLine(snap)}<div class="kicker">ServiceTitan reviews${throughTxt?" · latest "+esc(throughTxt):""}${stale?" · no dated reviews on ST Reviews":""}</div>
     <div class="big-h tight">Reviews by tech</div>
     <div class="rv-top">
       <div class="rv-co"><div class="l">Company</div><div class="rv-co-n"><b class="num">${sums.rv_mtd||0}</b><span>this month</span></div><div class="rv-co-n"><b class="num">${sums.rv_l30||0}</b><span>last 30 days</span></div><div class="rv-co-n"><b class="num">${sums.rv_ytd||0}</b><span>this year</span></div></div>
@@ -421,25 +423,71 @@ function callSlideHTML(snap, now){
       ${tile("Callback jobs", jobV, jobS2)}
     </div>`;
 }
+function fieldPeople(){
+  const seen={}, out=[];
+  roster(true,"tech").concat(roster(true,"sales")).forEach(r=>{
+    if(!r||!r.t||seen[r.t.k]) return;
+    seen[r.t.k]=true;
+    out.push(r);
+  });
+  return out;
+}
+function fieldSlideHTML(snap){
+  const sums=snap.leaderSums||{};
+  const cbs=snap.callbacks||{};
+  const rows=fieldPeople().map(r=>{
+    const m=statsFor(r.t,"mtd"), l=statsFor(r.t,"l30"), y=statsFor(r.t,"ytd");
+    return { name:r.name, k:r.t.k, m:m.mem||0, l30:l.mem||0, y:y.mem||0, cb:m.cb||0 };
+  }).sort((a,b)=>b.m-a.m||b.cb-a.cb||b.y-a.y||a.name.localeCompare(b.name));
+  const body=rows.map(r=>`<div class="field-r"><div class="who">${av(r.k,r.name)}<b>${esc(r.name)}</b></div><div class="c num">${r.m}</div><div class="c num">${r.l30}</div><div class="c num">${r.y}</div><div class="c num cb">${r.cb}</div></div>`).join("");
+  const u=snap.memUnassigned||{};
+  const ids=Object.keys(u.ids||{});
+  const notes=["Company totals include techs hidden on this board."];
+  if (u.ytd) notes.push(`Unassigned${ids.length?" ("+ids.join(", ")+")":""} is not on ST Techs: ${u.mtd} this month, ${u.l30} in the last 30 days, ${u.ytd} this year. Counted in the company total only.`);
+  if (cbs.unassignedMonth) notes.push(`${cbs.unassignedMonth} callback${cbs.unassignedMonth===1?"":"s"} this month ${cbs.unassignedMonth===1?"is":"are"} on a job that is not in ST Jobs.`);
+  return `<div class="kicker">${esc(monthName())} · memberships from ServiceTitan · callbacks joined from the original job</div>
+    <div class="big-h tight">Memberships and callbacks</div>
+    <div class="field-co"><div><div class="l">Memberships</div><b class="num">${sums.mem_mtd||0}</b><span>this month</span></div><div><div class="l">Last 30 days</div><b class="num">${sums.mem_l30||0}</b><span>memberships</span></div><div><div class="l">This year</div><b class="num">${sums.mem_ytd||0}</b><span>memberships</span></div><div><div class="l">Callbacks</div><b class="num">${cbs.month||0}</b><span>this month</span></div></div>
+    <div class="field-h"><span>Tech</span><span>This month</span><span>Last 30 days</span><span>This year</span><span>Callbacks</span></div>
+    <div class="scrollbox"><div class="scrollin">${body}</div></div>
+    ${notes.length?`<div class="rv-note">${esc(notes.join(" "))}</div>`:""}`;
+}
+function googleLine(snap){
+  const live=snap&&snap.google;
+  if (live&&live.live&&live.count){
+    const places=(live.places||[]).map(p=>`${p.name} ${p.rating} from ${p.count}`).join(" · ");
+    const when=live.asOf?nyShort(live.asOf):"";
+    return `<div class="g-line"><b>Google ${live.rating} ★</b> from ${live.count} review${live.count===1?"":"s"}${when?" · through "+esc(when):""}${places?" · "+esc(places):""}</div>`;
+  }
+  const shot=SETTINGS.GOOGLE_SNAPSHOT;
+  if (!shot||!shot.places) return "";
+  const when=nyShort(shot.asOf)||shot.asOf||"";
+  const places=shot.places.map(p=>`${p.name} ${p.rating} from ${p.count}`).join(" · ");
+  return `<div class="g-line">Public snapshot ${esc(when)} · not a live feed · ${esc(places)}. The Google Reviews tab replaces this.</div>`;
+}
 function flipSlideHTML(snap, now){
   const board=Sc.flipBoard(snap, now, S.techs, boardCtx());
   const goal=S.cfg.flipGoal!=null?+S.cfg.flipGoal:(SETTINGS.FLIP_GOAL||0);
   const c=board.company;
+  const auto=(snap.feed&&snap.feed.flipSource)==="servicetitan";
   const ps=goal?Sc.paceStatus(c.mtd, goal, now):null;
   const convTxt=board.convKnown?(c.mtd?pct(c.rate):"—"):"—";
   const convSub=board.convKnown?`${c.conv} converted`:"Add a Converted column to track this";
   const soldTxt=board.soldKnown?money(c.sold, true):"—";
-  const head=`<div class="lbh flip-h"><span></span><span></span><span style="text-align:left">Tech</span><span>Flips</span><span>Sold from flips</span></div>`;
-  const list=board.rows.length?`${head}<div class="scrollbox"><div class="ld scrollin flip-list">${board.rows.map((r,i)=>`<div class="ld-r flip-r ${i===0?"top":""}"><div class="rk num">${i+1}</div>${r.key?av(r.key,r.name):`<div class="av">${esc(Sc.initials(r.name))}</div>`}<div class="nm">${esc(r.name)}${r.matched?"":"<small>Check the spelling on the Flips tab</small>"}</div><div class="c">${bigSmall(r.flips, board.convKnown?r.conv+" converted":"this month")}</div><div class="c">${board.soldKnown&&r.soldKnown?money(r.sold,true):"—"}</div></div>`).join("")}</div></div>`
-    :`<div class="empty-tv"><div><b>No flips logged this month</b>Add a row on the Flips tab and it shows up here.</div></div>`;
-  return `<div class="kicker">${esc(monthName())} · the office logs these by hand</div><div class="big-h tight">Flip tracker</div>
+  const head=`<div class="lbh flip-h"><span></span><span></span><span style="text-align:left">Tech</span><span>Flips</span><span>${auto?"This year":"Sold from flips"}</span></div>`;
+  const second=r=>auto?String(r.ytd||0):(board.soldKnown&&r.soldKnown?money(r.sold,true):"—");
+  const list=board.rows.length?`${head}<div class="scrollbox"><div class="ld scrollin flip-list">${board.rows.map((r,i)=>`<div class="ld-r flip-r ${i===0?"top":""}"><div class="rk num">${i+1}</div>${r.key?av(r.key,r.name):`<div class="av">${esc(Sc.initials(r.name))}</div>`}<div class="nm">${esc(r.name)}${r.matched?"":"<small>Name did not match a tech</small>"}</div><div class="c">${bigSmall(r.flips, board.convKnown?r.conv+" converted":"this month")}</div><div class="c"><b class="num">${second(r)}</b><span>${auto?"this year":"sold"}</span></div></div>`).join("")}</div></div>`
+    :`<div class="empty-tv"><div><b>No flips this month</b>${auto?"No ServiceTitan leads are dated this month.":"Add a row on the Flips tab and it shows up here."}</div></div>`;
+  const kicker=auto?`${esc(monthName())} · ServiceTitan leads, one per job`:`${esc(monthName())} · the office logs these by hand`;
+  const yearTile=auto?`<div class="tile"><div class="l">This year</div><div class="v num">${c.ytd||0}</div><div class="s">lead generated by</div></div><div class="tile"><div class="l">Last 30 days</div><div class="v num">${c.l30||0}</div><div class="s">de-duplicated</div></div>`
+    :`<div class="tile"><div class="l">Converted</div><div class="v num">${convTxt}</div><div class="s">${esc(convSub)}</div></div><div class="tile"><div class="l">Sold from flips</div><div class="v num">${soldTxt}</div><div class="s">${board.soldKnown?"this month":"optional"}</div></div>`;
+  return `<div class="kicker">${kicker}</div><div class="big-h tight">Flip tracker</div>
     <div class="goal-big flip-goal"><div class="goal-num num">${c.mtd}</div><div class="goal-of">${goal?`of <b>${goal}</b> flips this month<br>${ps.ahead?"Ahead of pace":"Behind pace by "+Math.max(0, Math.round(ps.behindBy))}`:"Set flip_goal on Board_Config"}</div></div>
     ${goal?`<div class="gbar flip-bar"><i style="width:${Math.min(100,(ps.pct||0)*100)}%"></i><div class="pace" style="left:${ps.pace*100}%"></div><div class="pct num">${pct(ps.pct||0)}</div></div>`:""}
     <div class="tiles flip-tiles">
       <div class="tile"><div class="l">Today</div><div class="v num">${board.layout==="summary"?"—":c.today}</div><div class="s">${board.layout==="summary"?"needs a date":"flips"}</div></div>
       <div class="tile"><div class="l">This week</div><div class="v num">${board.layout==="summary"?"—":c.week}</div><div class="s">${board.layout==="summary"?"needs a date":"since Monday"}</div></div>
-      <div class="tile"><div class="l">Converted</div><div class="v num">${convTxt}</div><div class="s">${esc(convSub)}</div></div>
-      <div class="tile"><div class="l">Sold from flips</div><div class="v num">${soldTxt}</div><div class="s">${board.soldKnown?"this month":"optional"}</div></div>
+      ${yearTile}
     </div>
     ${list}`;
 }
@@ -1029,6 +1077,33 @@ async function loadTabRows(id, apiKey, wanted){
   names.forEach((t,i)=>{ if(tabs[i]) rows[String(t).trim().toLowerCase()]=tabs[i]; });
   return rows;
 }
+async function loadBonusFlips(apiKey){
+  const id=SETTINGS.BONUS_SHEET, tab=SETTINGS.BONUS_TAB;
+  if(!id||!tab||!apiKey) return null;
+  // A:B is status and date received. D is the job number. F is date closed. O is the tech.
+  // Commission columns are not requested.
+  const parts=["A:B","D:D","F:F","O:O"];
+  const q=parts.map(p=>"ranges="+encodeURIComponent("'"+tab+"'!"+p)).join("&");
+  const u=`https://sheets.googleapis.com/v4/spreadsheets/${id}/values:batchGet?${q}&valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING&key=${encodeURIComponent(apiKey)}`;
+  try{
+    const r=await fetchT(u, 15000);
+    if(!r.ok) return null;
+    const j=await r.json();
+    const ranges=j.valueRanges||[];
+    const col=i=> (ranges[i]&&ranges[i].values)||[];
+    const received=col(0), jobs=col(1), closed=col(2), techs=col(3);
+    const n=Math.max(received.length, jobs.length, closed.length, techs.length);
+    const out=[["Job ID","Date","Tech"]];
+    for(let i=1;i<n;i++){
+      const name=techs[i]&&techs[i][0]!=null?String(techs[i][0]).trim():"";
+      if(!name) continue;
+      const jid=jobs[i]&&jobs[i][0]!=null?jobs[i][0]:"";
+      const when=(closed[i]&&closed[i][0])||(received[i]&&received[i][1])||"";
+      out.push([jid, when, name]);
+    }
+    return out.length>1?out:null;
+  }catch(e){ return null; }
+}
 async function directWeather(){
   try{
     const r=await fetchT("https://api.open-meteo.com/v1/forecast?latitude=42.1615&longitude=-70.7928&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=America%2FNew_York&forecast_days=6");
@@ -1050,6 +1125,8 @@ function sheetMode(){
     if (busy) return; busy=true;
     try{
       const rows = await loadTabRows(id, apiKey, SHEET_TABS);
+      const bonus = await loadBonusFlips(apiKey);
+      if (bonus) rows["bonus flips"]=bonus;
       const wb={SheetNames:[],Sheets:{}, __rows:rows};
       Object.keys(rows).forEach(k=>{ wb.SheetNames.push(k); });
       if (!wb.SheetNames.length) throw new Error("Couldn't read the KPI sheet. Check it's shared \"anyone with the link can view\".");

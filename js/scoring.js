@@ -203,6 +203,10 @@
     take(sheetRows(wb, "ST Timesheets"), function (r) { return String(r[0]).trim().toLowerCase() === "employee"; }, ["employee"]);
     take(sheetRows(wb, "ST Memberships"), function (r) { return String(r[0]).trim().toLowerCase() === "membership id"; }, ["sold by"]);
     take(sheetRows(wb, "ST Reviews"), function (r) { return String(r[0]).trim().toLowerCase() === "published"; }, ["technician"]);
+    take(sheetRows(wb, "MP Reviews"), function (r) {
+      var cells = (r || []).map(function (c) { return String(c).trim().toLowerCase(); });
+      return cells.indexOf("published") >= 0 && cells.indexOf("review id") >= 0;
+    }, ["technician"]);
     take(sheetRows(wb, "Board_Updates"), function (r) { return String(r[0]).trim().toLowerCase() === "posted"; }, ["tech"]);
     ["Flips", SETTINGS.MEMBERSHIP_TAB, SETTINGS.REVIEW_TRACKER_TAB].forEach(function (tab) {
       var head = flipHeader(sheetRows(wb, tab));
@@ -1865,12 +1869,94 @@
         }
       });
     }
-    var rvRows = sheetRows(wb, "ST Reviews");
-    var rvRes = headerIndex(rvRows, function (r) { return String(r[0]).trim().toLowerCase() === "published"; });
+    var mpRows = sheetRows(wb, "MP Reviews");
+    var mpRes = headerIndex(mpRows, function (r) {
+      var cells = (r || []).map(function (c) { return String(c).trim().toLowerCase(); });
+      return cells.indexOf("published") >= 0 && cells.indexOf("review id") >= 0;
+    });
     var autoReviews = [];
     var reviewThrough = null, reviewRowsN = 0, reviewUntagged = 0;
-    var reviewMatch = { blank: 0, high: 0, medium: 0, unmatched: 0, namedInText: 0 };
-    if (rvRes.i >= 0) {
+    var reviewMatch = { blank: 0, high: 0, medium: 0, unmatched: 0, namedInText: 0, tagged: 0, credited: 0 };
+    var reviewSource = "";
+    var reviewStars = { mtd: { s: 0, n: 0 }, l30: { s: 0, n: 0 }, ytd: { s: 0, n: 0 } };
+    var bumpStar = function (box, rating) {
+      if (!(rating >= 1 && rating <= 5)) return;
+      box.s += rating;
+      box.n += 1;
+    };
+    var starBox = function () { return { s: 0, n: 0 }; };
+    var mpReady = mpRes.i >= 0 && mpRows.slice(mpRes.i + 1).some(function (r) { return toDate(r[mpRes.h.published]); });
+    if (mpReady) {
+      reviewSource = "marketingpro";
+      auto.rv = true;
+      Object.keys(T).forEach(function (k) {
+        T[k].rvM = zeros();
+        T[k].rvL30 = 0;
+        T[k].rvMatched = { mtd: 0, l30: 0, ytd: 0 };
+        T[k].rvStars = { mtd: starBox(), l30: starBox(), ytd: starBox() };
+      });
+      mpRows.slice(mpRes.i + 1).forEach(function (r) {
+        var h = mpRes.h;
+        var d = toDate(r[h.published]); if (!d) return;
+        reviewRowsN++;
+        if (!reviewThrough || d > reviewThrough) reviewThrough = d;
+        var techName = cleanPersonName(r[h.technician] || "");
+        var techId = String(r[h["technician id"]] || "").trim();
+        var blankTech = !techName && !techId;
+        if (blankTech) { reviewUntagged++; reviewMatch.blank++; }
+        else reviewMatch.tagged++;
+        var rating = num(r[h.rating]);
+        var text = String(r[h.review] || "").replace(/\s+/g, " ").trim();
+        var author = cleanPersonName(r[h.author] || "");
+        autoReviews.push({
+          by: String(r[h.platform] || "Google"),
+          who: techName ? firstName(techName) : "",
+          author: author,
+          t: text.slice(0, 180),
+          s: rating || 0,
+          d: d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: TZ }),
+          at: d.getTime()
+        });
+        if (d > now) return;
+        var dp = nyParts(d);
+        var inYear = dp.y === Y;
+        var inMonth = inYear && dp.m === M;
+        var in30 = d >= l30;
+        if (inYear) coRv[dp.m]++;
+        if (in30) coRvL30++;
+        if (inYear) bumpStar(reviewStars.ytd, rating);
+        if (inMonth) bumpStar(reviewStars.mtd, rating);
+        if (in30) bumpStar(reviewStars.l30, rating);
+        var tk = nameKey(techId) || (techName ? names.resolve(techName, "MP Reviews") : null);
+        if (tk && !T[tk]) {
+          var known = byStId[String(techId)];
+          var label = (known && known.name) || techName;
+          if (label) tech(label, "MP Reviews");
+        }
+        if (!(tk && T[tk])) {
+          if (!blankTech) reviewMatch.unmatched++;
+          return;
+        }
+        reviewMatch.credited++;
+        if (!T[tk].rvM) T[tk].rvM = zeros();
+        if (T[tk].rvL30 == null) T[tk].rvL30 = 0;
+        if (!T[tk].rvStars) T[tk].rvStars = { mtd: starBox(), l30: starBox(), ytd: starBox() };
+        var stars = T[tk].rvStars;
+        if (inYear) {
+          T[tk].rvM[dp.m]++;
+          bumpStar(stars.ytd, rating);
+          if (inMonth) bumpStar(stars.mtd, rating);
+        }
+        if (in30) {
+          T[tk].rvL30++;
+          bumpStar(stars.l30, rating);
+        }
+      });
+    }
+    var rvRows = sheetRows(wb, "ST Reviews");
+    var rvRes = headerIndex(rvRows, function (r) { return String(r[0]).trim().toLowerCase() === "published"; });
+    if (!mpReady && rvRes.i >= 0) {
+      reviewSource = "st";
       auto.rv = true;
       Object.keys(T).forEach(function (k) { T[k].rvM = zeros(); T[k].rvL30 = 0; T[k].rvMatched = { mtd: 0, l30: 0, ytd: 0 }; });
       var reviewIndex = buildReviewJobIndex(jr, sheetRows(wb, "ST Customers"), sheetRows(wb, "Install Board"));
@@ -1999,7 +2085,7 @@
       if (!instRec[t.k] && b.inst_mtd) t.inst[M] = b.inst_mtd;
       t.mem = {mtd:b.mem_mtd || 0, ytd:b.mem_ytd || 0}; t.rv = {mtd:b.rv_mtd || 0, ytd:b.rv_ytd || 0};
       if (auto.mem && t.memM) t.mem = {mtd:t.memM[M], ytd:t.memM.slice(0, M + 1).reduce(function (a, b) { return a + b; }, 0), m:t.memM, l30:t.memL30 || 0};
-      if (auto.rv && t.rvM) t.rv = {mtd:t.rvM[M], ytd:t.rvM.slice(0, M + 1).reduce(function (a, b) { return a + b; }, 0), m:t.rvM, l30:t.rvL30 || 0};
+      if (auto.rv && t.rvM) t.rv = {mtd:t.rvM[M], ytd:t.rvM.slice(0, M + 1).reduce(function (a, b) { return a + b; }, 0), m:t.rvM, l30:t.rvL30 || 0, stars: t.rvStars || null};
       if (auto.cb && t.cbM) { t.cb = t.cbM; t.cbL30 = t.cbL30 || 0; }
       if (useAppt || jh["total hours worked"] != null) { t.inst = t.y.instN.slice(); t.instL30 = t.l30.instN; }
       round(t.y); round(t.l30); if (t.att) { round(t.att.y); round(t.att.l30); }
@@ -2040,7 +2126,7 @@
     }, {});
     if (auto.mem) { leaderSums.mem_mtd = coMem[M]; leaderSums.mem_ytd = coMem.slice(0, M + 1).reduce(function (a, b) { return a + b; }, 0); leaderSums.mem_l30 = coMemL30; }
     if (auto.rv) { leaderSums.rv_mtd = coRv[M]; leaderSums.rv_ytd = coRv.slice(0, M + 1).reduce(function (a, b) { return a + b; }, 0); leaderSums.rv_l30 = coRvL30; }
-    var reviewsOut = autoReviews.length ? autoReviews.sort(function (a, b) { return b.at - a.at; }).slice(0, 20).map(function (x) { return {by:x.by, t:x.t, s:x.s, d:x.d}; }) : reviews;
+    var reviewsOut = autoReviews.length ? autoReviews.sort(function (a, b) { return b.at - a.at; }).slice(0, 8).map(function (x) { return {by:x.by, who:x.who || "", author:x.author || "", t:x.t, s:x.s, d:x.d}; }) : reviews;
     auto.inst = useAppt || jh["total hours worked"] != null;
     auto.instBy = useAppt ? "appointment" : "worked";
     flags.sort(function (a, b) { return b.d.localeCompare(a.d); });
@@ -2051,7 +2137,7 @@
     var snapOut = {v:2, builtAt: now.getTime(), auto:auto, flags:flags.slice(0, 200), dataThrough: maxDate ? nyYMD(maxDate) : "", month:M, year:Y, jobRows:jobRows, estRows:estRows,
       goals:goals, ytdGoals:ytdGoals, actuals:actuals, techs:T, co:co, reviews:reviewsOut, anns:[], annLive:null, contest:null, feed:null, updates:updates, leaderSums:leaderSums, weather:weather, ambiguous:names.ambiguous,
       reviewThrough: reviewThrough ? nyYMD(reviewThrough) : "", reviewRows: reviewRowsN, reviewUntagged: reviewUntagged,
-      reviewMatch: reviewMatch,
+      reviewMatch: reviewMatch, reviewSource: reviewSource, reviewStars: reviewStars,
       memUnassigned: memUnassigned, callbacks: callbackRoll,
       google: readGoogleProfile(sheetRows(wb, "Google Reviews")),
       unpaid: readUnpaidInvoices(jobSheet, names),
@@ -2120,6 +2206,8 @@
     s.inst = m != null ? (inst[m] || 0) : P === "ytd" ? sumTo(inst, M) : P === "l30" ? (t.instL30 != null ? t.instL30 : (inst[M] || 0)) : (inst[M] || 0);
     s.mem = m != null ? (mem.m ? mem.m[m] : (m === M ? mem.mtd : null)) : P === "ytd" ? mem.ytd : P === "l30" ? (mem.l30 != null ? mem.l30 : mem.mtd) : mem.mtd;
     s.rv = m != null ? (rv.m ? rv.m[m] : (m === M ? rv.mtd : null)) : P === "ytd" ? rv.ytd : P === "l30" ? (rv.l30 != null ? rv.l30 : rv.mtd) : rv.mtd;
+    var starPeriod = (rv.stars || {})[P === "ytd" ? "ytd" : P === "l30" ? "l30" : "mtd"];
+    s.rvAvg = starPeriod && starPeriod.n ? starPeriod.s / starPeriod.n : null;
     s.rating = ((ctx.techs || {})[t.k] || {}).rating || 0;
     s.openAmt = t.openAmt || 0; s.openN = t.openN || 0; s.overdue = t.overdueN || 0;
     s.cbRate = s.jobs ? s.cb / s.jobs : 0;
@@ -2269,7 +2357,7 @@
       jobsCompleted: latestColumnDate(firstRows(wb, ["ST Jobs", "Automation Jobs"]), "completion date"),
       estimatesSold: latestColumnDate(firstRows(wb, ["ST Estimates", "Automation Estimates"]), "sold on"),
       estimatesCreated: latestColumnDate(firstRows(wb, ["ST Estimates", "Automation Estimates"]), "creation date"),
-      reviews: latestColumnDate(sheetRows(wb, "ST Reviews"), "published"),
+      reviews: latestColumnDate(sheetRows(wb, "MP Reviews"), "published") || latestColumnDate(sheetRows(wb, "ST Reviews"), "published"),
       memberships: latestColumnDate(sheetRows(wb, "ST Memberships"), "created"),
       callbacks: latestColumnDate(sheetRows(wb, "ST Callbacks"), "created"),
       timesheets: latestColumnDate(sheetRows(wb, "ST Timesheets"), "start"),

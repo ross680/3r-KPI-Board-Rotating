@@ -109,7 +109,7 @@ function activeSlides(){
   } catch (e) {}
   if (ok("ytd")) out.push({k:"ytd"});
   if (ok("wx") && snap && snap.weather) out.push({k:"wx"});
-  if (ok("rv") && snap && snap.reviews && snap.reviews.length) out.push({k:"rv"});
+  if (ok("rv") && snap && ((snap.reviews && snap.reviews.length) || snap.reviewRows)) out.push({k:"rv"});
   if (ok("ann") && snap && Array.isArray(snap.anns)) snap.anns.forEach((a,i)=>{ if(a) out.push({k:"ann", i}); });
   if (snap && Array.isArray(snap.updates)) snap.updates.forEach((u,i)=>{ if(u && u.type!=="ticker") out.push({k:"upd", i}); });
   try {
@@ -284,39 +284,53 @@ function nyShort(ymd){
   const d=ymd?Sc.toDate(ymd):null;
   return d?d.toLocaleDateString("en-US",{month:"short", day:"numeric", timeZone:SETTINGS.TIMEZONE}):"";
 }
+function starLabel(n){
+  if (n==null || !isFinite(+n)) return "—";
+  return (Math.round(+n*10)/10).toFixed(1);
+}
 function reviewSlideHTML(snap){
   const sums=snap.leaderSums||{};
   const through=snap.reviewThrough||"";
   const throughTxt=through?nyShort(through):"";
-  const rows=roster(true).map(r=>({
-    name:r.name, k:r.t.k,
-    m:statsFor(r.t,"mtd").rv||0,
-    l30:statsFor(r.t,"l30").rv||0,
-    y:statsFor(r.t,"ytd").rv||0
-  })).sort((a,b)=>b.l30-a.l30||b.m-a.m||b.y-a.y||a.name.localeCompare(b.name));
-  const quote=(snap.reviews&&snap.reviews[0])||null;
+  const mp=snap.reviewSource==="marketingpro";
+  const ctx=boardCtx();
+  const rows=Object.keys(snap.techs||{}).map(k=>snap.techs[k]).filter(t=>t && !Sc.techIsHidden(t, ctx)).map(t=>{
+    const mtd=statsFor(t,"mtd"), l30=statsFor(t,"l30"), ytd=statsFor(t,"ytd");
+    return { name:Sc.displayName(t, snap.techs, (S.techs||{})[t.k]||{}), k:t.k, m:mtd.rv||0, l30:l30.rv||0, y:ytd.rv||0, avg:ytd.rvAvg };
+  }).filter(r=>r.m||r.l30||r.y).sort((a,b)=>b.y-a.y||b.l30-a.l30||b.m-a.m||a.name.localeCompare(b.name));
   const untagged=+snap.reviewUntagged||0;
   const total=+snap.reviewRows||0;
   const stale=!through;
-  const head=`<div class="rv-h"><span>Tech</span><span>This month</span><span>Last 30 days</span><span>This year</span></div>`;
+  const head=`<div class="rv-h"><span>Tech</span><span>This month</span><span>Last 30 days</span><span>This year</span><span>Avg</span></div>`;
   const body=rows.length?rows.map(r=>{
     const hit=(snap.techs&&snap.techs[r.k]&&snap.techs[r.k].rvMatched)||{};
     const mark=n=>n?`<small>+${n} matched</small>`:"";
-    return `<div class="rv-r"><div class="who">${av(r.k,r.name)}<b>${esc(r.name)}</b></div><div class="c num">${r.m}${mark(hit.mtd)}</div><div class="c num">${r.l30}${mark(hit.l30)}</div><div class="c num">${r.y}${mark(hit.ytd)}</div></div>`;
+    return `<div class="rv-r"><div class="who">${av(r.k,r.name)}<b>${esc(r.name)}</b></div><div class="c num">${r.m}${mark(hit.mtd)}</div><div class="c num">${r.l30}${mark(hit.l30)}</div><div class="c num">${r.y}${mark(hit.ytd)}</div><div class="c num star">${starLabel(r.avg)}</div></div>`;
   }).join(""):`<div class="empty-tv"><div><b>No techs on the board</b></div></div>`;
-  const quoteHtml=quote?`<div class="rv-quote"><div class="st">${"★".repeat(Math.min(5,Math.round(quote.s||0)))}</div><p>${esc(quote.t.length>180?quote.t.slice(0,177)+"…":quote.t)}</p><div class="s">${esc(quote.who||quote.by)}${quote.d?" · "+esc(quote.d):""}</div></div>`:"";
+  const newest=(snap.reviews||[]).slice(0,3);
+  const ticker=newest.length?`<div class="rv-new">${newest.map(q=>{
+    const stars=q.s? "★".repeat(Math.min(5, Math.round(q.s))) : "";
+    const who=q.who||"";
+    const line=q.t?q.t:(q.author?q.author+" left a rating":"Rating only");
+    return `<div class="rv-line"><b>${esc(stars)}</b><span>${esc([q.d, who].filter(Boolean).join(" · "))}</span><em>${esc(line)}</em></div>`;
+  }).join("")}</div>`:"";
   const rm=snap.reviewMatch||{};
+  const coStars=(snap.reviewStars&&snap.reviewStars.ytd)||null;
+  const coAvg=coStars&&coStars.n?coStars.s/coStars.n:null;
   const found=(rm.high||0)+(rm.medium||0);
-  const gap=untagged
-    ? (found
-      ? `${untagged} of ${total} reviews have no technician. ${rm.high||0} matched a job and are marked. ${rm.medium||0} matched a last name only and are not in the grade. ${rm.namedInText||0} already name a tech in the text.`
-      : `${untagged} of ${total} reviews have no technician. None could be tied to a job. ${rm.namedInText||0} already name a tech in the text and are counted. The export has no customer, phone, address, or job column.`)
-    : "Tagged from the ServiceTitan review export.";
-  return `${googleLine(snap)}<div class="kicker">ServiceTitan reviews${throughTxt?" · latest "+esc(throughTxt):""}${stale?" · no dated reviews on ST Reviews":""}</div>
+  const gap=mp
+    ? `${rm.tagged||0} of ${total} name a technician. ${untagged} have no technician. The company total includes both, and techs on the hidden list stay off these rows.`
+    : (untagged
+      ? (found
+        ? `${untagged} of ${total} reviews have no technician. ${rm.high||0} matched a job and are marked. ${rm.medium||0} matched a last name only and are not in the grade. ${rm.namedInText||0} already name a tech in the text.`
+        : `${untagged} of ${total} reviews have no technician. None could be tied to a job. ${rm.namedInText||0} already name a tech in the text and are counted. The export has no customer, phone, address, or job column.`)
+      : "Tagged from the ServiceTitan review export.");
+  const src=mp?"Marketing Pro":"ServiceTitan reviews";
+  return `${googleLine(snap)}<div class="kicker">${src}${throughTxt?" · latest "+esc(throughTxt):""}${stale?" · no dated reviews":""}</div>
     <div class="big-h tight">Reviews by tech</div>
     <div class="rv-top">
-      <div class="rv-co"><div class="l">Company</div><div class="rv-co-n"><b class="num">${sums.rv_mtd||0}</b><span>this month</span></div><div class="rv-co-n"><b class="num">${sums.rv_l30||0}</b><span>last 30 days</span></div><div class="rv-co-n"><b class="num">${sums.rv_ytd||0}</b><span>this year</span></div></div>
-      ${quoteHtml}
+      <div class="rv-co"><div class="l">Company</div><div class="rv-co-n"><b class="num">${sums.rv_mtd||0}</b><span>this month</span></div><div class="rv-co-n"><b class="num">${sums.rv_l30||0}</b><span>last 30 days</span></div><div class="rv-co-n"><b class="num">${sums.rv_ytd||0}</b><span>this year</span></div><div class="rv-co-n"><b class="num">${starLabel(coAvg)}</b><span>avg this year</span></div></div>
+      ${ticker}
     </div>
     <div class="rv-table">${head}<div class="scrollbox"><div class="scrollin">${body}</div></div></div>
     <div class="rv-note">${esc(gap)}</div>`;
@@ -848,7 +862,7 @@ function paneBoard(){
     <p class="small" style="margin-top:0">Source: <b>3R Rotating KPI Board</b> Google Sheet. The board re-reads it every 5 minutes while an admin has this page open, then pushes the numbers to every screen showing the board.</p>
     <div class="note ${S.sync.state==="ok"?"ok":S.sync.state==="error"?"bad":""}">${esc(S.sync.msg)}${S.snapAt?` Last pushed ${esc(ago(S.snapAt))}.`:""}${S.snap?` ${S.snap.jobRows} job rows, ${S.snap.estRows} estimate rows.`:""}</div>
     <div class="row" style="margin-top:12px"><button class="btn" type="button" id="syncNow" ${S.mcp?"":"disabled"}>Refresh from sheet now</button></div>
-    <p class="muted small" style="margin-top:12px">Revenue, jobs, avg ticket, close rate, gross margin, hours and leads come from ST Jobs, or Automation Jobs if that tab is the one filled in. Sold and open estimates come from ST Estimates or Automation Estimates. Callbacks on the scorecard come from ST Callbacks when that tab has rows, otherwise Call Back Record. Those are ServiceTitan callback jobs, not CSR callback requests. Installs are install job types over 4 hours. Membership and review grades come from ST Memberships and ST Reviews when those tabs are filled, otherwise the Leaderboard tab. Goals come from Goals and YTD Goals. The race counts rows typed on the Flips, Memberships, and Review Tracker tabs. A Contest or Races row can change a race goal, prize, or start date. The Reviews tab is the quote list. Weekly booking rate, weekly and daily inbound calls, and abandoned calls come from the Call Center tab. Inbound is every call that came in, not calls answered on Actuals. Leave those cells blank until Pivotl's report has the numbers.</p>
+    <p class="muted small" style="margin-top:12px">Revenue, jobs, avg ticket, close rate, gross margin, hours and leads come from ST Jobs, or Automation Jobs if that tab is the one filled in. Sold and open estimates come from ST Estimates or Automation Estimates. Callbacks on the scorecard come from ST Callbacks when that tab has rows, otherwise Call Back Record. Those are ServiceTitan callback jobs, not CSR callback requests. Installs are install job types over 4 hours. Membership grades come from ST Memberships when that tab has rows, otherwise the Leaderboard tab. Review grades come from MP Reviews when that tab has rows, otherwise ST Reviews, otherwise the Leaderboard tab. Goals come from Goals and YTD Goals. The race counts rows typed on the Flips, Memberships, and Review Tracker tabs. A Contest or Races row can change a race goal, prize, or start date. The Reviews tab is the quote list. Weekly booking rate, weekly and daily inbound calls, and abandoned calls come from the Call Center tab. Inbound is every call that came in, not calls answered on Actuals. Leave those cells blank until Pivotl's report has the numbers.</p>
   </div>`;
 }
 

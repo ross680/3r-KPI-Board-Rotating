@@ -90,8 +90,12 @@
     inverseScoreAtTarget: 0.5,
     // January year-to-date is at least this many months. 1 means a one-day January is not a one-day target.
     ytdMinMonths: 1,
-    // Month-to-date targets stay the full monthly target. Pace on the goal slide is separate.
-    prorateMtdTargets: false,
+    // Month-to-date dollar and count targets scale to how much of the month has passed.
+    // A tech on pace for the monthly goal scores about 100% on that metric today.
+    // Last 30 days keeps the full monthly target. The goal slide still draws calendar pace.
+    // mtdMinDays stops the first days of the month from being graded against a one-day goal.
+    prorateMtdTargets: true,
+    mtdMinDays: 7,
     // Letter cutoffs. The first one the score reaches, from the top, wins. Below all of them is F.
     letterGrades: [
       { letter: "A", min: 90 },
@@ -197,6 +201,7 @@
     {k:"trend", label:"Revenue by month"},
     {k:"all",   label:"Team scoreboard (every metric, one screen)"},
     {k:"lb",    label:"Tech leaderboard"},
+    {k:"unpaid", label:"Unpaid invoices by technician"},
     {k:"stats", label:"Month vs year stat sheet"},
     {k:"spot",  label:"Tech spotlight"},
     {k:"leads", label:"Leads turned over"},

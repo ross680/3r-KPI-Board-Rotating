@@ -94,6 +94,8 @@ Date	Inbound	Abandoned
 
 Completed jobs count as revenue. Booked calls use the created date and skip canceled jobs. A `$0` completed job is not a paid job, so it does not enter average ticket. Install *revenue* is the slice of revenue whose business unit or job type matches install, replace, or new system. That is separate from the install *count* below.
 
+`Balance` on that same tab is the unpaid-invoice slide. A row counts when it has an invoice number, it is not canceled, Empty Invoice is not true, and Balance is above zero. The slide shows the count and the dollars still due for each tech. People on the hidden-tech list, including Franco, are left off the rows. Their balances stay in the company total. The board does not need a new tab for this.
+
 `ST Appointments`: `job id`, `appointment hours`. Hours on the same job add up.
 
 `ST Estimates` or `Automation Estimates`:
@@ -108,7 +110,7 @@ Estimates written are dated on creation. Sold dollars are dated on sold-on, or o
 
 `ST Memberships`: `membership id`, `created`, `type` (renewals are excluded), `sold by id`, `sold by`.
 
-`ST Reviews`: `published`, `rating`, `review`, `platform`, `technician id`, `technician`. A review goes on the carousel when the text is longer than 30 characters and the rating is 4 or higher, or blank. The technician id, or the full name in the technician column, credits that person. The review text credits a first name only when exactly one known person has it. A shared first name is not credited, and the admin page lists the clash. Names shorter than 3 letters are not matched in the text. The company total counts the review once.
+`ST Reviews`: `published`, `rating`, `review`, `platform`, `technician id`, `technician`. A review goes on the reviews slide when the text is longer than 30 characters and the rating is 4 or higher, or blank. The slide lists this month, the last 30 days, and the year for each tech, plus the company totals and the date of the newest review. The technician id, or the full name in the technician column, credits that person. The review text credits a first name only when exactly one known person has it. A shared first name is not credited, and the admin page lists the clash. Names shorter than 3 letters are not matched in the text. A review with no technician still counts once in the company total. The hand-typed `Reviews` tab is used only when `ST Reviews` has no quote rows.
 
 `ST Callbacks`: `callback job id`, `created`, `status` (canceled rows are skipped), `original job id`. The original job's primary technician gets the callback. The job's own recall flag is not the callback count.
 
@@ -201,7 +203,7 @@ The Flip Tracker slide ranks this month's flips, shows converted flips and the c
 | `coSource` | `auto` (from jobs) or `actuals` |
 | `tvGrades` | `no` hides letter grades on the TV. Admin still shows them. |
 | `logoPlate` | `no` turns off the white plate behind the logo |
-| `slidesOff` | Comma-separated slide keys to hide: `goal`, `calls`, `trend`, `all`, `lb`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
+| `slidesOff` | Comma-separated slide keys to hide: `goal`, `calls`, `trend`, `all`, `lb`, `unpaid`, `flips`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
 | `flip_goal` | Company flip goal for the month. Replaces the 20 in `js/settings.js`. |
 | `hidden_techs` | Comma-separated names left off individual slides, grades, the flip tracker, the races, flip alerts, and the team spotlight. Defaults to `Franco`. A blank value shows everyone again. Their jobs and dollars stay in the company, team, monthly, and goal totals. A name matches any person who has each of its words, ignoring case, so `Franco` also covers `Franco DosSantos`. |
 | `w_<metric>` / `t_<metric>` | Technician weight and monthly target |
@@ -228,7 +230,7 @@ A rate with an empty denominator is left out. It is not scored as zero. That cov
 
 Lower-is-better metrics (callbacks, missed days, PTO, overdue follow-ups, callback rate) score 100% at zero and 50% at the allowed target. Twice the target scores 0%.
 
-Month-to-date targets are the full monthly target. They are not prorated inside the month. Year-to-date targets scale by how much of the year has passed, using the real length of the current month, and January counts as at least one full month.
+Month-to-date dollar and count targets scale to how much of the month has passed, with a floor of one week, so a tech who is on pace scores about 100% on that metric instead of being graded against the whole month on the 17th. Last 30 days keeps the full monthly target. Year-to-date targets scale by how much of the year has passed, using the real length of the current month, and January counts as at least one full month. Rates such as average ticket and close rate are not scaled, because they are not dollar totals.
 
 Technicians, apprentices, and salespeople use different metric sets. Defaults, and the choices above, are named in `RULES` inside `js/settings.js`. Apprentices are graded on attendance and do not appear on the TV tech leaderboard. The sales list is ranked by dollars sold, not by the sales score.
 

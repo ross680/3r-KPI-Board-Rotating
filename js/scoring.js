@@ -1306,7 +1306,9 @@
     var board = {};
     var unassignedBoard = [];
     if (lbi >= 0) lbRows.slice(lbi + 1).forEach(function (r) {
-      var nm = String(r[lbh.name] == null ? "" : r[lbh.name]).trim(); if (!nm || nm.startsWith("←")) return;
+      var nm = String(r[lbh.name] == null ? "" : r[lbh.name]).trim();
+      // Instruction rows ("💡 Set status…", "← Tech Name") are not people.
+      if (!nm || nm.charAt(0) === "←" || !/^[A-Za-z]/.test(nm)) return;
       var g = function (c) { return num(r[lbh[c]]); };
       var row = {name:nm, status:String(r[lbh.status] == null ? "active" : r[lbh.status]).trim().toLowerCase() || "active",
         mem_mtd:g("mem_mtd"), rv_mtd:g("rv_mtd"), inst_mtd:g("inst_mtd"), mem_ytd:g("mem_ytd"), rv_ytd:g("rv_ytd"),
@@ -1531,6 +1533,7 @@
     var rvRows = sheetRows(wb, "ST Reviews");
     var rvRes = headerIndex(rvRows, function (r) { return String(r[0]).trim().toLowerCase() === "published"; });
     var autoReviews = [];
+    var reviewThrough = null, reviewRowsN = 0, reviewUntagged = 0;
     if (rvRes.i >= 0) {
       auto.rv = true;
       Object.keys(T).forEach(function (k) { T[k].rvM = zeros(); T[k].rvL30 = 0; });
@@ -1550,9 +1553,14 @@
       rvRows.slice(rvRes.i + 1).forEach(function (r) {
         var h = rvRes.h;
         var d = toDate(r[h.published]); if (!d) return;
+        reviewRowsN++;
+        if (!reviewThrough || d > reviewThrough) reviewThrough = d;
+        var techName = cleanPersonName(r[h.technician] || "");
+        var techId = String(r[h["technician id"]] || "").trim();
+        if (!techName && !techId) reviewUntagged++;
         var rating = num(r[h.rating]);
         var text = String(r[h.review] || "").trim();
-        if (text.length > 30 && (rating >= 4 || !rating)) autoReviews.push({by:String(r[h.platform] || "Google") + " review", t:text.slice(0, 400), s:rating || 5, d:d.toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric", timeZone:TZ}), at:d.getTime()});
+        if (text.length > 30 && (rating >= 4 || !rating)) autoReviews.push({by:String(r[h.platform] || "Google") + " review", who:techName, t:text.slice(0, 400), s:rating || 5, d:d.toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric", timeZone:TZ}), at:d.getTime()});
         if (d > now) return;
         var dp = nyParts(d);
         if (dp.y === Y) coRv[dp.m]++;
@@ -1666,8 +1674,12 @@
     var cbCounts = countCallbackJobs(sheetRows(wb, "ST Callbacks"), now);
     var callTab = SETTINGS.CALL_CENTER_TAB || "Call Center";
     var callParsed = readCallCenter(sheetRows(wb, callTab), now);
+    var jobSheet = jr && jr.length ? jr : firstRows(wb, ["ST Jobs", "Automation Jobs"]);
     var snapOut = {v:2, builtAt: now.getTime(), auto:auto, flags:flags.slice(0, 200), dataThrough: maxDate ? nyYMD(maxDate) : "", month:M, year:Y, jobRows:jobRows, estRows:estRows,
       goals:goals, ytdGoals:ytdGoals, actuals:actuals, techs:T, co:co, reviews:reviewsOut, anns:[], annLive:null, contest:null, feed:null, updates:updates, leaderSums:leaderSums, weather:weather, ambiguous:names.ambiguous,
+      reviewThrough: reviewThrough ? nyYMD(reviewThrough) : "", reviewRows: reviewRowsN, reviewUntagged: reviewUntagged,
+      unpaid: readUnpaidInvoices(jobSheet, names),
+      sources: sheetSources(wb),
       callCenter: {
         target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET,
         week: callParsed.week,
@@ -1807,6 +1819,97 @@
     if (floor == null || !isFinite(+floor)) floor = 1;
     return Math.max(+floor, M + frac);
   }
+  function mtdFraction(now) {
+    var p = nyParts(now || nyNow());
+    var dim = daysInMonth(p.y, p.m) || 30;
+    var frac = p.d / dim;
+    var minDays = +SETTINGS.RULES.mtdMinDays;
+    if (isFinite(minDays) && minDays > 0) frac = Math.max(frac, Math.min(1, minDays / dim));
+    if (frac < 0) frac = 0;
+    if (frac > 1) frac = 1;
+    return frac;
+  }
+  /* Invoiced jobs that still have a balance. Canceled jobs and empty invoices are left out.
+     A balance of zero is paid. The company total includes hidden techs; the slide hides them. */
+  function readUnpaidInvoices(rows, names) {
+    rows = rows || [];
+    var res = headerIndex(rows, function (r) {
+      var cells = (r || []).map(function (c) { return String(c == null ? "" : c).trim().toLowerCase(); });
+      return cells.indexOf("balance") >= 0 && cells.indexOf("primary technician") >= 0;
+    });
+    if (res.i < 0) return null;
+    var h = res.h;
+    var groups = {};
+    var order = [];
+    var totalN = 0, totalAmt = 0, latest = null;
+    rows.slice(res.i + 1).forEach(function (r) {
+      if (/cancel/i.test(String(r[h.status] || ""))) return;
+      var invCol = h["invoice #"] != null ? h["invoice #"] : h.invoice;
+      if (invCol == null || !String(r[invCol] == null ? "" : r[invCol]).trim()) return;
+      if (h["empty invoice"] != null && /^true$/i.test(String(r[h["empty invoice"]] || "").trim())) return;
+      var bal = num(r[h.balance]);
+      if (!(bal > 0)) return;
+      var raw = cleanPersonName(r[h["primary technician"]]);
+      var resolved = raw && names ? names.resolve(raw, "Unpaid invoices") : null;
+      var id = resolved || (raw ? key(raw) : "");
+      var label = raw || "Unassigned";
+      if (resolved && names.people[resolved] && names.people[resolved].full) label = names.people[resolved].full;
+      var gid = id || ("name:" + label.toLowerCase());
+      var g = groups[gid];
+      if (!g) {
+        g = { key: id, name: label, count: 0, amount: 0 };
+        groups[gid] = g;
+        order.push(g);
+      }
+      g.count += 1;
+      g.amount += bal;
+      totalN += 1;
+      totalAmt += bal;
+      var d = toDate(r[h["invoice date"]]) || toDate(r[h["completion date"]]);
+      if (d && (!latest || d > latest)) latest = d;
+    });
+    order.forEach(function (g) { g.amount = Math.round(g.amount * 100) / 100; });
+    order.sort(function (a, b) { return b.amount - a.amount || b.count - a.count || String(a.name).localeCompare(String(b.name)); });
+    return { totalN: totalN, totalAmt: Math.round(totalAmt * 100) / 100, asOf: latest ? nyYMD(latest) : "", rows: order };
+  }
+  function latestColumnDate(rows, headerName) {
+    var want = String(headerName || "").toLowerCase();
+    var res = headerIndex(rows, function (r) {
+      return (r || []).some(function (c) { return String(c == null ? "" : c).trim().toLowerCase() === want; });
+    });
+    if (res.i < 0 || res.h[want] == null) return "";
+    var best = null;
+    rows.slice(res.i + 1).forEach(function (r) {
+      var d = toDate(r[res.h[want]]);
+      if (d && (!best || d > best)) best = d;
+    });
+    return best ? nyYMD(best) : "";
+  }
+  function sheetSources(wb) {
+    var callRows = sheetRows(wb, SETTINGS.CALL_CENTER_TAB || "Call Center");
+    return {
+      jobsCompleted: latestColumnDate(firstRows(wb, ["ST Jobs", "Automation Jobs"]), "completion date"),
+      estimatesSold: latestColumnDate(firstRows(wb, ["ST Estimates", "Automation Estimates"]), "sold on"),
+      estimatesCreated: latestColumnDate(firstRows(wb, ["ST Estimates", "Automation Estimates"]), "creation date"),
+      reviews: latestColumnDate(sheetRows(wb, "ST Reviews"), "published"),
+      memberships: latestColumnDate(sheetRows(wb, "ST Memberships"), "created"),
+      callbacks: latestColumnDate(sheetRows(wb, "ST Callbacks"), "created"),
+      timesheets: latestColumnDate(sheetRows(wb, "ST Timesheets"), "start"),
+      appointments: latestColumnDate(sheetRows(wb, "ST Appointments"), "last end"),
+      flips: latestColumnDate(sheetRows(wb, "Flips"), "date"),
+      callCenter: latestColumnDate(callRows, "date")
+    };
+  }
+  /* The Goals tab's average ticket is a per-job goal. Use it unless Board_Config set t_avg. */
+  function applyCompanyGoals(cfg, goals, raw) {
+    cfg = cfg || {};
+    raw = raw || {};
+    goals = goals || {};
+    var setOnSheet = raw.t_avg !== undefined && raw.t_avg !== "" && raw.t_avg != null;
+    var avg = goals.avg_ticket && +goals.avg_ticket.v;
+    if (!setOnSheet && avg > 0 && cfg.metrics && cfg.metrics.avg) cfg.metrics.avg.target = avg;
+    return cfg;
+  }
   function letterGrade(score) {
     if (score == null || !isFinite(score)) return null;
     var grades = (SETTINGS.RULES.letterGrades || []).slice().sort(function (a, b) { return (+b.min || 0) - (+a.min || 0); });
@@ -1820,10 +1923,7 @@
     var rules = SETTINGS.RULES;
     var monthsIn = P === "ytd" ? monthsElapsed(ctx.snap, ctx.now) : 1;
     var mtdFrac = 1;
-    if (rules.prorateMtdTargets && P !== "ytd" && P !== "l30") {
-      var pScale = nyParts((ctx && ctx.now) || nyNow());
-      mtdFrac = pScale.d / daysInMonth(pScale.y, pScale.m);
-    }
+    if (rules.prorateMtdTargets && P !== "ytd" && P !== "l30") mtdFrac = mtdFraction((ctx && ctx.now) || nyNow());
     var tw = 0, tot = 0, parts = {};
     var apprentice = SET === APP_METRICS;
     SET.forEach(function (m) {
@@ -2267,6 +2367,7 @@
     contestForMonth:contestForMonth, contestPrizes:contestPrizes, contestStandings:contestStandings, raceStandings:raceStandings, daysLeftInMonth:daysLeftInMonth,
     percentToGoal:percentToGoal, monthPace:monthPace, yearPace:yearPace, paceStatus:paceStatus, periodStart:periodStart,
     periodLabel:periodLabel, monthName:monthName, isStale:isStale, chooseDataMode:chooseDataMode,
-    applySheetConfig:applySheetConfig, parseTechMeta:parseTechMeta, shiftLimitMinutes:shiftLimitMinutes
+    applySheetConfig:applySheetConfig, applyCompanyGoals:applyCompanyGoals, parseTechMeta:parseTechMeta, shiftLimitMinutes:shiftLimitMinutes,
+    mtdFraction:mtdFraction, readUnpaidInvoices:readUnpaidInvoices
   };
 });

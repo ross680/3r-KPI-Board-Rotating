@@ -176,9 +176,9 @@ describe("tech grades", function () {
     });
     const none = Sc.scoreTech(person(s, "Sam Rivera"), "mtd", ctx(s));
     assert.equal(none.parts.cb.s, 1);
-    person(s, "Sam Rivera").cb[9] = 2;
+    person(s, "Sam Rivera").cb[9] = none.parts.cb.target;
     const atTarget = Sc.scoreTech(person(s, "Sam Rivera"), "mtd", ctx(s));
-    assert.equal(atTarget.parts.cb.s, 0.5);
+    assert.ok(Math.abs(atTarget.parts.cb.s - 0.5) < 1e-9);
   });
 
   it("leaves the grade blank when every weighted metric has no data", function () {
@@ -335,8 +335,9 @@ describe("apprentice attendance", function () {
     assert.equal(st.attend, 0.8);
     assert.equal(Math.round(st.onTime * 1000) / 1000, Math.round((2 / 3) * 1000) / 1000);
     assert.equal(person(s, "Alex Rivera").att.y.sched[8], 0);
-    assert.equal(graded.score, 61);
-    assert.equal(graded.grade, "D");
+    // One missed day and 8 PTO hours are the whole month's allowance, scored against Oct 26's pace.
+    assert.equal(graded.score, 58);
+    assert.equal(graded.grade, "F");
   });
 
   it("treats the grace minute as on time and the next minute as late", function () {
@@ -772,8 +773,16 @@ describe("named grading settings", function () {
       assert.equal(graded.parts.cb.s, 0);
     });
     const half = snap({ "Leaderboard": [LB_H, ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0]] });
-    person(half, "Sam Rivera").cb[9] = 2;
-    assert.equal(Sc.scoreTech(person(half, "Sam Rivera"), "mtd", ctx(half)).parts.cb.s, 0.5);
+    const halfBase = Sc.scoreTech(person(half, "Sam Rivera"), "mtd", ctx(half));
+    person(half, "Sam Rivera").cb[9] = halfBase.parts.cb.target;
+    const halfAt = Sc.scoreTech(person(half, "Sam Rivera"), "mtd", ctx(half));
+    assert.ok(Math.abs(halfAt.parts.cb.s - 0.5) < 1e-9);
+    withRule({ prorateMtdTargets: false }, function () {
+      const full = snap({ "Leaderboard": [LB_H, ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0]] });
+      person(full, "Sam Rivera").cb[9] = 2;
+      assert.equal(Sc.scoreTech(person(full, "Sam Rivera"), "mtd", ctx(full)).parts.cb.s, 0.5);
+      assert.equal(Sc.scoreTech(person(full, "Sam Rivera"), "mtd", ctx(full)).parts.cb.target, 2);
+    });
 
     const jan15 = Sc.nyDate(2026, 0, 15, 12, 0, 0);
     withRule({ ytdMinMonths: 0 }, function () {
@@ -791,7 +800,10 @@ describe("named grading settings", function () {
       assert.equal(l30.parts.rev.target, 40000);
     });
     const plain = snap({ "Leaderboard": [LB_H, ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0]] });
-    assert.equal(Sc.scoreTech(person(plain, "Sam Rivera"), "mtd", ctx(plain)).parts.rev.target, 40000);
+    assert.ok(Math.abs(Sc.scoreTech(person(plain, "Sam Rivera"), "mtd", ctx(plain)).parts.rev.target - 40000 * (26 / 31)) < 1e-6);
+    withRule({ prorateMtdTargets: false }, function () {
+      assert.equal(Sc.scoreTech(person(plain, "Sam Rivera"), "mtd", ctx(plain)).parts.rev.target, 40000);
+    });
 
     withRule({ salesRankBy: "score" }, function () {
       const s = snap({
@@ -1605,5 +1617,64 @@ describe("call center", function () {
     assert.equal(yesterday.inboundWeek, null);
     assert.equal(yesterday.rate, null);
     assert.equal(yesterday.show, true);
+  });
+});
+
+describe("pace grades, instruction rows, and unpaid invoices", function () {
+  it("uses at least a week of the monthly goal in the first days of the month", function () {
+    const nov3 = Sc.nyDate(2026, 10, 3, 12, 0, 0);
+    const s = snap({ "Leaderboard": [LB_H, ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0]] }, nov3);
+    const graded = Sc.scoreTech(person(s, "Sam Rivera"), "mtd", ctx(s, { now: nov3 }));
+    assert.ok(Math.abs(graded.parts.rev.target - 40000 * (7 / 30)) < 1e-6);
+    const nov17 = Sc.nyDate(2026, 10, 17, 15, 0, 0);
+    const later = Sc.scoreTech(person(s, "Sam Rivera"), "mtd", ctx(s, { now: nov17 }));
+    assert.ok(Math.abs(later.parts.rev.target - 40000 * (17 / 30)) < 1e-6);
+    assert.equal(Sc.scoreTech(person(s, "Sam Rivera"), "l30", ctx(s, { now: nov17 })).parts.rev.target, 40000);
+  });
+
+  it("does not grade a leaderboard instruction row as a technician", function () {
+    const s = snap({
+      "Leaderboard": [
+        LB_H,
+        ["Sam Rivera", "active", 0, 0, 0, 0, 0, 0, 0],
+        ["💡 Set status to inactive to hide a tech from the board", "active", 0, 0, 0, 0, 0, 0, 0]
+      ]
+    });
+    const names = Object.keys(s.techs).map(function (k) { return s.techs[k].full; });
+    assert.ok(names.indexOf("Sam Rivera") >= 0);
+    assert.equal(names.some(function (n) { return n.indexOf("Set status") >= 0; }), false);
+  });
+
+  it("uses the Goals tab average ticket unless Board_Config set one", function () {
+    const cfg = Settings.defaultCfg();
+    Sc.applyCompanyGoals(cfg, { avg_ticket: { v: 850 } }, {});
+    assert.equal(cfg.metrics.avg.target, 850);
+    const pinned = Settings.defaultCfg();
+    pinned.metrics.avg.target = 700;
+    Sc.applyCompanyGoals(pinned, { avg_ticket: { v: 850 } }, { t_avg: 700 });
+    assert.equal(pinned.metrics.avg.target, 700);
+  });
+
+  it("sums open invoice balances and keeps paid, canceled, and empty invoices out", function () {
+    const H = ["Job ID", "Status", "Invoice #", "Empty Invoice", "Balance", "Primary Technician", "Invoice Date", "Completion Date"];
+    const s = snap({
+      "ST Jobs": [
+        H,
+        ["1", "Completed", "100", "false", 500, "Sam Rivera", "10/1/2026", "10/1/2026"],
+        ["2", "Completed", "101", "false", 0, "Sam Rivera", "10/2/2026", "10/2/2026"],
+        ["3", "Canceled", "102", "false", 900, "Sam Rivera", "10/3/2026", "10/3/2026"],
+        ["4", "Completed", "103", "true", 400, "Sam Rivera", "10/4/2026", "10/4/2026"],
+        ["5", "In Progress", "104", "false", 250.5, "Amy Cole", "10/20/2026", "10/20/2026"],
+        ["6", "Completed", "105", "false", 80, "Franco DosSantos", "10/5/2026", "10/5/2026"]
+      ]
+    });
+    assert.equal(s.unpaid.totalN, 3);
+    assert.equal(s.unpaid.totalAmt, 830.5);
+    assert.equal(s.unpaid.asOf, "2026-10-20");
+    const franco = s.unpaid.rows.filter(function (r) { return r.name.indexOf("Franco") >= 0; })[0];
+    assert.ok(franco);
+    assert.equal(franco.amount, 80);
+    assert.equal(Sc.nameIsHidden(franco.name, ["Franco"]), true);
+    assert.equal(s.unpaid.rows.some(function (r) { return r.amount === 900 || r.amount === 400; }), false);
   });
 });

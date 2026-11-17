@@ -470,3 +470,17 @@ body.tv .hdr{display:none}
 .day-col b{font-size:2.2vh;font-weight:900;margin-top:.4vh}
 .day-col span{font-size:1.5vh;font-weight:800;color:#FFB4A8}
 .day-col em{font-style:normal;font-size:1.6vh;font-weight:800;color:#E7F6FC}
+.oc-hero{display:flex;align-items:center;gap:2vw;background:rgba(38,164,203,.16);border:1px solid var(--blue);border-radius:1.6vh;padding:2vh 2vw;margin-top:1vh}
+.oc-av{width:16vh;height:16vh;font-size:5vh}
+.oc-copy{min-width:0}
+.oc-copy .nm{font-stretch:120%;font-weight:900;font-size:8vh;line-height:.95}
+.oc-phone{font-stretch:118%;font-weight:900;font-size:4.2vh;color:#E7F6FC;margin-top:.6vh}
+.oc-mgr{display:flex;gap:1.2vw;align-items:baseline;margin-top:1.2vh;font-size:2.6vh;font-weight:800;color:#E7F6FC}
+.oc-mgr b{font-size:3.2vh;font-weight:900;color:#fff}
+.oc-mgr em{font-style:normal;font-size:2.8vh;font-weight:800}
+.oc-list{margin-top:2vh}
+.oc-h{font-size:2vh;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:#E7F6FC;margin-bottom:.6vh}
+.oc-next{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1.2fr) minmax(0,.8fr);gap:1vw;align-items:center;background:rgba(18,25,28,.85);border:1px solid #23313A;border-radius:1.2vh;padding:1.2vh 1.4vw;margin-top:.6vh}
+.oc-next .d{font-size:2.4vh;font-weight:800;color:#E7F6FC}
+.oc-next b{font-stretch:118%;font-weight:900;font-size:3.6vh}
+.oc-next span{text-align:right;font-size:2.6vh;font-weight:800;color:#E7F6FC}

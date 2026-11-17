@@ -210,6 +210,7 @@
     {k:"goal",  label:"Monthly goal (install + service split)"},
     {k:"calls", label:"Call center (inbound, booking rate, callbacks, abandoned)"},
     {k:"calls2", label:"Call center week to week"},
+    {k:"oncall", label:"On call (only while a current week is on the On Call tab)"},
     {k:"trend", label:"Revenue by month"},
     {k:"all",   label:"Team scoreboard (every metric, one screen)"},
     {k:"lb",    label:"Tech leaderboard"},
@@ -233,7 +234,7 @@
   var PHOTO_FOLDER = "11gVMpNygKLHh7vHBqly2c3lj9WwNef_j";
 
   // Tab names must match the sheet exactly. "Automation Estimates" has no leading space.
-  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Google Reviews","Announcements","Team Spotlight","Contest","Races","Flips","Memberships","Review Tracker","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","MP Reviews","ST Reviews","ST Callbacks","ST Customers","Install Board","Call Center","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
+  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Google Reviews","Announcements","Team Spotlight","Contest","Races","Flips","Memberships","Review Tracker","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","MP Reviews","ST Reviews","ST Callbacks","ST Customers","Install Board","Call Center","On Call","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
 
   function defaultCfg() {
     return {

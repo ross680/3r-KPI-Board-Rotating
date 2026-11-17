@@ -92,6 +92,7 @@ function activeSlides(){
   try {
     if (ok("calls") && snap && Sc.callCenterView(snap, Sc.nyNow()).show) out.push({k:"calls"});
     if (ok("calls2") && snap && snap.callCenter && ((snap.callCenter.weeks && snap.callCenter.weeks.length) || (snap.callCenter.days && snap.callCenter.days.length > 1))) out.push({k:"calls2"});
+    if (ok("oncall") && snap && snap.onCall && snap.onCall.show && snap.onCall.current) out.push({k:"oncall"});
   } catch (e) {}
   if (ok("trend") && snap && snap.jobRows) out.push({k:"trend"});
   if (ok("all")) out.push({k:"all"});
@@ -263,6 +264,7 @@ function slideHTML(sl){
   if (sl.k==="mem") return fieldSlideHTML(snap);
   if (sl.k==="calls") return callSlideHTML(snap, now);
   if (sl.k==="calls2") return callTrendHTML(snap, now);
+  if (sl.k==="oncall") return onCallHTML(snap, now);
   if (sl.k==="flips") return flipSlideHTML(snap, now);
   if (sl.k==="contest") return contestSlideHTML(snap, now);
   if (sl.k==="celebrate"){
@@ -404,6 +406,29 @@ function welcomeHTML(a){
     return `<div class="welcome-card"><div class="av"><img src="${esc(src)}" alt=""></div><b>${esc(f.name)}</b></div>`;
   }).join("");
   return `<div class="ann welcome">${a.icon?`<div class="ic">${esc(a.icon)}</div>`:""}<div class="badge">${esc(a.badge||"Welcome")}</div><div class="msg">${esc(a.message)}</div>${a.detail?`<div class="sub">${esc(a.detail)}</div>`:""}<div class="welcome-row">${cards}</div></div>`;
+}
+function onCallKey(name){
+  const techs=(S.snap&&S.snap.techs)||{};
+  return Sc.matchTech(techs, name)||"";
+}
+function onCallHTML(snap, now){
+  const oc=snap.onCall||{};
+  const cur=oc.current;
+  if(!oc.show||!cur) return "";
+  const p=Sc.nyParts(now||Sc.nyNow());
+  const when=p.wd===0||p.wd===6?"This weekend":"Tonight";
+  const range=(a,b)=>esc(nyShort(a))+"–"+esc(nyShort(b));
+  const face=(name)=>{
+    const k=onCallKey(name);
+    return k?av(k, name, "oc-av"):`<div class="av oc-av">${esc(initials(name))}</div>`;
+  };
+  const phone=n=>n?`<div class="oc-phone num">${esc(n)}</div>`:"";
+  const next=(oc.upcoming||[]).map(w=>`<div class="oc-next"><div class="d">${range(w.weekStart, w.weekEnd)}</div><b>${esc(w.tech)}</b>${w.techPhone?`<span class="num">${esc(w.techPhone)}</span>`:""}</div>`).join("");
+  const mgr=cur.manager?`<div class="oc-mgr"><span>Manager</span><b>${esc(cur.manager)}</b>${cur.managerPhone?`<em class="num">${esc(cur.managerPhone)}</em>`:""}</div>`:"";
+  return `<div class="kicker">On Call tab · ${esc(when)} · ${range(cur.weekStart, cur.weekEnd)}</div>
+    <div class="big-h tight">On call now</div>
+    <div class="oc-hero">${face(cur.tech)}<div class="oc-copy"><div class="nm">${esc(cur.tech)}</div>${phone(cur.techPhone)}${mgr}</div></div>
+    ${next?`<div class="oc-list"><div class="oc-h">Next</div>${next}</div>`:""}`;
 }
 function callTrendHTML(snap, now){
   const cc=snap.callCenter||{};

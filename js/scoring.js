@@ -1137,6 +1137,60 @@
     }
     return { week: week, day: day, weeks: weeks, days: days };
   }
+  /* On Call tab: week_start, week_end, tech, tech_phone, manager, manager_phone.
+     Dates are YYYY-MM-DD. A week is current only when today is inside it.
+     A missing tab, a header with no rows, or only past and future weeks stays hidden. */
+  function readOnCall(rows, now) {
+    rows = rows || [];
+    now = now || nyNow();
+    var headerAt = -1, h = {};
+    var i, j;
+    for (i = 0; i < rows.length; i++) {
+      var map = {};
+      var line = rows[i] || [];
+      for (j = 0; j < line.length; j++) {
+        var key = String(line[j] == null ? "" : line[j]).trim().toLowerCase().replace(/[\s-]+/g, "_");
+        if (key) map[key] = j;
+      }
+      if (map.week_start != null && map.tech != null && map.week_end != null) { headerAt = i; h = map; break; }
+    }
+    var empty = { show: false, current: null, upcoming: [] };
+    if (headerAt < 0) return empty;
+    var today = nyYMD(now);
+    var list = [];
+    rows.slice(headerAt + 1).forEach(function (r) {
+      if (!r) return;
+      var start = toDate(r[h.week_start]);
+      var end = toDate(r[h.week_end]);
+      var tech = cleanPersonName(r[h.tech] || "");
+      if (!start || !end || !tech) return;
+      var startIso = nyYMD(start);
+      var endIso = nyYMD(end);
+      if (endIso < startIso) return;
+      var phone = function (col) {
+        if (h[col] == null || r[h[col]] == null) return "";
+        return String(r[h[col]]).trim();
+      };
+      list.push({
+        weekStart: startIso,
+        weekEnd: endIso,
+        tech: tech,
+        techPhone: phone("tech_phone"),
+        manager: h.manager == null ? "" : cleanPersonName(r[h.manager] || ""),
+        managerPhone: phone("manager_phone")
+      });
+    });
+    list.sort(function (a, b) { return a.weekStart < b.weekStart ? -1 : a.weekStart > b.weekStart ? 1 : 0; });
+    var current = null;
+    list.forEach(function (row) {
+      if (row.weekStart <= today && today <= row.weekEnd) {
+        if (!current || row.weekStart > current.weekStart) current = row;
+      }
+    });
+    if (!current) return empty;
+    var upcoming = list.filter(function (row) { return row.weekStart > current.weekEnd; }).slice(0, 3);
+    return { show: true, current: current, upcoming: upcoming, asOf: today };
+  }
   /* ST Reviews has no customer, phone, address, or job column. A match is possible only when
      the review text contains a job id or a customer name, and a completed job sits within 30 days before it.
      A date by itself is not a match. Appointments have no technician, so Install Board names are used when that job is listed there. */
@@ -2142,6 +2196,7 @@
       google: readGoogleProfile(sheetRows(wb, "Google Reviews")),
       unpaid: readUnpaidInvoices(jobSheet, names),
       sources: sheetSources(wb),
+      onCall: readOnCall(sheetRows(wb, "On Call"), now),
       callCenter: {
         target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET,
         week: callParsed.week,
@@ -2829,7 +2884,7 @@
     drivePhotoUrl:drivePhotoUrl, readTeamSpotlight:readTeamSpotlight, activeSpotlight:activeSpotlight,
     spotlightDeck:spotlightDeck, weaveSpotlight:weaveSpotlight,
     readFlipEntries:readFlipEntries, flipBoard:flipBoard, flipAlerts:flipAlerts, tickerItems:tickerItems,
-    readCallCenter:readCallCenter, countCallbackJobs:countCallbackJobs, callCenterView:callCenterView,
+    readCallCenter:readCallCenter, readOnCall:readOnCall, countCallbackJobs:countCallbackJobs, callCenterView:callCenterView,
     contestForMonth:contestForMonth, contestPrizes:contestPrizes, contestStandings:contestStandings, raceStandings:raceStandings, daysLeftInMonth:daysLeftInMonth,
     percentToGoal:percentToGoal, monthPace:monthPace, yearPace:yearPace, paceStatus:paceStatus, periodStart:periodStart,
     periodLabel:periodLabel, monthName:monthName, isStale:isStale, chooseDataMode:chooseDataMode,

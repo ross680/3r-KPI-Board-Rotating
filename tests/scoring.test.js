@@ -605,6 +605,7 @@ describe("goals, pace, stale data, and sheet settings", function () {
     assert.ok(Settings.SHEET_TABS.includes("ST Appointments"));
     assert.ok(Settings.SHEET_TABS.includes("ST Memberships"));
     assert.ok(Settings.SHEET_TABS.includes("ST Reviews"));
+    assert.ok(Settings.SHEET_TABS.includes("MP Reviews"));
     assert.ok(Settings.SHEET_TABS.includes("ST Callbacks"));
     assert.ok(Settings.SHEET_TABS.includes("Memberships"));
     assert.ok(Settings.SHEET_TABS.includes("Review Tracker"));
@@ -1720,6 +1721,74 @@ describe("automatic flips, memberships, callbacks, and Google reviews", function
     assert.equal(Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s)).cb, 1);
     assert.equal(s.callbacks.month, 2);
     assert.equal(s.callbacks.unassignedMonth, 1);
+  });
+
+  it("counts Marketing Pro reviews by technician and ignores ST Reviews while that tab has rows", function () {
+    const now = Sc.nyDate(2026, 10, 17, 15, 0, 0);
+    const H = ["Published", "Platform", "Rating", "Author", "Technician", "Technician ID", "Job ID", "Customer", "Customer ID", "Verification", "Job Type", "Completed", "Review Type", "Review", "Review ID"];
+    const s = snap({
+      "ST Techs": [
+        TECH_H,
+        ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""],
+        ["Franco DosSantos", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "F1", ""],
+        ["David Sevieri", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "D1", ""]
+      ],
+      "MP Reviews": [
+        H,
+        ["2026-11-17", "Google", 5, "Jeffrey Scribner", "", "", "", "", "", "False", "", "", "Original", "", "R1"],
+        ["2026-10-30", "Google", 5, "Ron Mills", "Sam Rivera", "S1", "94959751", "Ron Mills", "1", "True", "Plumbing Install", "2026-10-27", "Original", "The tech was careful and cleaned up every bit of the mess before he left the house.", "R2"],
+        ["2026-11-02", "Google", 3, "Ann", "David Sevieri Tech", "D1", "", "", "", "True", "", "2026-11-01", "Original", "Short but kind visit today and the heat is back on in the house.", "R3"],
+        ["2026-01-15", "Facebook", 4, "Pat", "Franco DosSantos", "F1", "", "", "", "True", "", "2026-01-14", "Original", "Franco fixed the boiler and explained the next step clearly before leaving.", "R4"],
+        ["2025-12-01", "Google", 5, "Old", "Sam Rivera", "S1", "", "", "", "True", "", "2025-11-20", "Original", "Last year he replaced the water heater and the house has been warm since.", "R5"]
+      ],
+      "ST Reviews": [
+        ["Published", "Platform", "Rating", "Technician ID", "Technician", "Review"],
+        ["2026-11-01", "Google", 1, "", "Sam Rivera", "This ServiceTitan row must not count once Marketing Pro has a dated review."]
+      ]
+    }, now);
+    assert.equal(s.reviewSource, "marketingpro");
+    assert.equal(s.reviewRows, 5);
+    assert.equal(s.reviewMatch.tagged, 4);
+    assert.equal(s.reviewUntagged, 1);
+    assert.equal(s.leaderSums.rv_mtd, 2);
+    assert.equal(s.leaderSums.rv_ytd, 4);
+    assert.equal(s.leaderSums.rv_l30, 3);
+    assert.equal(person(s, "Sam Rivera").rv.mtd, 0);
+    assert.equal(person(s, "Sam Rivera").rv.ytd, 1);
+    assert.equal(person(s, "Sam Rivera").rv.l30, 1);
+    assert.equal(person(s, "David Sevieri").rv.mtd, 1);
+    assert.equal(person(s, "David Sevieri").rv.stars.ytd.s, 3);
+    assert.equal(person(s, "Franco DosSantos").rv.ytd, 1);
+    assert.equal(s.reviews[0].author, "Jeffrey Scribner");
+    assert.equal(s.reviews[0].who, "");
+    assert.equal(s.reviews[1].who, "David");
+    assert.equal(Math.round(s.reviewStars.ytd.s / s.reviewStars.ytd.n * 10) / 10, 4.3);
+  });
+
+  it("credits a Marketing Pro review to an inactive ServiceTitan technician", function () {
+    const now = Sc.nyDate(2026, 10, 17, 15, 0, 0);
+    const H = ["Published", "Platform", "Rating", "Author", "Technician", "Technician ID", "Job ID", "Customer", "Customer ID", "Verification", "Job Type", "Completed", "Review Type", "Review", "Review ID"];
+    const s = snap({
+      "ST Techs": [TECH_H, ["Luke Anderson", "Plumbing Service", "FALSE", "2020-01-01", "08:00", "L1", ""]],
+      "MP Reviews": [H, ["2026-11-03", "Google", 5, "Pat", "Luke Anderson", "L1", "1", "Pat", "9", "True", "Plumbing Service", "2026-11-02", "Original", "Luke found the leak and had the water back on before lunch.", "R9"]]
+    }, now);
+    assert.equal(person(s, "Luke Anderson").rv.mtd, 1);
+    assert.equal(person(s, "Luke Anderson").rv.stars.ytd.n, 1);
+    assert.equal(s.reviewMatch.credited, 1);
+    assert.equal(s.leaderSums.rv_mtd, 1);
+  });
+
+  it("keeps ST Reviews when Marketing Pro has a header and no dated rows", function () {
+    const s = snap({
+      "ST Techs": [TECH_H, ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""]],
+      "MP Reviews": [["Published", "Platform", "Rating", "Author", "Technician", "Technician ID", "Job ID", "Customer", "Customer ID", "Verification", "Job Type", "Completed", "Review Type", "Review", "Review ID"]],
+      "ST Reviews": [
+        ["Published", "Platform", "Rating", "Technician ID", "Technician", "Review"],
+        ["10/20/2026", "Google", 5, "S1", "Sam Rivera", "Came out the same day and fixed the boiler right away for us"]
+      ]
+    });
+    assert.equal(s.reviewSource, "st");
+    assert.equal(person(s, "Sam Rivera").rv.mtd, 1);
   });
 
   it("matches a blank review to a job only with an id or a customer name inside 30 days", function () {

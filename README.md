@@ -110,7 +110,15 @@ Estimates written are dated on creation. Sold dollars are dated on sold-on, or o
 
 `ST Memberships`: `membership id`, `created`, `type` (renewals are excluded), `sold by id`, `sold by`. A sold-by id that is not on `ST Techs`, such as `16129167`, stays in the company total and is labeled Unassigned. It is not a row on the tech list.
 
-`ST Reviews`: `published`, `rating`, `review`, `platform`, `technician id`, `technician`. A review goes on the reviews slide when the text is longer than 30 characters and the rating is 4 or higher, or blank. The slide lists this month, the last 30 days, and the year for each tech, plus the company totals and the date of the newest review. The technician id, or the full name in the technician column, credits that person. The review text credits a first name only when exactly one known person has it. A shared first name is not credited, and the admin page lists the clash. Names shorter than 3 letters are not matched in the text. A review with no technician still counts once in the company total. The hand-typed `Reviews` tab is used only when `ST Reviews` has no quote rows.
+`MP Reviews` is the review grade and the reviews slide when it has a dated row. Header:
+
+```
+Published	Platform	Rating	Author	Technician	Technician ID	Job ID	Customer	Customer ID	Verification	Job Type	Completed	Review Type	Review	Review ID
+```
+
+`Published` and `Completed` are `YYYY-MM-DD`. The technician id is matched to `ST Techs`, then the technician name, the same way other ServiceTitan names are matched. A trailing "tech" on the name is ignored. A review with no technician stays in the company total and is not given to a person. The company total also includes people on the hidden-tech list. The slide shows this month, the last 30 days, this year, and the average rating this year. The three newest reviews sit beside the company total: date, stars, the tech's first name, and a short line of text. `ST Reviews` is used only when `MP Reviews` has no dated rows.
+
+`ST Reviews`: `published`, `rating`, `review`, `platform`, `technician id`, `technician`. A review goes on the reviews slide when the text is longer than 30 characters and the rating is 4 or higher, or blank. The slide lists this month, the last 30 days, and the year for each tech, plus the company totals and the date of the newest review. The technician id, or the full name in the technician column, credits that person. The review text credits a first name only when exactly one known person has it. A shared first name is not credited, and the admin page lists the clash. Names shorter than 3 letters are not matched in the text. A review with no technician still counts once in the company total. The hand-typed `Reviews` tab is used only when neither `MP Reviews` nor `ST Reviews` has quote rows.
 
 The export has no customer, phone, address, or job column. For a blank technician, the board also tries the review text against `ST Jobs`, `ST Customers`, and `Install Board`. A high match is a 6-to-9 digit job number that is on `ST Jobs`, or a full customer name that is unique in the text, and a completed job for that customer finished on or before the review and no more than 30 days earlier. Install Board `Techs` are credited when that job is listed there. Otherwise the primary technician is credited. A unique last name of 6 or more letters is a lower match: it is counted on the slide note and is not added to the grade. A date by itself is not a match. `ST Appointments` has no technician names, so it cannot assign the review. A high match is included in the tech's review count and marked `matched`.
 
@@ -120,7 +128,7 @@ Tabs that were looked at and not turned into new slides: `ST Appointments` (hour
 
 `ST Callbacks`: `callback job id`, `created`, `status` (canceled rows are skipped), `original job id`. The tab has no technician column. The board joins `original job id` to `ST Jobs` and credits that job's primary technician. That count is the grade. `Call Back Record` is used only when `ST Callbacks` is empty. A callback whose original job is missing from `ST Jobs` stays in the company total.
 
-`Reviews` (typed by hand, used when `ST Reviews` is empty): row 1 is a header, then column B by, C text, D stars, E date. This is the quote carousel. The race uses a separate tab named `Review Tracker`.
+`Reviews` (typed by hand, used when neither `MP Reviews` nor `ST Reviews` has a quote): row 1 is a header, then column B by, C text, D stars, E date. This is the quote carousel. The race uses a separate tab named `Review Tracker`.
 
 `Google Reviews` is the company Google rating. It is separate from `ST Reviews`. Row 1 is this header, and each review is one new row under it:
 

@@ -122,6 +122,14 @@ Published	Platform	Rating	Author	Technician	Technician ID	Job ID	Customer	Custom
 
 The export has no customer, phone, address, or job column. For a blank technician, the board also tries the review text against `ST Jobs`, `ST Customers`, and `Install Board`. A high match is a 6-to-9 digit job number that is on `ST Jobs`, or a full customer name that is unique in the text, and a completed job for that customer finished on or before the review and no more than 30 days earlier. Install Board `Techs` are credited when that job is listed there. Otherwise the primary technician is credited. A unique last name of 6 or more letters is a lower match: it is counted on the slide note and is not added to the grade. A date by itself is not a match. `ST Appointments` has no technician names, so it cannot assign the review. A high match is included in the tech's review count and marked `matched`.
 
+`On Call` is a separate tab. It is not the June 2026 roster and not the Team Portal page. Header:
+
+```
+week_start	week_end	tech	tech_phone	manager	manager_phone
+```
+
+`week_start` and `week_end` are `YYYY-MM-DD`, and the end date is included. The slide appears only when today, in America/New_York, falls inside a row that also has a tech name. A missing tab, a header with no rows, or weeks that have already ended stays off the rotation. The current row is shown large, with a photo when `Board_Techs` has one for that name, and a phone only when that cell has a number. The manager line works the same way. Up to three later weeks are listed under it. Someone on the hidden-tech list, including Franco, is still shown here when that row names them. The other slides still hide those names.
+
 `Call Center` week-to-week is a second slide. It compares the two newest weekly rows (inbound, booked, bookable, booking rate, abandoned) and shows the daily inbound and abandoned rows that exist. It does not invent an answer rate, a handle time, a wait time, or a by-agent split. Those columns are not on the tab. Callbacks owed and completed stay off this slide while they are blank.
 
 Tabs that were looked at and not turned into new slides: `ST Appointments` (hours are already on the install count; no technician and no arrival time), `ST Timesheets` (already the apprentice attendance grade; no job link for utilization), `ST Estimates` (close rate is already on the sales board), `ST Estimate Detail` (price and cost lines, not a new TV number), `ST Customers` (used only to join a review to a job), and `Install Board` (promised arrival window and customer notes, not an actual arrival, so it is not an on-time slide).
@@ -225,7 +233,7 @@ The Flip Tracker slide ranks this month's flips, shows converted flips and the c
 | `coSource` | `auto` (from jobs) or `actuals` |
 | `tvGrades` | `no` hides letter grades on the TV. Admin still shows them. |
 | `logoPlate` | `no` turns off the white plate behind the logo |
-| `slidesOff` | Comma-separated slide keys to hide: `goal`, `calls`, `calls2`, `trend`, `all`, `lb`, `unpaid`, `flips`, `mem`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
+| `slidesOff` | Comma-separated slide keys to hide: `goal`, `calls`, `calls2`, `oncall`, `trend`, `all`, `lb`, `unpaid`, `flips`, `mem`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
 | `flip_goal` | Company flip goal for the month. Replaces the 20 in `js/settings.js`. |
 | `hidden_techs` | Comma-separated names left off individual slides, grades, the flip tracker, the races, flip alerts, and the team spotlight. Defaults to `Franco`. A blank value shows everyone again. Their jobs and dollars stay in the company, team, monthly, and goal totals. A name matches any person who has each of its words, ignoring case, so `Franco` also covers `Franco DosSantos`. |
 | `w_<metric>` / `t_<metric>` | Technician weight and monthly target |

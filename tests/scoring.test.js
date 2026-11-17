@@ -606,6 +606,7 @@ describe("goals, pace, stale data, and sheet settings", function () {
     assert.ok(Settings.SHEET_TABS.includes("ST Memberships"));
     assert.ok(Settings.SHEET_TABS.includes("ST Reviews"));
     assert.ok(Settings.SHEET_TABS.includes("MP Reviews"));
+    assert.ok(Settings.SHEET_TABS.includes("On Call"));
     assert.ok(Settings.SHEET_TABS.includes("ST Callbacks"));
     assert.ok(Settings.SHEET_TABS.includes("Memberships"));
     assert.ok(Settings.SHEET_TABS.includes("Review Tracker"));
@@ -1821,6 +1822,41 @@ describe("automatic flips, memberships, callbacks, and Google reviews", function
     assert.equal(s.reviewMatch.unmatched, 2);
     assert.equal(sam.rv, 2);
     assert.equal(person(s, "Sam Rivera").rvMatched.mtd, 2);
+  });
+
+  it("shows the On Call week that contains today and hides a season that already ended", function () {
+    const now = Sc.nyDate(2026, 10, 17, 21, 0, 0);
+    const H = ["week_start", "week_end", "tech", "tech_phone", "manager", "manager_phone"];
+    const oldOnly = snap({
+      "On Call": [H, ["2026-06-22", "2026-06-28", "Franco DosSantos", "555-0100", "Ross Hunt", "555-0199"]]
+    }, now);
+    assert.equal(oldOnly.onCall.show, false);
+    assert.equal(oldOnly.onCall.current, null);
+    const s = snap({
+      "ST Techs": [TECH_H, ["Franco DosSantos", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "F1", ""]],
+      "On Call": [
+        H,
+        ["2026-06-22", "2026-06-28", "Nick Yukich", "555-0111", "", ""],
+        ["2026-11-16", "2026-11-22", "Franco DosSantos", "555-0100", "Ross Hunt", "555-0199"],
+        ["2026-11-23", "2026-11-29", "Kaio Reis", "", "Ross Hunt", ""],
+        ["2026-11-30", "2026-12-06", "Justin Romano", "555-0142", "", ""],
+        ["", "", "", "", "", ""],
+        ["2026-12-07", "2026-12-13", "", "555-0000", "", ""]
+      ]
+    }, now);
+    assert.equal(s.onCall.show, true);
+    assert.equal(s.onCall.current.tech, "Franco DosSantos");
+    assert.equal(s.onCall.current.techPhone, "555-0100");
+    assert.equal(s.onCall.current.manager, "Ross Hunt");
+    assert.equal(s.onCall.upcoming.length, 2);
+    assert.equal(s.onCall.upcoming[0].tech, "Kaio Reis");
+    assert.equal(s.onCall.upcoming[0].techPhone, "");
+    assert.equal(s.onCall.upcoming[1].tech, "Justin Romano");
+    const future = snap({
+      "On Call": [H, ["2026-12-01", "2026-12-07", "Nick Yukich", "", "", ""]]
+    }, now);
+    assert.equal(future.onCall.show, false);
+    assert.equal(Sc.readOnCall([], now).show, false);
   });
 
   it("keeps more than one call-center week and the daily rows", function () {

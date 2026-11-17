@@ -412,6 +412,7 @@ body.tv .hdr{display:none}
 .rv-r .who b{font-size:2.8vh;font-stretch:118%;font-weight:900}
 .rv-r .av{width:5.2vh;height:5.2vh;font-size:2vh}
 .rv-r .c{font-stretch:120%;font-weight:900;font-size:3.4vh}
+.rv-r .c small{display:block;font-size:1.5vh;font-weight:800;color:var(--blue);font-stretch:100%}
 .rv-note{font-size:1.9vh;font-weight:700;color:#E7F6FC;padding-top:.4vh}
 .pay-hero{align-items:center;margin-bottom:.4vh}
 .pay-hero .goal-num{font-size:11vh}
@@ -450,3 +451,16 @@ body.tv .hdr{display:none}
 .field-r .av{width:5.4vh;height:5.4vh;font-size:2vh}
 .field-r .c{font-stretch:120%;font-weight:900;font-size:3.6vh}
 .field-h span:last-child{color:var(--blue)}
+.wk-head,.wk-row{display:grid;grid-template-columns:minmax(0,1.2fr) repeat(2,minmax(0,1fr));gap:1vw;align-items:center}
+.wk-head{font-size:2.2vh;font-weight:800;color:#E7F6FC}
+.wk-head span:not(:first-child),.wk-row b{text-align:right}
+.wk-row{background:rgba(18,25,28,.85);border:1px solid #23313A;border-radius:1vh;padding:1vh 1.2vw;margin-top:.6vh}
+.wk-row .l{font-size:2.4vh;font-weight:800;color:#E7F6FC}
+.wk-row b{font-stretch:120%;font-weight:900;font-size:4.2vh}
+.day-bars{display:flex;gap:.8vw;align-items:flex-end;margin-top:1.6vh;height:22vh}
+.day-col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;min-width:0;height:100%}
+.day-bar{width:70%;flex:1;display:flex;align-items:flex-end;background:#12191C;border-radius:.6vh;overflow:hidden}
+.day-bar i{display:block;width:100%;background:var(--blue);border-radius:.6vh .6vh 0 0}
+.day-col b{font-size:2.2vh;font-weight:900;margin-top:.4vh}
+.day-col span{font-size:1.5vh;font-weight:800;color:#FFB4A8}
+.day-col em{font-style:normal;font-size:1.6vh;font-weight:800;color:#E7F6FC}

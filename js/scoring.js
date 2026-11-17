@@ -1069,6 +1069,7 @@
       return cells.indexOf("week of") >= 0 && cells.some(function (c) { return c === "bookable" || c.indexOf("bookable ") === 0; });
     });
     var week = null;
+    var weeks = [];
     if (found.i >= 0) {
       var h = found.h;
       var weekCol = h["week of"];
@@ -1097,11 +1098,14 @@
         };
         if (item.current) current = item;
         if (!latest || item.weekOf > latest.weekOf) latest = item;
+        weeks.push(item);
       }
+      weeks.sort(function (a, b) { return a.weekOf < b.weekOf ? -1 : a.weekOf > b.weekOf ? 1 : 0; });
       week = current || latest;
     }
     var dayFound = headerIndex(rows, isDailyHeader);
     var day = null;
+    var days = [];
     if (dayFound.i >= 0) {
       var dh = dayFound.h;
       var dateCol = dh.date;
@@ -1122,10 +1126,123 @@
         };
         if (dayItem.current) dayCurrent = dayItem;
         if (!dayLatest || dayItem.date > dayLatest.date) dayLatest = dayItem;
+        days.push(dayItem);
       }
+      days.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
       day = dayCurrent || dayLatest;
     }
-    return { week: week, day: day };
+    return { week: week, day: day, weeks: weeks, days: days };
+  }
+  /* ST Reviews has no customer, phone, address, or job column. A match is possible only when
+     the review text contains a job id or a customer name, and a completed job sits within 30 days before it.
+     A date by itself is not a match. Appointments have no technician, so Install Board names are used when that job is listed there. */
+  function buildReviewJobIndex(jobRows, customerRows, installRows) {
+    var jobs = jobRows || [];
+    var jh = headerIndex(jobs, function (r) {
+      return (r || []).some(function (c) { return String(c).trim().toLowerCase() === "primary technician"; });
+    });
+    var byId = {};
+    var completed = [];
+    if (jh.i >= 0) {
+      var h = jh.h;
+      jobs.slice(jh.i + 1).forEach(function (r) {
+        var id = String(r[h["job id"]] == null ? "" : r[h["job id"]]).trim();
+        var num = String(r[h["job #"]] == null ? id : r[h["job #"]]).trim();
+        var done = toDate(r[h["completion date"]]);
+        var status = String(r[h.status] || "");
+        var tech = cleanPersonName(r[h["primary technician"]]);
+        var rec = { id: id, num: num, done: done, status: status, tech: tech, customer: "" };
+        if (id) byId[id] = rec;
+        if (num) byId[num] = rec;
+        if (done && !/cancel/i.test(status) && /complete/i.test(status)) completed.push(rec);
+      });
+    }
+    var customers = [];
+    var ch = headerIndex(customerRows || [], function (r) {
+      return (r || []).some(function (c) { return String(c).trim().toLowerCase() === "customer"; });
+    });
+    if (ch.i >= 0) {
+      var hh = ch.h;
+      (customerRows || []).slice(ch.i + 1).forEach(function (r) {
+        var name = cleanPersonName(r[hh.customer]);
+        if (!name) return;
+        var parts = name.split(" ").filter(Boolean);
+        var jobNum = hh["job #"] == null ? "" : String(r[hh["job #"]] == null ? "" : r[hh["job #"]]).trim();
+        var rec = { name: name, last: parts.length ? parts[parts.length - 1].toLowerCase() : "", jobNum: jobNum };
+        customers.push(rec);
+        var job = byId[jobNum];
+        if (job && !job.customer) job.customer = name.toLowerCase();
+      });
+    }
+    var crew = {};
+    var ih = headerIndex(installRows || [], function (r) {
+      return (r || []).some(function (c) { return String(c).trim().toLowerCase() === "techs"; });
+    });
+    if (ih.i >= 0) {
+      var ihh = ih.h;
+      (installRows || []).slice(ih.i + 1).forEach(function (r) {
+        var id = String(r[ihh["job id"]] == null ? r[ihh["job #"]] : r[ihh["job id"]]).trim();
+        var names = String(r[ihh.techs] || "").split(",").map(function (s) { return cleanPersonName(s); }).filter(Boolean);
+        if (id && names.length) crew[id] = names;
+      });
+    }
+    return { byId: byId, completed: completed, customers: customers, crew: crew };
+  }
+  function daysBefore(reviewAt, jobAt) {
+    if (!reviewAt || !jobAt) return null;
+    var gap = nyDayIndex(reviewAt) - nyDayIndex(jobAt);
+    return gap;
+  }
+  function closestJob(list, reviewAt) {
+    var best = null, bestGap = 9999;
+    list.forEach(function (job) {
+      var gap = daysBefore(reviewAt, job.done);
+      if (gap == null || gap < 0 || gap > 30) return;
+      if (gap < bestGap) { best = job; bestGap = gap; }
+    });
+    return best;
+  }
+  function textHasName(text, name) {
+    var raw = String(name || "").trim().toLowerCase();
+    if (raw.length < 8 || raw.split(" ").length < 2) return false;
+    return new RegExp("(?:^|[^a-z])" + escapeRe(raw) + "(?:[^a-z]|$)").test(String(text || "").toLowerCase());
+  }
+  function reviewJobMatch(text, when, index) {
+    text = String(text || "");
+    var ids = text.match(/\b\d{6,9}\b/g) || [];
+    var i;
+    var idJobs = [];
+    for (i = 0; i < ids.length; i++) if (index.byId[ids[i]]) idJobs.push(index.byId[ids[i]]);
+    var idHit = closestJob(idJobs, when);
+    if (idHit) return { confidence: "high", job: idHit, why: "job id" };
+    var nameHits = [];
+    index.customers.forEach(function (c) {
+      if (textHasName(text, c.name)) nameHits.push(c);
+    });
+    var uniqueNames = {};
+    nameHits.forEach(function (c) { uniqueNames[c.name.toLowerCase()] = c; });
+    var nameKeys = Object.keys(uniqueNames);
+    if (nameKeys.length === 1) {
+      var want = nameKeys[0];
+      var theirs = index.completed.filter(function (job) { return job.customer === want; });
+      var named = closestJob(theirs, when);
+      if (named) return { confidence: "high", job: named, why: "customer name" };
+    }
+    var lasts = {};
+    index.customers.forEach(function (c) {
+      if (c.last.length < 6) return;
+      if (!new RegExp("\\b" + escapeRe(c.last) + "\\b", "i").test(text)) return;
+      lasts[c.last] = lasts[c.last] || {};
+      lasts[c.last][c.name.toLowerCase()] = c;
+    });
+    var lastKeys = Object.keys(lasts).filter(function (k) { return Object.keys(lasts[k]).length === 1; });
+    if (lastKeys.length === 1) {
+      var only = Object.keys(lasts[lastKeys[0]])[0];
+      var lastJobs = index.completed.filter(function (job) { return job.customer === only; });
+      var lastHit = closestJob(lastJobs, when);
+      if (lastHit) return { confidence: "medium", job: lastHit, why: "last name" };
+    }
+    return { confidence: "none", job: null, why: "" };
   }
   /* ServiceTitan callback jobs (a job opened on an original job). Not a CSR callback request. */
   function countCallbackJobs(rows, now) {
@@ -1467,6 +1584,8 @@
       var parsedCalls = readCallCenter(sheetRows(wb, callTab), now);
       snap.callCenter.week = parsedCalls.week;
       snap.callCenter.day = parsedCalls.day;
+      snap.callCenter.weeks = parsedCalls.weeks || [];
+      snap.callCenter.days = parsedCalls.days || [];
       snap.callCenter.target = SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET;
     }
     if (useCbJobs) {
@@ -1750,9 +1869,11 @@
     var rvRes = headerIndex(rvRows, function (r) { return String(r[0]).trim().toLowerCase() === "published"; });
     var autoReviews = [];
     var reviewThrough = null, reviewRowsN = 0, reviewUntagged = 0;
+    var reviewMatch = { blank: 0, high: 0, medium: 0, unmatched: 0, namedInText: 0 };
     if (rvRes.i >= 0) {
       auto.rv = true;
-      Object.keys(T).forEach(function (k) { T[k].rvM = zeros(); T[k].rvL30 = 0; });
+      Object.keys(T).forEach(function (k) { T[k].rvM = zeros(); T[k].rvL30 = 0; T[k].rvMatched = { mtd: 0, l30: 0, ytd: 0 }; });
+      var reviewIndex = buildReviewJobIndex(jr, sheetRows(wb, "ST Customers"), sheetRows(wb, "Install Board"));
       var minLetters = SETTINGS.RULES.reviewNameMinLength || 3;
       var groups = {};
       Object.keys(names.people).forEach(function (id) {
@@ -1773,7 +1894,8 @@
         if (!reviewThrough || d > reviewThrough) reviewThrough = d;
         var techName = cleanPersonName(r[h.technician] || "");
         var techId = String(r[h["technician id"]] || "").trim();
-        if (!techName && !techId) reviewUntagged++;
+        var blankTech = !techName && !techId;
+        if (blankTech) { reviewUntagged++; reviewMatch.blank++; }
         var rating = num(r[h.rating]);
         var text = String(r[h.review] || "").trim();
         if (text.length > 30 && (rating >= 4 || !rating)) autoReviews.push({by:String(r[h.platform] || "Google") + " review", who:techName, t:text.slice(0, 400), s:rating || 5, d:d.toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric", timeZone:TZ}), at:d.getTime()});
@@ -1792,9 +1914,33 @@
           }
           f.people.forEach(function (p) { if (T[p.key]) credited[p.key] = true; });
         });
+        if (blankTech && Object.keys(credited).length) reviewMatch.namedInText++;
+        if (blankTech && !Object.keys(credited).length) {
+          var linked = reviewJobMatch(text, d, reviewIndex);
+          if (linked.confidence === "high") {
+            reviewMatch.high++;
+            var crew = (reviewIndex.crew && (reviewIndex.crew[linked.job.id] || reviewIndex.crew[linked.job.num])) || [];
+            var creditNames = crew.length ? crew : [linked.job.tech];
+            creditNames.forEach(function (nm) {
+              var ck = nm ? resolvePerson(names, nm, "ST Reviews") : null;
+              if (ck && T[ck] && !credited[ck]) credited[ck] = "high";
+            });
+          } else if (linked.confidence === "medium") reviewMatch.medium++;
+          else reviewMatch.unmatched++;
+        }
         Object.keys(credited).forEach(function (k) {
-          if (dp.y === Y && T[k]) T[k].rvM[dp.m]++;
-          if (d >= l30 && T[k]) T[k].rvL30++;
+          if (dp.y === Y && T[k]) {
+            T[k].rvM[dp.m]++;
+            if (credited[k] === "high") {
+              if (!T[k].rvMatched) T[k].rvMatched = { mtd: 0, l30: 0, ytd: 0 };
+              T[k].rvMatched.ytd++;
+              if (dp.m === M) T[k].rvMatched.mtd++;
+            }
+          }
+          if (d >= l30 && T[k]) {
+            T[k].rvL30++;
+            if (credited[k] === "high" && T[k].rvMatched) T[k].rvMatched.l30++;
+          }
         });
       });
     }
@@ -1905,6 +2051,7 @@
     var snapOut = {v:2, builtAt: now.getTime(), auto:auto, flags:flags.slice(0, 200), dataThrough: maxDate ? nyYMD(maxDate) : "", month:M, year:Y, jobRows:jobRows, estRows:estRows,
       goals:goals, ytdGoals:ytdGoals, actuals:actuals, techs:T, co:co, reviews:reviewsOut, anns:[], annLive:null, contest:null, feed:null, updates:updates, leaderSums:leaderSums, weather:weather, ambiguous:names.ambiguous,
       reviewThrough: reviewThrough ? nyYMD(reviewThrough) : "", reviewRows: reviewRowsN, reviewUntagged: reviewUntagged,
+      reviewMatch: reviewMatch,
       memUnassigned: memUnassigned, callbacks: callbackRoll,
       google: readGoogleProfile(sheetRows(wb, "Google Reviews")),
       unpaid: readUnpaidInvoices(jobSheet, names),
@@ -1913,6 +2060,8 @@
         target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET,
         week: callParsed.week,
         day: callParsed.day,
+        weeks: callParsed.weeks || [],
+        days: callParsed.days || [],
         jobs: {
           known: !!cbCounts,
           week: cbCounts ? cbCounts.week : 0,

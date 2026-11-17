@@ -91,6 +91,7 @@ function activeSlides(){
   if (ok("goal")) out.push({k:"goal"});
   try {
     if (ok("calls") && snap && Sc.callCenterView(snap, Sc.nyNow()).show) out.push({k:"calls"});
+    if (ok("calls2") && snap && snap.callCenter && ((snap.callCenter.weeks && snap.callCenter.weeks.length) || (snap.callCenter.days && snap.callCenter.days.length > 1))) out.push({k:"calls2"});
   } catch (e) {}
   if (ok("trend") && snap && snap.jobRows) out.push({k:"trend"});
   if (ok("all")) out.push({k:"all"});
@@ -261,6 +262,7 @@ function slideHTML(sl){
   }
   if (sl.k==="mem") return fieldSlideHTML(snap);
   if (sl.k==="calls") return callSlideHTML(snap, now);
+  if (sl.k==="calls2") return callTrendHTML(snap, now);
   if (sl.k==="flips") return flipSlideHTML(snap, now);
   if (sl.k==="contest") return contestSlideHTML(snap, now);
   if (sl.k==="celebrate"){
@@ -297,9 +299,19 @@ function reviewSlideHTML(snap){
   const total=+snap.reviewRows||0;
   const stale=!through;
   const head=`<div class="rv-h"><span>Tech</span><span>This month</span><span>Last 30 days</span><span>This year</span></div>`;
-  const body=rows.length?rows.map(r=>`<div class="rv-r"><div class="who">${av(r.k,r.name)}<b>${esc(r.name)}</b></div><div class="c num">${r.m}</div><div class="c num">${r.l30}</div><div class="c num">${r.y}</div></div>`).join(""):`<div class="empty-tv"><div><b>No techs on the board</b></div></div>`;
+  const body=rows.length?rows.map(r=>{
+    const hit=(snap.techs&&snap.techs[r.k]&&snap.techs[r.k].rvMatched)||{};
+    const mark=n=>n?`<small>+${n} matched</small>`:"";
+    return `<div class="rv-r"><div class="who">${av(r.k,r.name)}<b>${esc(r.name)}</b></div><div class="c num">${r.m}${mark(hit.mtd)}</div><div class="c num">${r.l30}${mark(hit.l30)}</div><div class="c num">${r.y}${mark(hit.ytd)}</div></div>`;
+  }).join(""):`<div class="empty-tv"><div><b>No techs on the board</b></div></div>`;
   const quoteHtml=quote?`<div class="rv-quote"><div class="st">${"★".repeat(Math.min(5,Math.round(quote.s||0)))}</div><p>${esc(quote.t.length>180?quote.t.slice(0,177)+"…":quote.t)}</p><div class="s">${esc(quote.who||quote.by)}${quote.d?" · "+esc(quote.d):""}</div></div>`:"";
-  const gap=untagged?`${untagged} of ${total} reviews have no technician on the row. They count in the company total only.`:"Tagged from the ServiceTitan review export.";
+  const rm=snap.reviewMatch||{};
+  const found=(rm.high||0)+(rm.medium||0);
+  const gap=untagged
+    ? (found
+      ? `${untagged} of ${total} reviews have no technician. ${rm.high||0} matched a job and are marked. ${rm.medium||0} matched a last name only and are not in the grade. ${rm.namedInText||0} already name a tech in the text.`
+      : `${untagged} of ${total} reviews have no technician. None could be tied to a job. ${rm.namedInText||0} already name a tech in the text and are counted. The export has no customer, phone, address, or job column.`)
+    : "Tagged from the ServiceTitan review export.";
   return `${googleLine(snap)}<div class="kicker">ServiceTitan reviews${throughTxt?" · latest "+esc(throughTxt):""}${stale?" · no dated reviews on ST Reviews":""}</div>
     <div class="big-h tight">Reviews by tech</div>
     <div class="rv-top">
@@ -379,6 +391,41 @@ function welcomeHTML(a){
   }).join("");
   return `<div class="ann welcome">${a.icon?`<div class="ic">${esc(a.icon)}</div>`:""}<div class="badge">${esc(a.badge||"Welcome")}</div><div class="msg">${esc(a.message)}</div>${a.detail?`<div class="sub">${esc(a.detail)}</div>`:""}<div class="welcome-row">${cards}</div></div>`;
 }
+function callTrendHTML(snap, now){
+  const cc=snap.callCenter||{};
+  const weeks=(cc.weeks||[]).slice().sort((a,b)=>String(a.weekOf).localeCompare(String(b.weekOf)));
+  const cur=weeks.length?weeks[weeks.length-1]:null;
+  const prev=weeks.length>1?weeks[weeks.length-2]:null;
+  const open=w=>{
+    const start=w&&w.weekOf?Sc.toDate(w.weekOf):null;
+    if(!start) return false;
+    const p=Sc.nyParts(now);
+    const today=Sc.nyDate(p.y, p.m, p.d, 12, 0, 0);
+    return Sc.addNyDays(start, 6) >= today;
+  };
+  const label=w=>w?(nyShort(w.weekOf)||w.weekOf)+(open(w)?" so far":""):"";
+  const rate=w=>w&&w.bookable?pct(w.booked/w.bookable):"—";
+  const numCell=(v)=>v==null?"—":String(v);
+  const pair=(label, a, b)=>`<div class="wk-row"><div class="l">${label}</div><b class="num">${esc(a)}</b><b class="num">${esc(b)}</b></div>`;
+  const days=(cc.days||[]).slice(-8);
+  const max=Math.max(1, ...days.map(d=>d.inbound||0));
+  const bars=days.map(d=>{
+    const when=nyShort(d.date);
+    const h=Math.max(8, Math.round((d.inbound||0)/max*100));
+    return `<div class="day-col"><div class="day-bar"><i style="height:${h}%"></i></div><b class="num">${d.inbound==null?"—":d.inbound}</b><span>${d.abandoned==null?"":d.abandoned}</span><em>${esc(when)}</em></div>`;
+  }).join("");
+  return `<div class="kicker">Call Center tab · blue bars are inbound · red number is abandoned</div>
+    <div class="big-h tight">Calls, week to week</div>
+    <div class="wk-head"><span></span><span>${esc(label(cur)||"Latest")}</span><span>${esc(label(prev)||"Prior")}</span></div>
+    <div class="wk">
+      ${pair("Inbound", numCell(cur&&cur.inbound), numCell(prev&&prev.inbound))}
+      ${pair("Booked", numCell(cur&&cur.booked), numCell(prev&&prev.booked))}
+      ${pair("Bookable", numCell(cur&&cur.bookable), numCell(prev&&prev.bookable))}
+      ${pair("Booking rate", rate(cur), rate(prev))}
+      ${pair("Abandoned", numCell(cur&&cur.abandoned), numCell(prev&&prev.abandoned))}
+    </div>
+    <div class="day-bars">${bars}</div>`;
+}
 function callSlideHTML(snap, now){
   const v=Sc.callCenterView(snap, now);
   const when=v.weekOf ? (Sc.toDate(v.weekOf)||null) : null;
@@ -402,12 +449,13 @@ function callSlideHTML(snap, now){
   else if (v.completedReq!=null){ reqV=String(v.completedReq); reqS="completed · owed is blank"; }
   const dayWhen=v.dayOf ? (Sc.toDate(v.dayOf)||null) : null;
   const dayTxt=dayWhen?dayWhen.toLocaleDateString("en-US",{month:"short", day:"numeric", timeZone:SETTINGS.TIMEZONE}):"";
+  const dayLabel=v.currentDay?"today":(dayTxt||"latest day");
   const inDayV=v.inboundDay==null?"No data":String(v.inboundDay);
-  const inDayS=v.inboundDay==null?"Date and Inbound on the Call Center tab":(v.currentDay?"today":dayTxt||"latest day on the tab");
+  const inDayS=v.inboundDay==null?"Date and Inbound on the Call Center tab":dayLabel;
   const inWkV=v.inboundWeek==null?"No data":String(v.inboundWeek);
   const inWkS=v.inboundWeek==null?"Inbound column on the weekly row":"every call that came in";
   let abdV="No data", abdS="Abandoned on the Call Center tab, daily or weekly";
-  if (v.abandoned!=null && v.abandonedDay!=null){ abdV=String(v.abandoned); abdS=v.abandonedDay+" today · this week"; }
+  if (v.abandoned!=null && v.abandonedDay!=null){ abdV=String(v.abandoned); abdS=v.abandonedDay+" "+dayLabel+" · this week"; }
   else if (v.abandoned!=null){ abdV=String(v.abandoned); abdS="this week"; }
   else if (v.abandonedDay!=null){ abdV=String(v.abandonedDay); abdS=v.currentDay?"today":(dayTxt||"latest day on the tab"); }
   if (v.owed!=null || v.completedReq!=null) jobBits.push(reqV+" callback requests");
@@ -417,7 +465,7 @@ function callSlideHTML(snap, now){
     <div class="goal-big"><div class="${v.rate==null?"goal-num words":"goal-num num"}">${esc(big)}</div><div class="goal-of">${ofHtml}</div></div>
     ${bar}
     <div class="tiles">
-      ${tile("Inbound today", inDayV, inDayS)}
+      ${tile(v.currentDay?"Inbound today":("Inbound "+(dayTxt||"latest")), inDayV, inDayS)}
       ${tile("Inbound this week", inWkV, inWkS)}
       ${tile("Abandoned", abdV, abdS)}
       ${tile("Callback jobs", jobV, jobS2)}

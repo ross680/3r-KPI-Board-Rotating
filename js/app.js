@@ -3,7 +3,7 @@ const SETTINGS = window.BOARD_SETTINGS;
 const Sc = window.Scoring;
 const {
   DEFAULT_SHEET, XLSX_MIME, DRIVE, DL_TOOL, MONTHS, METRICS, SALES_METRICS, APP_METRICS,
-  SLIDES, INSTALL_HOURS, LOGO_FILE, LOGO_PDF, PHOTO_FOLDER, SHEET_TABS, HUB_URL, defaultCfg,
+  SLIDES, INSTALL_HOURS, LOGO_FILE, LOGO_PDF, SHEET_TABS, HUB_URL, defaultCfg,
   TIMEZONE, STALE_HOURS
 } = SETTINGS;
 const num = Sc.num, bool = Sc.bool, toDate = Sc.toDate, key = Sc.key, money = Sc.money, pct = Sc.pct;
@@ -95,6 +95,7 @@ function activeSlides(){
   if (ok("trend") && snap && snap.jobRows) out.push({k:"trend"});
   if (ok("all")) out.push({k:"all"});
   if (ok("lb")) out.push({k:"lb"});
+  if (ok("unpaid") && snap && snap.unpaid && snap.unpaid.totalN) out.push({k:"unpaid"});
   if (ok("flips")) out.push({k:"flips"});
   try {
     if (ok("contest") && snap && Sc.raceStandings(snap, boardCtx()).active) out.push({k:"contest"});
@@ -123,6 +124,14 @@ function activeSlides(){
     const woven=Sc.weaveSpotlight(out, spots);
     return woven.length?woven:[{k:"goal"}];
   } catch (e) { return out.length?out:[{k:"goal"}]; }
+}
+function paceNote(){
+  const P=S.cfg.boardPeriod||"mtd";
+  if(!SETTINGS.RULES.prorateMtdTargets || P==="ytd" || P==="l30") return "";
+  const p=Sc.nyParts(Sc.nyNow());
+  const dim=Sc.daysInMonth(p.y, p.m);
+  const days=Math.max(p.d, Math.min(dim, +SETTINGS.RULES.mtdMinDays||0));
+  return ` · graded to day ${Math.min(dim, days)} of ${dim}`;
 }
 const bigSmall = (big, small) => `<b class="num">${big}</b><span class="num">${small}</span>`;
 function slideHTML(sl){
@@ -166,28 +175,26 @@ function slideHTML(sl){
   if (sl.k==="lb"){
     const R = roster(true);
     if (!R.length) return `<div class="empty-tv"><div><b>No techs on the board yet</b>Add names to the Leaderboard tab or turn techs on in Admin.</div></div>`;
-    return `<div class="kicker">${esc(periodLabel(P))}</div><div class="big-h">Tech leaderboard</div>
-      <div class="lbh"><span></span><span></span><span style="text-align:left">Tech</span><span style="text-align:center">${grades?"Grade":""}</span><span>Revenue</span><span>Avg ticket</span><span class="x">Close rate</span><span class="x">Open est.</span><span class="x">Callbacks</span></div>
+    return `<div class="kicker">${esc(periodLabel(P))}${paceNote()}</div><div class="big-h">Tech leaderboard</div>
+      <div class="lbh"><span></span><span></span><span style="text-align:left">Tech</span><span style="text-align:center">${grades?"Grade":""}</span><span>Revenue</span><span>Avg ticket</span><span class="x">Close rate</span><span class="x">Callbacks</span></div>
       <div class="scrollbox"><div class="lb scrollin">${R.map((r,i)=>`<div class="lbr ${i===0?"top":""}">
         <div class="rk num">${i+1}</div>${av(r.t.k,r.name)}
         <div class="nm">${esc(r.name)}<small>${grades?"Score "+scoreText(r.score)+" · ":""}${r.st.pts.toLocaleString()} pts · ${r.st.jobs} jobs</small></div>
         ${grades?`<div class="grade ${gradeClass(r.grade)}">${gradeText(r.grade)}</div>`:`<div></div>`}
         <div class="c"><b class="num">${money(r.st.rev,true)}</b><span>revenue</span></div>
-        <div class="c"><b class="num">${r.st.paid?money(r.st.avg):"—"}</b><span>avg ticket</span></div>
-        <div class="c x"><b class="num">${r.st.opp?pct(r.st.close):"—"}</b><span>${r.st.opp} opps</span></div>
-        <div class="c x"><b class="num">${r.st.openN}</b><span>${money(r.st.openAmt,true)}</span></div>
+        <div class="c"><b class="num">${r.st.paid?money(r.st.avg):"—"}</b><span>per paid job</span></div>
+        <div class="c x"><b class="num">${r.st.opp?pct(r.st.close):"—"}</b><span>close rate</span></div>
         <div class="c x"><b class="num" style="color:${r.st.cb>0?"#FF8A80":"#fff"}">${r.st.cb}</b><span>callbacks</span></div>
       </div>`).join("")}</div></div>`;
   }
   if (sl.k==="all"){
     const R=[...roster(true), ...roster(true,"sales")].map(r=>({...r, sales:roleOf(r.t)==="sales"}));
     if(!R.length) return "";
-    const shortN=n=>{ n=Math.round(+n||0); return n>=10000?(n/1000).toFixed(n>=100000?0:1).replace(/\.0$/,"")+"K":n.toLocaleString(); };
     const sm=v=>money(v, Math.abs(v)>=10000);
     // [label, value, relative width] — widths sized to the longest value each column can show
-    const cols=[["Points",r=>shortN(r.st.pts),1.05],["Revenue",r=>money(r.st.rev,true),1.1],["Jobs",r=>r.st.jobs,.7],["Avg ticket",r=>r.st.paid?sm(r.st.avg):"—",1.15],["Close %",r=>r.st.opp?pct(r.st.close):"—",.95],["Sold",r=>money(r.st.sold,true),1.1],["Avg sale",r=>r.st.soldN?sm(r.st.avgSale):"—",1.15],["Open est.",r=>`${r.st.openN}<small>${money(r.st.openAmt,true)}</small>`,1],["Members",r=>r.st.mem,.95],["Reviews",r=>r.st.rv,.9],["Installs",r=>r.st.inst,.9],["Leads",r=>r.st.leads,.8],["Callbacks",r=>`<span style="color:${r.st.cb?"#FF8A80":"#fff"}">${r.st.cb}</span>`,1]];
+    const cols=[["Revenue",r=>money(r.st.rev,true),1.2],["Avg ticket",r=>r.st.paid?sm(r.st.avg):"—",1.25],["Close rate",r=>r.st.opp?pct(r.st.close):"—",1.05],["Sold",r=>money(r.st.sold,true),1.15],["Members",r=>r.st.mem,.9],["Reviews",r=>r.st.rv,.9],["Callbacks",r=>`<span style="color:${r.st.cb?"#FF8A80":"#fff"}">${r.st.cb}</span>`,1.05]];
     const gc=`minmax(0,2.5fr) ${grades?"min(5.4vh,3vw) ":""}${cols.map(c=>`minmax(0,${c[2]}fr)`).join(" ")}`;
-    return `<div class="kicker">${esc(periodLabel(P))} · every metric</div><div class="big-h" style="margin-bottom:1.4vh">Team scoreboard</div>
+    return `<div class="kicker">${esc(periodLabel(P))}${paceNote()} · the metrics in the grade</div><div class="big-h" style="margin-bottom:1.4vh">Team scoreboard</div>
       <div class="am-h" style="grid-template-columns:${gc}"><span style="text-align:left">Name</span>${grades?"<span></span>":""}${cols.map(c=>`<span>${c[0]}</span>`).join("")}</div>
       <div class="scrollbox"><div class="scrollin am">${R.map(r=>`<div class="am-r ${r.sales?"sales":""}" style="grid-template-columns:${gc}"><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}${r.sales?"<em>Sales</em>":""}</b></div>${grades?`<div class="grade ${gradeClass(r.grade)}">${gradeText(r.grade)}</div>`:""}${cols.map(c=>`<div class="c num">${c[1](r)}</div>`).join("")}</div>`).join("")}</div></div>`;
   }
@@ -235,12 +242,8 @@ function slideHTML(sl){
       ${alert?`<div class="wx-alert">${esc(alert)}</div>`:""}
       <div class="wx-days">${days.map(d=>{const [i2,l2]=WX(d.c); return `<div class="tile"><div class="l">${esc(dayName(d.d))}</div><div class="wx-di">${i2}</div><div class="v num">${Math.round(d.hi)}°<span class="lo"> ${Math.round(d.lo)}°</span></div><div class="s">${esc(l2)} · ${Math.round(d.p)}% rain</div></div>`;}).join("")}</div>`;
   }
-  if (sl.k==="rv"){
-    const rv=snap.reviews; const n=(S.cycle||0) % rv.length; const r=rv[n]; const others=rv.filter((_,i)=>i!==n).slice(0,3);
-    return `<div class="kicker">What customers are saying</div>
-      <div style="margin-top:3vh"><div class="quote">${esc(r.t)}</div><div class="qby"><span class="st">${"★".repeat(Math.min(5,Math.round(r.s)))}</span>${esc(r.by)}${r.d?" · "+esc(r.d):""}</div></div>
-      <div class="rv-more">${others.map(o=>`<div class="tile"><div style="color:#F2B01E">${"★".repeat(Math.min(5,Math.round(o.s)))}</div>${esc(o.t.length>120?o.t.slice(0,117)+"…":o.t)}<div class="s" style="margin-top:.8vh">${esc(o.by)}</div></div>`).join("")}</div>`;
-  }
+  if (sl.k==="unpaid") return unpaidSlideHTML(snap);
+  if (sl.k==="rv") return reviewSlideHTML(snap);
   if (sl.k==="upd"){
     const u=snap.updates[sl.i]; if(!u) return "";
     if (u.type==="shoutout" && u.tech && snap.techs[u.tech] && !Sc.techIsHidden(snap.techs[u.tech], boardCtx())){ const nm=Sc.displayName(snap.techs[u.tech], snap.techs, S.techs[u.tech]||{});
@@ -272,6 +275,57 @@ function slideHTML(sl){
     return `<div class="ann">${icon?`<div class="ic">${esc(icon)}</div>`:""}${badge?`<div class="${badgeCls}">${esc(badge)}</div>`:""}<div class="msg">${esc(msg)}</div>${detail?`<div class="sub">${esc(detail)}</div>`:""}</div>`;
   }
   return "";
+}
+function nyShort(ymd){
+  const d=ymd?Sc.toDate(ymd):null;
+  return d?d.toLocaleDateString("en-US",{month:"short", day:"numeric", timeZone:SETTINGS.TIMEZONE}):"";
+}
+function reviewSlideHTML(snap){
+  const sums=snap.leaderSums||{};
+  const through=snap.reviewThrough||"";
+  const throughTxt=through?nyShort(through):"";
+  const rows=roster(true).map(r=>({
+    name:r.name, k:r.t.k,
+    m:statsFor(r.t,"mtd").rv||0,
+    l30:statsFor(r.t,"l30").rv||0,
+    y:statsFor(r.t,"ytd").rv||0
+  })).sort((a,b)=>b.l30-a.l30||b.m-a.m||b.y-a.y||a.name.localeCompare(b.name));
+  const quote=(snap.reviews&&snap.reviews[0])||null;
+  const untagged=+snap.reviewUntagged||0;
+  const total=+snap.reviewRows||0;
+  const stale=!through;
+  const head=`<div class="rv-h"><span>Tech</span><span>This month</span><span>Last 30 days</span><span>This year</span></div>`;
+  const body=rows.length?rows.map(r=>`<div class="rv-r"><div class="who">${av(r.k,r.name)}<b>${esc(r.name)}</b></div><div class="c num">${r.m}</div><div class="c num">${r.l30}</div><div class="c num">${r.y}</div></div>`).join(""):`<div class="empty-tv"><div><b>No techs on the board</b></div></div>`;
+  const quoteHtml=quote?`<div class="rv-quote"><div class="st">${"★".repeat(Math.min(5,Math.round(quote.s||0)))}</div><p>${esc(quote.t.length>180?quote.t.slice(0,177)+"…":quote.t)}</p><div class="s">${esc(quote.who||quote.by)}${quote.d?" · "+esc(quote.d):""}</div></div>`:"";
+  const gap=untagged?`${untagged} of ${total} reviews have no technician on the row. They count in the company total only.`:"Tagged from the ServiceTitan review export.";
+  return `<div class="kicker">Google reviews${throughTxt?" · latest "+esc(throughTxt):""}${stale?" · no dated reviews on ST Reviews":""}</div>
+    <div class="big-h tight">Reviews by tech</div>
+    <div class="rv-top">
+      <div class="rv-co"><div class="l">Company</div><div class="rv-co-n"><b class="num">${sums.rv_mtd||0}</b><span>this month</span></div><div class="rv-co-n"><b class="num">${sums.rv_l30||0}</b><span>last 30 days</span></div><div class="rv-co-n"><b class="num">${sums.rv_ytd||0}</b><span>this year</span></div></div>
+      ${quoteHtml}
+    </div>
+    <div class="rv-table">${head}<div class="scrollbox"><div class="scrollin">${body}</div></div></div>
+    <div class="rv-note">${esc(gap)}</div>`;
+}
+function unpaidSlideHTML(snap){
+  const u=snap.unpaid;
+  if(!u) return "";
+  const ctx=boardCtx();
+  const rows=(u.rows||[]).filter(r=>{
+    const t=r.key&&snap.techs?snap.techs[r.key]:null;
+    if(t&&Sc.techIsHidden(t, ctx)) return false;
+    if(Sc.nameIsHidden(r.name, (S.cfg&&S.cfg.hiddenTechs)||SETTINGS.HIDDEN_TECHS||[])) return false;
+    return true;
+  });
+  const max=Math.max(1, ...rows.map(r=>r.amount||0));
+  const asOf=nyShort(snap.dataThrough)||nyShort(u.asOf);
+  const list=rows.length?rows.map((r,i)=>`<div class="pay-r ${i===0?"top":""}"><div class="rk num">${i+1}</div>${r.key?av(r.key,r.name):`<div class="av">${esc(Sc.initials(r.name))}</div>`}<div class="nm">${esc(r.name)}</div><div class="pay-bar"><i style="width:${Math.max(4, r.amount/max*100)}%"></i></div><div class="c"><b class="num">${r.count}</b><span>${r.count===1?"invoice":"invoices"}</span></div><div class="c"><b class="num">${money(r.amount)}</b><span>still due</span></div></div>`).join("")
+    :`<div class="empty-tv"><div><b>No open balances for the techs on this board</b></div></div>`;
+  return `<div class="kicker">Invoiced jobs with a balance still due${asOf?" · through "+esc(asOf):""}</div>
+    <div class="big-h tight">Unpaid invoices</div>
+    <div class="goal-big pay-hero"><div class="goal-num num">${money(u.totalAmt,true)}</div><div class="goal-of"><b class="num">${u.totalN}</b> open invoice${u.totalN===1?"":"s"}<br>Company total, including techs hidden on this board</div></div>
+    <div class="pay-h"><span></span><span></span><span style="text-align:left">Tech</span><span></span><span>Count</span><span>Balance</span></div>
+    <div class="scrollbox"><div class="scrollin pay-list">${list}</div></div>`;
 }
 const CONFETTI_N = 18;
 function confettiHTML(){
@@ -658,7 +712,7 @@ function paneTechs(){
 }
 function paneScoring(){
   const c=S.cfg.metrics; const tw=METRICS.reduce((a,m)=>a+(+(c[m.k]||{}).w||0),0);
-  return `<div class="card"><h2>Scoring rules</h2><p class="muted small" style="margin-top:0">Each metric scores 0–100% of its monthly target, then the weights blend them into one score. A 90+, B 80+, C 70+, D 60+. Year-to-date scales monthly targets by how much of the year has passed, using the real length of the current month. A rate with nothing behind it (no opportunities, no paid jobs, no estimates, no clock-ins) is left out instead of counting as zero. Lower-is-better metrics score 100% at zero and 50% at the allowed target. Set a weight to 0 to leave a metric out.</p>
+  return `<div class="card"><h2>Scoring rules</h2><p class="muted small" style="margin-top:0">Each metric scores 0–100% of its target, then the weights blend them into one score. A 90+, B 80+, C 70+, D 60+. Month to date, dollar and count targets scale to today's share of the month, with at least a week of the goal so the first days are not graded against one day. Last 30 days keeps the full month. Year to date scales by how much of the year has passed. A rate with nothing behind it is left out instead of counting as zero. Lower-is-better metrics score 100% at zero and 50% at the allowed target. Set a weight to 0 to leave a metric out. The average-ticket goal on the Goals tab replaces the number here unless Board_Config sets t_avg.</p>
     <div class="fgrid"><span class="h">Metric</span><span class="h" style="text-align:right">Weight</span><span class="h" style="text-align:right">Monthly target</span>
     ${METRICS.map(m=>`<span><b>${m.label}</b><div class="muted small">${m.hint}</div></span><input type="number" min="0" max="100" step="1" data-w="${m.k}" value="${(c[m.k]||{}).w??m.w}" aria-label="${m.label} weight"><input type="number" min="0" step="any" data-tg="${m.k}" value="${(c[m.k]||{}).target??m.target}" aria-label="${m.label} target" ${m.k==="rating"?"disabled":""}>`).join("")}
     </div><p class="small" id="twt" style="margin:12px 0">Total weight ${tw}. Weights don't need to add to 100.</p>
@@ -931,7 +985,9 @@ function hubMode(){
       const snap=j.snapshot, c=snap.cfg||{};
       S.logoData = snap.logo || S.logoData;
       if (snap.logoPdf && snap.logoPdfHash !== (S.portalLogo||{}).h) renderPortalLogo(snap.logoPdf).then(P=>{ P.h=snap.logoPdfHash; applyPortalLogo(P); }).catch(e=>console.warn("portal logo",e));
-      S.cfg=Sc.applySheetConfig(c); applyPeople(snap, snap.techMeta||{}); applySnapshot(snap, snap.builtAt, "hub");
+      S.cfg=Sc.applySheetConfig(c);
+      if (Sc.applyCompanyGoals) Sc.applyCompanyGoals(S.cfg, snap.goals, c);
+      applyPeople(snap, snap.techMeta||{}); applySnapshot(snap, snap.builtAt, "hub");
       await mergeManualTabs(snap);
       S.sync={state:"ok",msg:"Live from the 3R Data Hub"}; render(true);
     }catch(e){ S.sync={state:"error",msg:"Couldn't reach the data hub. Showing the last numbers."}; if(!S.snap) render(); }
@@ -946,6 +1002,32 @@ function fetchT(u, ms){ const c=new AbortController(); const t=setTimeout(()=>c.
 async function fetchTab(id, tab, apiKey){
   const u=`https://sheets.googleapis.com/v4/spreadsheets/${id}/values/${encodeURIComponent("'"+tab+"'")}?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING&key=${encodeURIComponent(apiKey)}`;
   const r=await fetchT(u); if(!r.ok) return null; const j=await r.json(); return j.values||[];
+}
+async function listSheetTitles(id, apiKey){
+  const u=`https://sheets.googleapis.com/v4/spreadsheets/${id}?fields=sheets.properties.title&key=${encodeURIComponent(apiKey)}`;
+  try{
+    const r=await fetchT(u, 20000); if(!r.ok) return null;
+    const j=await r.json();
+    return (j.sheets||[]).map(s=>s.properties&&s.properties.title).filter(Boolean);
+  }catch(e){ return null; }
+}
+function titlesToFetch(wanted, titles){
+  if (titles && titles.length){
+    const by={};
+    titles.forEach(t=>{ by[String(t).trim().toLowerCase()]=t; });
+    return wanted.map(w=>by[String(w).trim().toLowerCase()]).filter(Boolean);
+  }
+  // No tab list. Skip names that 400 with "Unable to parse range" on this sheet.
+  const skip={races:1, contest:1, weather:1, "automation estimates":1};
+  return wanted.filter(t=>!skip[String(t).trim().toLowerCase()]);
+}
+async function loadTabRows(id, apiKey, wanted){
+  const titles=await listSheetTitles(id, apiKey);
+  const names=titlesToFetch(wanted, titles);
+  const tabs=await Promise.all(names.map(t=>fetchTab(id, t, apiKey).catch(()=>null)));
+  const rows={};
+  names.forEach((t,i)=>{ if(tabs[i]) rows[String(t).trim().toLowerCase()]=tabs[i]; });
+  return rows;
 }
 async function directWeather(){
   try{
@@ -967,17 +1049,17 @@ function sheetMode(){
   const pull = async () => {
     if (busy) return; busy=true;
     try{
-      const tabs = await Promise.all(SHEET_TABS.map(t=>fetchTab(id,t,apiKey).catch(()=>null)));
-      const wb={SheetNames:[],Sheets:{}}; const rows={};
-      SHEET_TABS.forEach((t,i)=>{ if(tabs[i]) { rows[t.trim().toLowerCase()]=tabs[i]; wb.SheetNames.push(t); } });
+      const rows = await loadTabRows(id, apiKey, SHEET_TABS);
+      const wb={SheetNames:[],Sheets:{}, __rows:rows};
+      Object.keys(rows).forEach(k=>{ wb.SheetNames.push(k); });
       if (!wb.SheetNames.length) throw new Error("Couldn't read the KPI sheet. Check it's shared \"anyone with the link can view\".");
-      wb.__rows=rows;
       const snap=buildSnapshot(wb);
       if (!snap.weather) snap.weather = await directWeather();
       const cfgRows=rows["board_config"]||[]; const c={}; cfgRows.slice(1).forEach(r=>{ if(String(r[0]||"").trim()) c[String(r[0]).trim()]=r[1]; });
-      S.cfg=Sc.applySheetConfig(c); applyPeople(snap, Sc.parseTechMeta(rows["board_techs"]||[])); applySnapshot(snap, Date.now(), "sheet");
+      S.cfg=Sc.applySheetConfig(c);
+      if (Sc.applyCompanyGoals) Sc.applyCompanyGoals(S.cfg, snap.goals, c);
+      applyPeople(snap, Sc.parseTechMeta(rows["board_techs"]||[])); applySnapshot(snap, Date.now(), "sheet");
       S.sync={state:"ok",msg:"Live from the KPI sheet"}; saveCached(); render(true);
-      loadHeadshotNames(apiKey);
     }catch(e){ S.sync={state:"error",msg:(e&&e.message)||"Couldn't reach the sheet. Showing the last numbers."}; if(!S.snap) render(); }
     finally{ busy=false; }
   };
@@ -997,9 +1079,7 @@ async function mergeManualTabs(snap){
   const id=(S.cfg&&S.cfg.sheetId)||DEFAULT_SHEET;
   const names=["Announcements","Team Spotlight","Contest","Races","Flips",SETTINGS.MEMBERSHIP_TAB,SETTINGS.REVIEW_TRACKER_TAB,"Board_Config","Call Center","ST Callbacks"];
   try{
-    const tabs=await Promise.all(names.map(t=>fetchTab(id,t,apiKey).catch(()=>null)));
-    const wb={__rows:{}};
-    names.forEach((t,i)=>{ if(tabs[i]) wb.__rows[t.trim().toLowerCase()]=tabs[i]; });
+    const wb={__rows:await loadTabRows(id, apiKey, names)};
     if(Object.keys(wb.__rows).length) Sc.attachFeed(snap, wb, Sc.nyNow());
     const cfgRows=wb.__rows.board_config;
     if(cfgRows){
@@ -1007,19 +1087,6 @@ async function mergeManualTabs(snap){
       cfgRows.slice(1).forEach(r=>{ if(String(r[0]||"").trim()) c[String(r[0]).trim()]=r[1]; });
       if(c.flip_goal!=null && c.flip_goal!=="" && isFinite(+c.flip_goal)) S.cfg.flipGoal=+c.flip_goal;
     }
-  }catch(_){}
-}
-async function loadHeadshotNames(apiKey){
-  if(!apiKey||!SETTINGS.PHOTO_FOLDER||!S.snap) return;
-  try{
-    const q="'"+SETTINGS.PHOTO_FOLDER+"' in parents and trashed=false";
-    const u=`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=200&key=${encodeURIComponent(apiKey)}`;
-    const r=await fetchT(u, 12000);
-    if(!r.ok) return;
-    const j=await r.json();
-    if(!S.snap) return;
-    S.snap.photoFiles=(j.files||[]).map(f=>({id:f.id, title:f.name||f.title||""}));
-    render(true);
   }catch(_){}
 }
 let lastAdvance=Date.now();
@@ -1056,7 +1123,7 @@ function reliability(){
   // extra safety: fresh reload every 6 hours (skips if paused by a person)
   setInterval(()=>{ if(!S.paused) location.reload(); }, 6*3600*1000);
 }
-function applyHubCfg(c){ S.cfg=Sc.applySheetConfig(c); }
+function applyHubCfg(c){ S.cfg=Sc.applySheetConfig(c); if(S.snap && Sc.applyCompanyGoals) Sc.applyCompanyGoals(S.cfg, S.snap.goals, c); }
 
 /* ===================== boot ===================== */
 setInterval(tick, 30000);

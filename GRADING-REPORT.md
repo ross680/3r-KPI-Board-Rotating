@@ -2,6 +2,14 @@
 
 For Ross. This is what changed in the KPI math, what was left alone on purpose, what else moved, and what still needs a person.
 
+## Update, November 17, 2026
+
+Letter grades were landing on D and F for techs who were on pace. Month-to-date revenue and sold dollars were scored against the full monthly target on the 17th, so about 57% of a goal that is supposed to take the whole month became a failing score on the heaviest metrics. `prorateMtdTargets` is now true. A tech on pace for the monthly goal scores about 100% on that metric today. Someone behind pace still scores low. The first seven days of a month use a one-week goal, so day 1 is not graded against one day's dollars. Last 30 days is unchanged. Letter cutoffs are unchanged: A 90, B 80, C 70, D 60.
+
+The Goals tab average ticket of $850 replaces the $650 code default unless Board_Config sets `t_avg`. The per-tech revenue target stays $40,000 a month and the sold target stays $50,000 a month. Those match a company revenue goal of about $351,000 spread across the field team. They were not raised to make the letters look better.
+
+A Leaderboard instruction row that starts with a lightbulb was being scored as a technician and showing an F. Instruction rows are ignored.
+
 The checks below are locked in `tests/scoring.test.js`. Run `npm test`.
 
 ## (a) Grading bugs that were fixed
@@ -114,7 +122,7 @@ These stay at the same values. Each one is a named setting in `js/settings.js` (
 
 - `inverseScoreAtTarget` is 0.5. Lower-is-better metrics score 100% at zero and 50% at the allowed target. Callbacks allowed at 2 per month: 0 callbacks scores 100%, 2 scores 50%, 4 scores 0%.
 - `ytdMinMonths` is 1. January year-to-date is at least one full month.
-- `prorateMtdTargets` is false. Month-to-date targets are the full month. They are not cut down because the month is only partly over. Pace on the goal slide is separate from the grade.
+- `prorateMtdTargets` is true, with `mtdMinDays` of 7. Month-to-date dollar and count targets scale to today's share of the month, and the first days use at least a week of the goal. Last 30 days stays the full month. The goal slide still draws calendar pace on its own.
 - `letterGrades` stay A 90, B 80, C 70, D 60.
 - `salesRankBy` is `"sold"`. The sales board is ranked by dollars sold, not by the sales score.
 - `apprenticesOnTechBoard` is false. Apprentices show on the apprentice table, not on the TV tech leaderboard.

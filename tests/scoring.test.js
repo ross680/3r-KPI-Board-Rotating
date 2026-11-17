@@ -1722,6 +1722,54 @@ describe("automatic flips, memberships, callbacks, and Google reviews", function
     assert.equal(s.callbacks.unassignedMonth, 1);
   });
 
+  it("matches a blank review to a job only with an id or a customer name inside 30 days", function () {
+    const now = OCT26;
+    const s = snap({
+      "ST Techs": [TECH_H, ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""]],
+      "ST Jobs": [
+        ["Job ID", "Job #", "Status", "Completion Date", "Primary Technician"],
+        ["9100100", "9100100", "Completed", "10/20/2026", "Sam Rivera"],
+        ["9100200", "9100200", "Completed", "10/10/2026", "Sam Rivera"],
+        ["9100300", "9100300", "Completed", "9/1/2026", "Sam Rivera"]
+      ],
+      "ST Customers": [
+        ["Job #", "Customer ID", "Customer", "City"],
+        ["9100100", "C1", "Jane Customer", "Norwell"],
+        ["9100200", "C2", "Ann Pemberton", "Pembroke"]
+      ],
+      "ST Reviews": [
+        ["Published", "Platform", "Rating", "Technician ID", "Technician", "Review"],
+        ["10/22/2026", "Google", 5, "", "", "Please look at job 9100100, the crew finished the boiler"],
+        ["10/22/2026", "Google", 5, "", "", "Jane Customer here. The boiler is finally fixed and the house is warm"],
+        ["10/22/2026", "Google", 5, "", "", "Pemberton had a long wait but I will not name the job"],
+        ["10/22/2026", "Google", 5, "", "", "Nice people and a clean truck"],
+        ["10/22/2026", "Google", 5, "", "", "Old job 9100300 was months ago"]
+      ]
+    }, now);
+    const sam = Sc.statsFor(person(s, "Sam Rivera"), "mtd", null, ctx(s));
+    assert.equal(s.reviewMatch.high, 2);
+    assert.equal(s.reviewMatch.medium, 1);
+    assert.equal(s.reviewMatch.unmatched, 2);
+    assert.equal(sam.rv, 2);
+    assert.equal(person(s, "Sam Rivera").rvMatched.mtd, 2);
+  });
+
+  it("keeps more than one call-center week and the daily rows", function () {
+    const s = snap({
+      "Call Center": [
+        ["Week of", "Booked", "Bookable", "Abandoned", "Callbacks owed", "Callbacks completed", "Inbound"],
+        ["10/19/2026", 10, 20, 2, "", "", 40],
+        ["10/26/2026", 8, 10, 1, "", "", 22],
+        ["Date", "Inbound", "Abandoned"],
+        ["10/26/2026", 9, 1],
+        ["10/25/2026", 6, 0]
+      ]
+    });
+    assert.equal(s.callCenter.weeks.length, 2);
+    assert.equal(s.callCenter.days.length, 2);
+    assert.equal(s.callCenter.weeks[1].booked, 8);
+  });
+
   it("averages the Google Reviews tab and ignores a header with no rows", function () {
     const live = Sc.readGoogleProfile([
       ["Date", "Reviewer", "Rating", "Text", "Tech", "Location"],

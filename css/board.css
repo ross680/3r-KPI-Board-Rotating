@@ -174,14 +174,20 @@ body.tv .hdr{display:none}
 .lbr .c b{display:block;font-stretch:115%;font-weight:900;font-size:3.8vh;line-height:1.05}
 .lbr .c span{font-size:1.7vh;color:#E7F6FC;font-weight:700}
 .lbh{display:grid;grid-template-columns:5vh 8vh minmax(0,1.7fr) repeat(4,minmax(0,1fr));gap:1.2vw;padding:0 1.4vw .6vh;font-size:2vh;color:#E7F6FC;font-weight:800}
-.z-great{background:rgba(0,255,136,.24);box-shadow:inset .7vh 0 0 #00ff88, 0 0 1.6vh rgba(0,255,136,.55)}
-.z-good{background:rgba(31,138,76,.28);box-shadow:inset .7vh 0 0 #1F8A4C}
+.z-great{background:rgba(0,16,8,.72);border:.35vh solid #00ff88;border-radius:1.4vh;box-shadow:0 0 .8vh #00ff88;animation:crush-glow 2.2s ease-in-out infinite}
+.z-great.num::after,.z-great > b.num::after,.z-great > .v.num::after,.pay-r.z-great .c:last-child > b.num::after{content:" ★";color:#00ff88;font-weight:900}
+.sc-m.z-great > b.num{position:relative;display:block;padding-right:1.2em;text-align:right}
+.sc-m.z-great > b.num::after{content:"★";position:absolute;right:0;top:0}
+.z-good{background:#22a447;box-shadow:none;color:#fff}
+.z-good .num,.z-good span,.z-good b{color:#fff}
 .z-warn{background:rgba(230,179,37,.28);box-shadow:inset .7vh 0 0 #E6B325}
 .z-bad{background:rgba(193,39,45,.30);box-shadow:inset .7vh 0 0 #C1272D}
+@keyframes crush-glow{0%,100%{box-shadow:0 0 .5vh #00ff88, inset 0 0 0 .15vh #00ff88}50%{box-shadow:0 0 2vh #00ff88, inset 0 0 0 .2vh #00ff88}}
+@media (prefers-reduced-motion:reduce){.z-great{animation:none}}
 .lbr .c.z-great,.lbr .c.z-good,.lbr .c.z-warn,.lbr .c.z-bad,.am-r .c.z-great,.am-r .c.z-good,.am-r .c.z-warn,.am-r .c.z-bad{border-radius:.8vh;padding:.3vh .5vw}
 .tile.z-great,.tile.z-good,.tile.z-warn,.tile.z-bad,.goal-num.z-great,.goal-num.z-good,.goal-num.z-warn,.goal-num.z-bad{border-radius:1vh}
-.zlegend{display:flex;gap:1.2vw;margin:0 0 1vh;font-size:1.8vh;font-weight:800}
-.zlegend span{border-radius:.6vh;padding:.3vh .8vw}
+.zlegend{display:flex;flex-wrap:wrap;gap:.8vw;margin:0 0 1vh;font-size:2.3vh;font-weight:900}
+.zlegend span{border-radius:.8vh;padding:.55vh 1vw}
 .sc-grid{display:grid;gap:1vw;flex:1;min-height:0}
 .sc-grid.cols-4{grid-template-columns:repeat(4,minmax(0,1fr))}
 .sc-grid.cols-3{grid-template-columns:repeat(3,minmax(0,1fr))}

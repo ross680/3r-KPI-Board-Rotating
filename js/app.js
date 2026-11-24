@@ -151,6 +151,7 @@ function slideHTML(sl){
     const iG=(G.install_rev||{}).v, sG=(G.service_rev||{}).v; const cm=coStats(null, snap.month);
     const split = (iG||sG) && snap.jobRows ? `<div class="split">${[["Install revenue",cm.instRev,iG],["Service revenue",cm.svcRev,sG]].filter(x=>x[2]).map(([n,v,g])=>`<div><div class="sp-top"><span>${n}</span><b class="num">${money(v,true)} <small>of ${money(g,true)}</small></b></div><div class="sp-bar"><i style="width:${Math.min(100,v/g*100)}%"></i><em style="left:${pace*100}%"></em></div></div>`).join("")}</div>` : "";
     return `<div class="kicker">${esc(monthName())} revenue goal</div>
+      ${colorLegend()}
       <div class="goal-big"><div class="goal-num num${goalZone?" z-"+goalZone:""}">${money(rev,true)}</div><div class="goal-of">of <b>${money(goal,true)}</b> goal<br>${p==null?"No monthly revenue goal set":ps.ahead?"Ahead of pace":"Behind pace by "+money(ps.behindBy,true)}</div></div>
       <div class="gbar"><i style="width:${p==null?0:Math.min(100,p*100)}%"></i><div class="pace" style="left:${pace*100}%"><span>Today's pace</span></div><div class="pct num">${p==null?"—":pct(p)}</div></div>
       ${split}
@@ -185,6 +186,7 @@ function slideHTML(sl){
     const R = roster(true);
     if (!R.length) return `<div class="empty-tv"><div><b>No techs on the board yet</b>Add names to the Leaderboard tab or turn techs on in Admin.</div></div>`;
     return `<div class="kicker">${esc(periodLabel(P))}${paceNote()}</div><div class="big-h">Tech leaderboard</div>
+      ${colorLegend()}
       <div class="lbh"><span></span><span></span><span style="text-align:left">Tech</span><span>Revenue</span><span>Avg ticket</span><span class="x">Close rate</span><span class="x">Callbacks</span></div>
       <div class="scrollbox"><div class="lb scrollin">${R.map((r,i)=>`<div class="lbr ${i===0?"top":""}">
         <div class="rk num">${i+1}</div>${av(r.t.k,r.name)}
@@ -221,6 +223,7 @@ function slideHTML(sl){
     const m=statsFor(r.t,"mtd"), y=statsFor(r.t,"ytd");
     const cells=[["Revenue","rev",money(m.rev,true),money(y.rev,true)],["Sold","sold",money(m.sold,true),money(y.sold,true)],["Avg ticket","avg",m.paid?money(m.avg):"—",y.paid?money(y.avg):"—"],["Close rate","close",m.opp?pct(m.close):"—",y.opp?pct(y.close):"—"],["Points","",m.pts.toLocaleString(),y.pts.toLocaleString()],["Leads","leads",m.leads,y.leads],["Memberships","mem",m.mem,y.mem],["Callbacks","cb",m.cb,y.cb]];
     return `<div class="kicker">${idx===0?"#1 tech":"Tech spotlight · #"+(idx+1)} · ${esc(periodLabel(P).toLowerCase())}</div>
+      ${colorLegend()}
       <div class="spot">${av(r.t.k,r.name)}
       <div style="min-width:0"><div class="nm">${esc(r.name)}</div>
         <div class="sp-grid">${cells.map(c=>`<div class="tile${zoneClass(r.parts,c[1])}"><div class="l">${c[0]}</div><div class="v num">${c[2]}</div><div class="s num">${c[3]} YTD</div></div>`).join("")}</div></div></div>`;
@@ -292,7 +295,7 @@ function zoneClass(parts, key){
   return z?" z-"+z:"";
 }
 function colorLegend(){
-  return `<div class="zlegend"><span class="z-great">Super green</span><span class="z-good">At or above</span><span class="z-warn">Close</span><span class="z-bad">Below</span></div>`;
+  return `<div class="zlegend"><span class="z-great">★ Crushing it (15%+ over goal)</span><span class="z-good">On goal</span><span class="z-warn">Close (within 15%)</span><span class="z-bad">Below goal</span></div>`;
 }
 function pct1(n){
   if(n==null||!isFinite(+n)) return "—";

@@ -1809,6 +1809,30 @@ describe("automatic flips, memberships, callbacks, and Google reviews", function
     assert.equal(Object.keys(s.techs).some(function (k) { return k === "kyle"; }), false);
   });
 
+  it("treats misspellings of Kaio as Kaio in the technician cell and the review text", function () {
+    const now = Sc.nyDate(2026, 10, 20, 15, 0, 0);
+    const H = ["Published", "Platform", "Rating", "Author", "Technician", "Technician ID", "Job ID", "Customer", "Customer ID", "Verification", "Job Type", "Completed", "Review Type", "Review", "Review ID", "Tech (matched)", "Match Source", "Confidence", "Match Note"];
+    const s = snap({
+      "ST Techs": [
+        TECH_H,
+        ["Kaio Reis", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "K1", ""],
+        ["Nick Yukich", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "N1", ""]
+      ],
+      "MP Reviews": [
+        H,
+        ["2026-11-02", "Google", 5, "Ann", "Kyle", "", "", "", "", "", "", "", "Original", "Fine.", "R1", "", "", "", ""],
+        ["2026-11-03", "Google", 5, "Bob", "", "", "", "", "", "", "", "", "Original", "Kayo fixed the boiler and stayed until the heat was on.", "R2", "", "", "", ""],
+        ["2026-11-04", "Google", 5, "Cara", "Nick Yukich", "", "", "", "", "", "", "", "Original", "Kai stopped by, and Nick finished the job.", "R3", "", "", "", ""],
+        ["2026-01-10", "Google", 5, "Dan", "Caio Reis", "", "", "", "", "", "", "", "Original", "Warm house.", "R4", "", "", "", ""]
+      ]
+    }, now);
+    assert.equal(person(s, "Kaio Reis").rv.mtd, 2);
+    assert.equal(person(s, "Kaio Reis").rv.ytd, 3);
+    assert.equal(person(s, "Kaio Reis").rvMatched.mtd, 1);
+    assert.equal(person(s, "Nick Yukich").rv.mtd, 1);
+    assert.equal(person(s, "Nick Yukich").rv.ytd, 1);
+  });
+
   it("keeps ST Reviews when Marketing Pro has a header and no dated rows", function () {
     const s = snap({
       "ST Techs": [TECH_H, ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""]],

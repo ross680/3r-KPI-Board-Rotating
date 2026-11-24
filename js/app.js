@@ -95,6 +95,9 @@ function activeSlides(){
   } catch (e) {}
   if (ok("trend") && snap && snap.jobRows) out.push({k:"trend"});
   if (ok("all")) out.push({k:"all"});
+  if (ok("svcboard") && snap && snap.scorecard && snap.scorecard.service && snap.scorecard.service.length) out.push({k:"svcboard"});
+  if (ok("instboard") && snap && snap.scorecard && snap.scorecard.install && snap.scorecard.install.length) out.push({k:"instboard"});
+  if (ok("bigticket") && snap && snap.scorecard && snap.scorecard.service && snap.scorecard.service.length) out.push({k:"bigticket"});
   if (ok("lb")) out.push({k:"lb"});
   if (ok("unpaid") && snap && snap.unpaid && snap.unpaid.totalN) out.push({k:"unpaid"});
   if (ok("flips")) out.push({k:"flips"});
@@ -144,10 +147,11 @@ function slideHTML(sl){
   if (sl.k==="goal"){
     const c=coStats("mtd"); const goal=(G.monthly_rev||{}).v||0, rev=c.rev, sold=c.sold;
     const ps=Sc.paceStatus(rev, goal, now); const p=ps.pct; const memG=(G.memberships||{}).v||0, mem=snap.leaderSums.mem_mtd||0; const wk=(G.weekly||{}).v||0;
+    const goalZone=p==null?"":Sc.metricZone(rev, goal*(ps.pace||0), false);
     const iG=(G.install_rev||{}).v, sG=(G.service_rev||{}).v; const cm=coStats(null, snap.month);
     const split = (iG||sG) && snap.jobRows ? `<div class="split">${[["Install revenue",cm.instRev,iG],["Service revenue",cm.svcRev,sG]].filter(x=>x[2]).map(([n,v,g])=>`<div><div class="sp-top"><span>${n}</span><b class="num">${money(v,true)} <small>of ${money(g,true)}</small></b></div><div class="sp-bar"><i style="width:${Math.min(100,v/g*100)}%"></i><em style="left:${pace*100}%"></em></div></div>`).join("")}</div>` : "";
     return `<div class="kicker">${esc(monthName())} revenue goal</div>
-      <div class="goal-big"><div class="goal-num num">${money(rev,true)}</div><div class="goal-of">of <b>${money(goal,true)}</b> goal<br>${p==null?"No monthly revenue goal set":ps.ahead?"Ahead of pace":"Behind pace by "+money(ps.behindBy,true)}</div></div>
+      <div class="goal-big"><div class="goal-num num${goalZone?" z-"+goalZone:""}">${money(rev,true)}</div><div class="goal-of">of <b>${money(goal,true)}</b> goal<br>${p==null?"No monthly revenue goal set":ps.ahead?"Ahead of pace":"Behind pace by "+money(ps.behindBy,true)}</div></div>
       <div class="gbar"><i style="width:${p==null?0:Math.min(100,p*100)}%"></i><div class="pace" style="left:${pace*100}%"><span>Today's pace</span></div><div class="pct num">${p==null?"—":pct(p)}</div></div>
       ${split}
       <div class="tiles">
@@ -174,19 +178,21 @@ function slideHTML(sl){
       </svg></div>
       <div class="tv-legend"><span><i style="background:#26A4CB"></i>Completed revenue</span><span><i style="background:#5E747D"></i>Sold</span>${goal?`<span>Goal hit ${hit} of ${M} full months</span>`:""}</div>`;
   }
+  if (sl.k==="svcboard") return serviceBoardHTML(snap);
+  if (sl.k==="instboard") return installBoardHTML(snap);
+  if (sl.k==="bigticket") return bigTicketHTML(snap);
   if (sl.k==="lb"){
     const R = roster(true);
     if (!R.length) return `<div class="empty-tv"><div><b>No techs on the board yet</b>Add names to the Leaderboard tab or turn techs on in Admin.</div></div>`;
     return `<div class="kicker">${esc(periodLabel(P))}${paceNote()}</div><div class="big-h">Tech leaderboard</div>
-      <div class="lbh"><span></span><span></span><span style="text-align:left">Tech</span><span style="text-align:center">${grades?"Grade":""}</span><span>Revenue</span><span>Avg ticket</span><span class="x">Close rate</span><span class="x">Callbacks</span></div>
+      <div class="lbh"><span></span><span></span><span style="text-align:left">Tech</span><span>Revenue</span><span>Avg ticket</span><span class="x">Close rate</span><span class="x">Callbacks</span></div>
       <div class="scrollbox"><div class="lb scrollin">${R.map((r,i)=>`<div class="lbr ${i===0?"top":""}">
         <div class="rk num">${i+1}</div>${av(r.t.k,r.name)}
-        <div class="nm">${esc(r.name)}<small>${grades?"Score "+scoreText(r.score)+" · ":""}${r.st.pts.toLocaleString()} pts · ${r.st.jobs} jobs</small></div>
-        ${grades?`<div class="grade ${gradeClass(r.grade)}">${gradeText(r.grade)}</div>`:`<div></div>`}
-        <div class="c"><b class="num">${money(r.st.rev,true)}</b><span>revenue</span></div>
-        <div class="c"><b class="num">${r.st.paid?money(r.st.avg):"—"}</b><span>per paid job</span></div>
-        <div class="c x"><b class="num">${r.st.opp?pct(r.st.close):"—"}</b><span>close rate</span></div>
-        <div class="c x"><b class="num" style="color:${r.st.cb>0?"#FF8A80":"#fff"}">${r.st.cb}</b><span>callbacks</span></div>
+        <div class="nm">${esc(r.name)}<small>${r.st.pts.toLocaleString()} pts · ${r.st.jobs} jobs</small></div>
+        <div class="c${zoneClass(r.parts,"rev")}"><b class="num">${money(r.st.rev,true)}</b><span>revenue</span></div>
+        <div class="c${zoneClass(r.parts,"avg")}"><b class="num">${r.st.paid?money(r.st.avg):"—"}</b><span>per paid job</span></div>
+        <div class="c x${zoneClass(r.parts,"close")}"><b class="num">${r.st.opp?pct(r.st.close):"—"}</b><span>close rate</span></div>
+        <div class="c x${zoneClass(r.parts,"cb")}"><b class="num">${r.st.cb}</b><span>callbacks</span></div>
       </div>`).join("")}</div></div>`;
   }
   if (sl.k==="all"){
@@ -194,11 +200,12 @@ function slideHTML(sl){
     if(!R.length) return "";
     const sm=v=>money(v, Math.abs(v)>=10000);
     // [label, value, relative width] — widths sized to the longest value each column can show
-    const cols=[["Revenue",r=>money(r.st.rev,true),1.2],["Avg ticket",r=>r.st.paid?sm(r.st.avg):"—",1.25],["Close rate",r=>r.st.opp?pct(r.st.close):"—",1.05],["Sold",r=>money(r.st.sold,true),1.15],["Members",r=>r.st.mem,.9],["Reviews",r=>r.st.rv,.9],["Callbacks",r=>`<span style="color:${r.st.cb?"#FF8A80":"#fff"}">${r.st.cb}</span>`,1.05]];
-    const gc=`minmax(0,2.5fr) ${grades?"min(5.4vh,3vw) ":""}${cols.map(c=>`minmax(0,${c[2]}fr)`).join(" ")}`;
-    return `<div class="kicker">${esc(periodLabel(P))}${paceNote()} · the metrics in the grade</div><div class="big-h" style="margin-bottom:1.4vh">Team scoreboard</div>
-      <div class="am-h" style="grid-template-columns:${gc}"><span style="text-align:left">Name</span>${grades?"<span></span>":""}${cols.map(c=>`<span>${c[0]}</span>`).join("")}</div>
-      <div class="scrollbox"><div class="scrollin am">${R.map(r=>`<div class="am-r ${r.sales?"sales":""}" style="grid-template-columns:${gc}"><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}${r.sales?"<em>Sales</em>":""}</b></div>${grades?`<div class="grade ${gradeClass(r.grade)}">${gradeText(r.grade)}</div>`:""}${cols.map(c=>`<div class="c num">${c[1](r)}</div>`).join("")}</div>`).join("")}</div></div>`;
+    const cols=[["Revenue","rev",r=>money(r.st.rev,true),1.2],["Avg ticket","avg",r=>r.st.paid?sm(r.st.avg):"—",1.25],["Close rate","close",r=>r.st.opp?pct(r.st.close):"—",1.05],["Sold","sold",r=>money(r.st.sold,true),1.15],["Members","mem",r=>r.st.mem,.9],["Reviews","rv",r=>r.st.rv,.9],["Callbacks","cb",r=>r.st.cb,1.05]];
+    const gc=`minmax(0,2.5fr) ${cols.map(c=>`minmax(0,${c[3]}fr)`).join(" ")}`;
+    return `<div class="kicker">${esc(periodLabel(P))}${paceNote()} · color is against today's pace</div><div class="big-h" style="margin-bottom:1.4vh">Team scoreboard</div>
+      ${colorLegend()}
+      <div class="am-h" style="grid-template-columns:${gc}"><span style="text-align:left">Name</span>${cols.map(c=>`<span>${c[0]}</span>`).join("")}</div>
+      <div class="scrollbox"><div class="scrollin am">${R.map(r=>`<div class="am-r ${r.sales?"sales":""}" style="grid-template-columns:${gc}"><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}${r.sales?"<em>Sales</em>":""}</b></div>${cols.map(c=>`<div class="c num${zoneClass(r.parts,c[1])}">${c[2](r)}</div>`).join("")}</div>`).join("")}</div></div>`;
   }
   if (sl.k==="stats"){
     const R = roster(true).map(r=>({...r, y:statsFor(r.t,"ytd"), m:statsFor(r.t,"mtd")}));
@@ -212,11 +219,11 @@ function slideHTML(sl){
     const R = roster(true); if(!R.length) return `<div class="empty-tv"><div><b>No spotlight yet</b>Waiting for tech data.</div></div>`;
     const idx = S.cfg.spotMode==="top" ? 0 : (S.cycle||0) % R.length; const r=R[idx];
     const m=statsFor(r.t,"mtd"), y=statsFor(r.t,"ytd");
-    const cells=[["Revenue",money(m.rev,true),money(y.rev,true)],["Sold",money(m.sold,true),money(y.sold,true)],["Avg ticket",m.paid?money(m.avg):"—",y.paid?money(y.avg):"—"],["Close rate",m.opp?pct(m.close):"—",y.opp?pct(y.close):"—"],["Points",m.pts.toLocaleString(),y.pts.toLocaleString()],["Leads",m.leads,y.leads],["Memberships",m.mem,y.mem],["Callbacks",m.cb,y.cb]];
+    const cells=[["Revenue","rev",money(m.rev,true),money(y.rev,true)],["Sold","sold",money(m.sold,true),money(y.sold,true)],["Avg ticket","avg",m.paid?money(m.avg):"—",y.paid?money(y.avg):"—"],["Close rate","close",m.opp?pct(m.close):"—",y.opp?pct(y.close):"—"],["Points","",m.pts.toLocaleString(),y.pts.toLocaleString()],["Leads","leads",m.leads,y.leads],["Memberships","mem",m.mem,y.mem],["Callbacks","cb",m.cb,y.cb]];
     return `<div class="kicker">${idx===0?"#1 tech":"Tech spotlight · #"+(idx+1)} · ${esc(periodLabel(P).toLowerCase())}</div>
       <div class="spot">${av(r.t.k,r.name)}
-      <div style="min-width:0"><div class="nm">${esc(r.name)}${grades?` <span class="grade ${gradeClass(r.grade)}" style="width:9vh;height:9vh;font-size:6vh;vertical-align:middle;border-radius:1.4vh">${gradeText(r.grade)}</span>`:""}</div>
-        <div class="sp-grid">${cells.map(c=>`<div class="tile"><div class="l">${c[0]}</div><div class="v num">${c[1]}</div><div class="s num">${c[2]} YTD</div></div>`).join("")}</div></div></div>`;
+      <div style="min-width:0"><div class="nm">${esc(r.name)}</div>
+        <div class="sp-grid">${cells.map(c=>`<div class="tile${zoneClass(r.parts,c[1])}"><div class="l">${c[0]}</div><div class="v num">${c[2]}</div><div class="s num">${c[3]} YTD</div></div>`).join("")}</div></div></div>`;
   }
   if (sl.k==="leads"){
     const R = roster(true,"all").map(r=>({...r, lm:statsFor(r.t,"mtd").leads, ly:statsFor(r.t,"ytd").leads, l30:statsFor(r.t,"l30").leads})).sort((a,b)=>b.l30-a.l30||b.ly-a.ly||String(a.name).localeCompare(String(b.name)));
@@ -279,6 +286,98 @@ function slideHTML(sl){
     return `<div class="ann">${icon?`<div class="ic">${esc(icon)}</div>`:""}${badge?`<div class="${badgeCls}">${esc(badge)}</div>`:""}<div class="msg">${esc(msg)}</div>${detail?`<div class="sub">${esc(detail)}</div>`:""}</div>`;
   }
   return "";
+}
+function zoneClass(parts, key){
+  const z=parts&&parts[key]&&parts[key].zone;
+  return z?" z-"+z:"";
+}
+function colorLegend(){
+  return `<div class="zlegend"><span class="z-good">At or above the goal</span><span class="z-warn">Close</span><span class="z-bad">Below the goal</span></div>`;
+}
+function pct1(n){
+  if(n==null||!isFinite(+n)) return "—";
+  const v=Math.round(+n*1000)/10;
+  return (v%1?v.toFixed(1):String(v))+"%";
+}
+function laborZone(kind, n){
+  if(n==null||!isFinite(+n)) return "";
+  if(kind==="sales") return n<=0.2?"good":n<=0.3?"warn":"bad";
+  return n<=0.19?"good":n<=0.25?"warn":"bad";
+}
+function laborFor(snap, name){
+  const lab=snap&&snap.labor;
+  if(!lab||!lab.people) return null;
+  const id=String(name||"").trim().toLowerCase();
+  return lab.people[id]||null;
+}
+function laborBits(snap, name){
+  const row=laborFor(snap, name);
+  if(!row) return "";
+  const through=row.through?nyShort(row.through):"";
+  const cell=(label, kind, n)=>n==null?"":`<div class="sc-m z-${laborZone(kind,n)}"><span>${label}${through?" through "+esc(through):""}</span><b class="num">${pct1(n)}</b></div>`;
+  return cell("Labor of revenue", "revenue", row.revenue)+cell("Labor of sales", "sales", row.sales);
+}
+function scWhen(card){
+  return `${nyShort(card.yStart)}–${nyShort(card.asOf)} · last 4 weeks ${nyShort(card.l4Start)}–${nyShort(card.asOf)}`;
+}
+function serviceBoardHTML(snap){
+  const card=snap.scorecard;
+  const rows=(card.service||[]).concat([card.team]);
+  const metric=(row, key, label, text)=>`<div class="sc-m${row.fresh?"":(row.zones&&row.zones[key]?" z-"+row.zones[key]:"")}"><span>${label}</span><b class="num">${text}</b></div>`;
+  const cards=rows.map(r=>{
+    const fresh=r.fresh?`<div class="sc-fresh">${esc(r.fresh)}</div>`:"";
+    return `<div class="sc-card"><div class="nm">${esc(r.label)}</div>${fresh}
+      ${metric(r,"pace","4-week pace", pct1(r.pace))}
+      ${metric(r,"ticket","Paid ticket", r.ticket==null?"—":money(r.ticket,true))}
+      ${metric(r,"conv","Conversion", pct1(r.conv))}
+      ${metric(r,"mem","Memberships", `${r.mem} · ${pct1(r.memPct)}`)}
+      ${metric(r,"zero","$0 jobs", pct1(r.zeroPct))}
+      ${metric(r,"cb","Callbacks", pct1(r.cbPct))}
+      ${laborBits(snap, r.name)}
+      <div class="sc-context">${r.jobs} jobs · ${money(r.rev,true)} · last 4 weeks ${r.l4jobs} · ${money(r.l4rev,true)}</div>
+    </div>`;
+  }).join("");
+  return `<div class="kicker">Service techs · ${esc(scWhen(card))} · Franco and Jon left out</div>
+    <div class="big-h tight">Service scorecard</div>
+    ${colorLegend()}
+    <div class="sc-grid cols-4">${cards}</div>`;
+}
+function installBoardHTML(snap){
+  const card=snap.scorecard;
+  const metric=(row, key, label, text)=>`<div class="sc-m${row.zones&&row.zones[key]?" z-"+row.zones[key]:""}"><span>${label}</span><b class="num">${text}</b></div>`;
+  const cards=(card.install||[]).map(r=>`<div class="sc-card"><div class="nm">${esc(r.label)}</div>
+      ${metric(r,"instTicket","Install ticket", r.instTicket==null?"—":money(r.instTicket,true))}
+      ${metric(r,"pace","4-week pace", pct1(r.pace))}
+      ${metric(r,"cb","Service callbacks", pct1(r.cbPct))}
+      ${laborBits(snap, r.name)}
+      <div class="sc-context">${r.inst} installs · ${money(r.instRev,true)} · year ${r.jobs} jobs · ${money(r.rev,true)} · last 4 weeks ${r.l4jobs} · ${money(r.l4rev,true)}</div>
+    </div>`).join("");
+  const team=card.team||{};
+  const teamCard=`<div class="sc-card"><div class="nm">Installers</div>
+      <div class="sc-m"><span>Average install ticket</span><b class="num">${team.installerTicket==null?"—":money(team.installerTicket,true)}</b></div>
+      <div class="sc-context">Mitch and Bryan only. Goal $12K.</div>
+      ${laborBits(snap, "Team")}
+    </div>`;
+  return `<div class="kicker">Install leads · ${esc(scWhen(card))} · Franco and Jon left out</div>
+    <div class="big-h tight">Install scorecard</div>
+    ${colorLegend()}
+    <div class="sc-grid cols-3">${cards}${teamCard}</div>`;
+}
+function bigTicketHTML(snap){
+  const card=snap.scorecard;
+  const rows=(card.service||[]).concat(card.install||[]);
+  const metric=(row, key, label, text)=>`<div class="sc-m${row.fresh?"":(row.zones&&row.zones[key]?" z-"+row.zones[key]:"")}"><span>${label}</span><b class="num">${text}</b></div>`;
+  const cards=rows.map(r=>`<div class="sc-card"><div class="nm">${esc(r.label)}${r.fresh?`<small>${esc(r.fresh)}</small>`:""}</div>
+      ${metric(r,"bigRate","$5K+ quote rate", `${pct1(r.bigRate)} · ${r.big} of ${r.svc}`)}
+      ${metric(r,"bigClose","$5K+ close rate", `${pct1(r.bigClose)} · ${r.bigSold} of ${r.big}`)}
+      <div class="sc-m"><span>Open $5K+ quotes</span><b class="num">${r.openN} · ${money(r.openAmt,true)}</b></div>
+    </div>`).join("");
+  const team=card.team||{};
+  return `<div class="kicker">Largest option on a service call, membership options left out · ${esc(scWhen(card))}</div>
+    <div class="big-h tight">Big-ticket pipeline</div>
+    ${colorLegend()}
+    <div class="sc-grid cols-5">${cards}</div>
+    <div class="sc-context">Team quote rate ${pct1(team.bigRate)} · close rate ${pct1(team.bigClose)} · open ${team.openN} · ${money(team.openAmt,true)}. Quote rate is colored against the team. Close rate goal is 25%.</div>`;
 }
 function nyShort(ymd){
   const d=ymd?Sc.toDate(ymd):null;
@@ -732,10 +831,10 @@ function paneScore(){
       <div><h2>Tech scorecard</h2><div class="muted small">${esc(periodLabel(S.period))} · data through ${esc(S.snap.dataThrough||"—")} · tap a tech for month-by-month</div></div>
       <div class="seg" role="group" aria-label="Period">${["mtd","l30","ytd"].map(p=>`<button type="button" class="${S.period===p?"on":""}" data-period="${p}">${{mtd:"This month",l30:"Last 30 days",ytd:"Year to date"}[p]}</button>`).join("")}</div>
     </div>
-    <div class="tscroll"><table class="sc" style="min-width:1180px"><thead><tr><th>Tech</th><th>Grade</th><th>Score</th><th>Revenue</th><th>Jobs</th><th>Avg ticket</th><th>Close rate</th><th>Sold</th><th>Open est.</th><th>Points</th><th>Leads</th><th>GM %</th><th>$/hr</th><th>Callbacks</th><th>CB %</th><th>Efficiency</th><th>Overdue f/u</th><th>Mem.</th><th>Reviews</th><th>Rating</th></tr></thead><tbody>
+    <div class="tscroll"><table class="sc" style="min-width:1100px"><thead><tr><th>Tech</th><th>Score</th><th>Revenue</th><th>Jobs</th><th>Avg ticket</th><th>Close rate</th><th>Sold</th><th>Open est.</th><th>Points</th><th>Leads</th><th>GM %</th><th>$/hr</th><th>Callbacks</th><th>CB %</th><th>Efficiency</th><th>Overdue f/u</th><th>Mem.</th><th>Reviews</th><th>Rating</th></tr></thead><tbody>
     ${R.map(r=>`<tr class="tr ${S.sel===r.t.k?"sel":""}" data-sel="${esc(r.t.k)}">
       <td><div class="who">${av(r.t.k,r.name,"s")}<b>${esc(r.name)}</b></div></td>
-      <td><span class="grade ${gradeClass(r.grade)}">${gradeText(r.grade)}</span></td><td class="num"><b>${scoreText(r.score)}</b></td>
+      <td class="num"><b>${scoreText(r.score)}</b></td>
       <td class="num">${money(r.st.rev)}</td><td class="num">${r.st.jobs}</td><td class="num">${r.st.paid?money(r.st.avg):"—"}</td>
       <td class="num">${r.st.opp?pct(r.st.close):"—"} <span class="muted small">(${r.st.opp})</span></td><td class="num">${money(r.st.sold)}</td>
       <td class="num">${r.st.openN} · ${money(r.st.openAmt,true)}</td><td class="num">${r.st.pts.toLocaleString()}</td><td class="num">${r.st.leads}</td><td class="num">${r.st.rev?pct(r.st.gmPct):"—"}</td><td class="num">${r.st.hrs?money(r.st.revHr):"—"}</td>
@@ -743,7 +842,7 @@ function paneScore(){
       <td class="num">${r.st.jobs?pct(r.st.cbRate):"—"}</td><td class="num">${r.st.hrs?pct(r.st.eff):"—"}</td><td class="num" style="${r.st.overdue?"color:var(--warn);font-weight:800":""}">${r.st.overdue}</td>
       <td class="num">${r.st.mem}</td><td class="num">${r.st.rv}</td>
       <td>${stars(r.t.k)}</td></tr>`).join("")}
-      <tr><td><b>Company</b></td><td></td><td></td><td class="num"><b>${money(c.rev)}</b></td><td class="num">${c.jobs}</td><td class="num">${c.paid?money(c.avg):"—"}</td><td class="num">${c.opp?pct(c.close):"—"}</td><td class="num">${money(c.sold)}</td><td></td><td></td><td class="num">${c.leads}</td><td class="num">${c.rev?pct(c.gmPct):"—"}</td><td class="num">${c.hrs?money(c.revHr):"—"}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+      <tr><td><b>Company</b></td><td></td><td class="num"><b>${money(c.rev)}</b></td><td class="num">${c.jobs}</td><td class="num">${c.paid?money(c.avg):"—"}</td><td class="num">${c.opp?pct(c.close):"—"}</td><td class="num">${money(c.sold)}</td><td></td><td></td><td class="num">${c.leads}</td><td class="num">${c.rev?pct(c.gmPct):"—"}</td><td class="num">${c.hrs?money(c.revHr):"—"}</td><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>
     </tbody></table></div>
     ${hidden?`<p class="muted small" style="margin:10px 0 0">${hidden} other name${hidden>1?"s":""} in the data (office staff, former techs) hidden. Turn them on in Techs &amp; photos.</p>`:""}
   </div>
@@ -754,10 +853,10 @@ function paneScore(){
 }
 function salesTable(){
   const A = salesRoster(false); if(!A.length) return "";
-  return `<div class="card"><h2>Sales</h2><div class="muted small" style="margin-bottom:10px">Everyone who sold or wrote estimates (${esc(periodLabel(S.period))}), ranked by sold. The sales grade uses the Sales scoring rules for everyone; techs keep their tech grade on the scorecard above.</div>
-  <div class="tscroll"><table class="sc" style="min-width:980px"><thead><tr><th>Name</th><th>Side</th><th>Sales grade</th><th>Score</th><th>Sold</th><th>Sold #</th><th>Estimates</th><th>Close %</th><th>Avg sale</th><th>Open est.</th><th>Overdue f/u</th><th>Mem.</th><th>Rating</th></tr></thead><tbody>
+  return `<div class="card"><h2>Sales</h2><div class="muted small" style="margin-bottom:10px">Everyone who sold or wrote estimates (${esc(periodLabel(S.period))}), ranked by sold.</div>
+  <div class="tscroll"><table class="sc" style="min-width:900px"><thead><tr><th>Name</th><th>Side</th><th>Score</th><th>Sold</th><th>Sold #</th><th>Estimates</th><th>Close %</th><th>Avg sale</th><th>Open est.</th><th>Overdue f/u</th><th>Mem.</th><th>Rating</th></tr></thead><tbody>
   ${A.map(r=>`<tr class="tr ${S.sel===r.t.k?"sel":""}" data-sel="${esc(r.t.k)}"><td><div class="who">${av(r.t.k,r.name,"s")}<b>${esc(r.name)}</b></div></td><td class="muted small">${r.side==="sales"?"Sales":r.side==="apprentice"?"Apprentice":"Tech"}</td>
-    <td><span class="grade ${gradeClass(r.sc.grade)}">${gradeText(r.sc.grade)}</span></td><td class="num"><b>${scoreText(r.sc.score)}</b></td><td class="num">${money(r.st.sold)}</td><td class="num">${r.st.soldN}</td><td class="num">${r.st.estN}</td><td class="num">${r.st.estN?pct(r.st.estClose):"—"}</td><td class="num">${r.st.soldN?money(r.st.avgSale):"—"}</td><td class="num">${r.st.openN} · ${money(r.st.openAmt,true)}</td><td class="num" style="${r.st.overdue?"color:var(--bad);font-weight:800":""}">${r.st.overdue}</td><td class="num">${r.st.mem}</td><td>${stars(r.t.k)}</td></tr>`).join("")}</tbody></table></div></div>`;
+    <td class="num"><b>${scoreText(r.sc.score)}</b></td><td class="num">${money(r.st.sold)}</td><td class="num">${r.st.soldN}</td><td class="num">${r.st.estN}</td><td class="num">${r.st.estN?pct(r.st.estClose):"—"}</td><td class="num">${r.st.soldN?money(r.st.avgSale):"—"}</td><td class="num">${r.st.openN} · ${money(r.st.openAmt,true)}</td><td class="num" style="${r.st.overdue?"color:var(--bad);font-weight:800":""}">${r.st.overdue}</td><td class="num">${r.st.mem}</td><td>${stars(r.t.k)}</td></tr>`).join("")}</tbody></table></div></div>`;
 }
 function flagTable(){
   const F=(S.snap.flags||[]); if(!S.snap.auto||!S.snap.auto.inst) return "";
@@ -773,9 +872,9 @@ function flagTable(){
 function appTable(){
   const A = roster(false,"apprentice"); if(!A.length) return "";
   return `<div class="card"><h2>Apprentices</h2><div class="muted small" style="margin-bottom:10px">Graded on attendance from ServiceTitan clock-ins and time off (${esc(periodLabel(S.period))}). Holidays and PTO days don't count as missed.</div>
-  <div class="tscroll"><table class="sc" style="min-width:900px"><thead><tr><th>Apprentice</th><th>Grade</th><th>Score</th><th>Attendance</th><th>On time</th><th>Missed days</th><th>Late days</th><th>PTO hrs</th><th>Days worked</th><th>Hours clocked</th><th>Rating</th></tr></thead><tbody>
+  <div class="tscroll"><table class="sc" style="min-width:820px"><thead><tr><th>Apprentice</th><th>Score</th><th>Attendance</th><th>On time</th><th>Missed days</th><th>Late days</th><th>PTO hrs</th><th>Days worked</th><th>Hours clocked</th><th>Rating</th></tr></thead><tbody>
   ${A.map(r=>`<tr class="tr ${S.sel===r.t.k?"sel":""}" data-sel="${esc(r.t.k)}"><td><div class="who">${av(r.t.k,r.name,"s")}<b>${esc(r.name)}</b></div></td>
-    <td><span class="grade ${gradeClass(r.grade)}">${gradeText(r.grade)}</span></td><td class="num"><b>${scoreText(r.score)}</b></td>
+    <td class="num"><b>${scoreText(r.score)}</b></td>
     ${r.st.hasAtt?`<td class="num">${r.st.sched?pct(r.st.attend):"—"}</td><td class="num">${r.st.daysW?pct(r.st.onTime):"—"}</td><td class="num" style="${r.st.missed?"color:var(--bad);font-weight:800":""}">${r.st.missed}</td><td class="num">${r.st.late}</td><td class="num">${Math.round(r.st.pto)}</td><td class="num">${r.st.daysW} / ${r.st.sched}</td><td class="num">${Math.round(r.st.clockHrs)}</td>`:`<td colspan="7" class="muted small" style="text-align:left">No clock-ins or PTO in ServiceTitan yet</td>`}
     <td>${stars(r.t.k)}</td></tr>`).join("")}</tbody></table></div></div>`;
 }
@@ -794,7 +893,7 @@ function monthTable(t){
 function detailHTML(r){
   const t=r.t; const o=S.techs[t.k]||{}; const today=Date.now();
   return `<div class="detail">
-    <div class="card"><div class="row" style="margin-bottom:10px">${av(t.k,r.name,"m")}<div><h2>${esc(t.full)}</h2><div class="muted small">Score ${scoreText(r.score)} · grade ${gradeText(r.grade)} · ${esc(periodLabel(S.period))}</div></div></div>
+    <div class="card"><div class="row" style="margin-bottom:10px">${av(t.k,r.name,"m")}<div><h2>${esc(t.full)}</h2><div class="muted small">Score ${scoreText(r.score)} · ${esc(periodLabel(S.period))}</div></div></div>
       ${(roleOf(t)==="apprentice"?APP_METRICS.filter(m=>((S.cfg.appMetrics||{})[m.k]||m).w>0):roleOf(t)==="sales"?SALES_METRICS.filter(m=>((S.cfg.salesMetrics||{})[m.k]||m).w>0):METRICS.filter(m=>(S.cfg.metrics[m.k]||{}).w>0)).map(m=>{const p=r.parts[m.k]||{v:0,s:null}; return `<div class="mbar"><span>${m.label}</span><div class="t"><i style="width:${p.s==null?0:Math.round(p.s*100)}%;${m.inverse&&p.v>0?"background:var(--bad)":""}"></i></div><span class="v num">${p.s==null?(m.k==="rating"?"not rated":"n/a"):fmtM(m,p.v)}</span></div>`;}).join("")}
       <p class="muted small">Bars show progress to each target in Scoring rules.</p>
       <h3 style="margin-top:14px">Manager notes</h3>
@@ -846,7 +945,7 @@ function paneBoard(){
       <span><b>Spotlight</b></span><select id="spMode" class="txt"><option value="rotate" ${S.cfg.spotMode!=="top"?"selected":""}>Rotate through every tech</option><option value="top" ${S.cfg.spotMode==="top"?"selected":""}>Top tech only</option></select>
       <span><b>Company totals</b><div class="muted small">Goal slide revenue, sold and calls booked</div></span><select id="coSrc" class="txt"><option value="auto" ${S.cfg.coSource!=="actuals"?"selected":""}>Calculated from job data</option><option value="actuals" ${S.cfg.coSource==="actuals"?"selected":""}>Actuals tab (typed in)</option></select>
     </div>
-    <label class="lbl" style="margin-top:12px"><input type="checkbox" id="tvGr" ${S.cfg.tvGrades!==false?"checked":""}> Show scores and letter grades on the TV (they always show here in Admin)</label>
+    <label class="lbl" style="margin-top:12px"><input type="checkbox" id="tvGr" ${S.cfg.tvGrades!==false?"checked":""}> Color TV metrics against the goal</label>
     <h3 style="margin-top:16px">Slides</h3>${SLIDES.map(s=>`<label class="lbl"><input type="checkbox" data-slide="${s.k}" ${on[s.k]!==false?"checked":""}> ${s.label}</label>`).join("")}
     <div class="row" style="margin-top:14px"><button class="btn" type="button" id="saveBoard">Save board settings</button><button class="btn ghost" type="button" onclick="location.hash='board'">Open board</button></div>
   </div>

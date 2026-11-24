@@ -2140,6 +2140,8 @@
       reviewMatch: reviewMatch, reviewSource: reviewSource, reviewStars: reviewStars,
       memUnassigned: memUnassigned, callbacks: callbackRoll,
       google: readGoogleProfile(sheetRows(wb, "Google Reviews")),
+      scorecard: buildFieldScorecard(wb, now),
+      labor: readLaborPct(sheetRows(wb, "Labor Pct")),
       unpaid: readUnpaidInvoices(jobSheet, names),
       sources: sheetSources(wb),
       callCenter: {
@@ -2376,6 +2378,254 @@
     if (!setOnSheet && avg > 0 && cfg.metrics && cfg.metrics.avg) cfg.metrics.avg.target = avg;
     return cfg;
   }
+  /* Green is at or above the goal. Yellow is within 15% of it. Red is further away.
+     Lower-is-better metrics flip the same band. No letter is attached. */
+  function metricZone(value, target, inverse) {
+    if (value == null || !isFinite(+value) || !(+target > 0)) return "";
+    var v = +value, t = +target;
+    if (inverse) {
+      if (v <= t) return "good";
+      if (v <= t * 1.15) return "warn";
+      return "bad";
+    }
+    if (v >= t) return "good";
+    if (v >= t * 0.85) return "warn";
+    return "bad";
+  }
+  function scorecardBu(bu) {
+    var s = String(bu || "");
+    if (/install/i.test(s)) return "inst";
+    if (/sales/i.test(s)) return "sales";
+    if (/service|maint/i.test(s)) return "svc";
+    return "other";
+  }
+  function memberOnlyEstimate(name) {
+    var s = String(name || "").toLowerCase().trim();
+    if (!/member|care club|total care/.test(s)) return false;
+    if (/^(membership|total care|care club|tcc)\b/.test(s)) return true;
+    return s.length < 40 && /member/.test(s) && !/install|replac|boiler|furnace|water|heater|tank|system|condens|air|plumb|drain|pipe|valve|pump/.test(s);
+  }
+  function ymdSpan(startIso, endIso) {
+    var a = toDate(startIso), b = toDate(endIso);
+    if (!a || !b) return 0;
+    return Math.round((b.getTime() - a.getTime()) / 86400000) + 1;
+  }
+  /* Service and install scorecards for the five techs on the v2 card.
+     Franco and Jon are left out of the rows and out of the team totals.
+     Justin is shown and marked new; his cells are not colored. */
+  function buildFieldScorecard(wb, now) {
+    now = now || nyNow();
+    var end = nyYMD(now);
+    var endDate = toDate(end);
+    var l4 = nyYMD(addNyDays(endDate, -27));
+    var yStart = nyParts(now).y + "-01-01";
+    var roster = [
+      { name: "Nick Yukich", label: "Nick", group: "service" },
+      { name: "Kaio Reis", label: "Kaio", group: "service" },
+      { name: "Justin Romano", label: "Justin", group: "service", fresh: "New, started Oct 21" },
+      { name: "Mitchell Cooper", label: "Mitch", group: "install" },
+      { name: "Bryan Welch", label: "Bryan", group: "install" }
+    ];
+    var blank = function () {
+      return { jobs: 0, rev: 0, l4jobs: 0, l4rev: 0, svc: 0, paidN: 0, paidRev: 0, zero: 0, opp: 0, conv: 0, recall: 0, inst: 0, instRev: 0, mem: 0, big: 0, bigSold: 0, openN: 0, openAmt: 0 };
+    };
+    var box = {};
+    roster.forEach(function (p) { box[p.name] = blank(); });
+    var jobs = sheetRows(wb, "ST Jobs");
+    var jhRes = headerIndex(jobs, function (r) {
+      return (r || []).some(function (c) { return String(c).trim().toLowerCase() === "primary technician"; });
+    });
+    var jobByNum = {};
+    if (jhRes.i >= 0) {
+      var jh = jhRes.h;
+      jobs.slice(jhRes.i + 1).forEach(function (r) {
+        var status = String(r[jh.status] || "").trim().toLowerCase();
+        var tech = cleanPersonName(r[jh["primary technician"]] || "");
+        var jobNum = String(r[jh["job #"]] == null ? "" : r[jh["job #"]]).trim();
+        var id = String(r[jh["job id"]] == null ? "" : r[jh["job id"]]).trim();
+        var kind = scorecardBu(r[jh["business unit"]]);
+        var meta = { tech: tech, kind: kind };
+        if (jobNum) jobByNum[jobNum] = meta;
+        if (id) jobByNum[id] = meta;
+        if (status !== "completed" || !box[tech]) return;
+        var done = toDate(r[jh["completion date"]]);
+        var doneIso = done ? nyYMD(done) : "";
+        if (!doneIso || doneIso < yStart || doneIso > end) return;
+        var rev = num(r[jh["jobs total revenue"]] || r[jh["jobs total"]]);
+        var o = box[tech];
+        o.jobs++;
+        o.rev += rev;
+        if (doneIso >= l4) { o.l4jobs++; o.l4rev += rev; }
+        if (kind === "svc") {
+          o.svc++;
+          var zero = bool(r[jh["zero dollar job"]]) || rev <= 0;
+          if (zero) o.zero++;
+          else { o.paidN++; o.paidRev += rev; }
+          if (bool(r[jh.opportunity])) {
+            o.opp++;
+            if (bool(r[jh.converted])) o.conv++;
+          }
+          var jt = String(r[jh["job type"]] || "");
+          if (bool(r[jh.recall]) || /call\s*back|callback/i.test(jt)) o.recall++;
+        } else if (kind === "inst") {
+          o.inst++;
+          o.instRev += rev;
+        }
+      });
+    }
+    var memRows = sheetRows(wb, "ST Memberships");
+    var memRes = headerIndex(memRows, function (r) { return String((r && r[0]) || "").trim().toLowerCase() === "membership id"; });
+    if (memRes.i >= 0) {
+      memRows.slice(memRes.i + 1).forEach(function (r) {
+        var h = memRes.h;
+        if (SETTINGS.RULES.excludeMembershipRenewals && SETTINGS.RULES.renewalPattern.test(String(r[h.type] || ""))) return;
+        var d = toDate(r[h.created]);
+        var iso = d ? nyYMD(d) : "";
+        if (!iso || iso < yStart || iso > end) return;
+        var tech = cleanPersonName(r[h["sold by"]] || "");
+        if (box[tech]) box[tech].mem++;
+      });
+    }
+    var est = sheetRows(wb, "ST Estimates");
+    var estRes = headerIndex(est, function (r) {
+      return (r || []).some(function (c) { return String(c).trim().toLowerCase() === "estimate status"; });
+    });
+    var bigByJob = {};
+    var openByJob = {};
+    if (estRes.i >= 0) {
+      var eh = estRes.h;
+      est.slice(estRes.i + 1).forEach(function (r) {
+        var jobn = String(r[eh["parent job number"]] == null ? "" : r[eh["parent job number"]]).trim();
+        if (!jobn) return;
+        var name = String(r[eh["estimate name"]] || "");
+        if (memberOnlyEstimate(name)) return;
+        var total = num(r[eh["estimates total"]]);
+        var status = String(r[eh["estimate status"]] || "");
+        if (!bigByJob[jobn]) bigByJob[jobn] = { max: 0, sold: false };
+        if (total > bigByJob[jobn].max) bigByJob[jobn].max = total;
+        if (total >= 5000 && /sold/i.test(status)) bigByJob[jobn].sold = true;
+        if (/open/i.test(status)) {
+          if (!openByJob[jobn] || total > openByJob[jobn]) openByJob[jobn] = total;
+        }
+      });
+    }
+    Object.keys(jobByNum).forEach(function (jobn) {
+      var meta = jobByNum[jobn];
+      if (!meta || meta.kind !== "svc" || !box[meta.tech]) return;
+      var big = bigByJob[jobn];
+      if (big && big.max >= 5000) {
+        box[meta.tech].big++;
+        if (big.sold) box[meta.tech].bigSold++;
+      }
+      var open = openByJob[jobn];
+      if (open >= 5000) {
+        box[meta.tech].openN++;
+        box[meta.tech].openAmt += open;
+      }
+    });
+    var days = ymdSpan(yStart, end);
+    function pack(person, raw) {
+      var pace = !person.fresh && raw.rev > 0 && days > 0 ? raw.l4rev / (raw.rev / days * 28) : null;
+      var ticket = raw.paidN ? raw.paidRev / raw.paidN : null;
+      var conv = raw.opp ? raw.conv / raw.opp : null;
+      var memPct = raw.svc ? raw.mem / raw.svc : null;
+      var zeroPct = raw.svc ? raw.zero / raw.svc : null;
+      var cbPct = raw.svc ? raw.recall / raw.svc : null;
+      var instTicket = raw.inst ? raw.instRev / raw.inst : null;
+      var bigRate = raw.svc ? raw.big / raw.svc : null;
+      var bigClose = raw.big ? raw.bigSold / raw.big : null;
+      return {
+        name: person.name, label: person.label, group: person.group, fresh: person.fresh || "",
+        jobs: raw.jobs, rev: Math.round(raw.rev), l4jobs: raw.l4jobs, l4rev: Math.round(raw.l4rev),
+        svc: raw.svc, paidN: raw.paidN, inst: raw.inst, instRev: Math.round(raw.instRev),
+        mem: raw.mem, big: raw.big, bigSold: raw.bigSold, openN: raw.openN, openAmt: Math.round(raw.openAmt),
+        pace: pace, ticket: ticket, conv: conv, memPct: memPct, zeroPct: zeroPct, cbPct: cbPct,
+        instTicket: instTicket, bigRate: bigRate, bigClose: bigClose
+      };
+    }
+    var people = roster.map(function (p) { return pack(p, box[p.name]); });
+    var teamRaw = blank();
+    roster.forEach(function (p) {
+      var raw = box[p.name];
+      Object.keys(teamRaw).forEach(function (k) { teamRaw[k] += raw[k]; });
+    });
+    var team = pack({ name: "Team", label: "Team", group: "team" }, teamRaw);
+    var installers = people.filter(function (p) { return p.group === "install"; });
+    var instRev = 0, instN = 0;
+    installers.forEach(function (p) { instRev += p.instRev; instN += p.inst; });
+    team.installerTicket = instN ? instRev / instN : null;
+    function paint(row) {
+      if (row.fresh) {
+        row.zones = {};
+        return row;
+      }
+      var teamBig = team.bigRate;
+      row.zones = {
+        pace: metricZone(row.pace, 1, false),
+        ticket: row.ticket == null ? "" : (row.ticket >= 1200 ? "good" : row.ticket >= 850 ? "warn" : metricZone(row.ticket, 850, false)),
+        conv: row.conv == null ? "" : (row.conv >= 0.8 ? "good" : metricZone(row.conv, 0.8, false)),
+        mem: row.memPct == null ? "" : (row.memPct >= 0.15 ? "good" : row.memPct >= 0.075 ? "warn" : "bad"),
+        zero: row.zeroPct == null ? "" : (row.zeroPct <= 0.35 ? "good" : row.zeroPct <= 0.42 ? "warn" : "bad"),
+        cb: row.cbPct == null ? "" : (row.cbPct <= 0.03 ? "good" : row.cbPct <= 0.06 ? "warn" : "bad"),
+        instTicket: row.group === "install" ? metricZone(row.instTicket, 12000, false) : "",
+        bigRate: teamBig > 0 ? (row.bigRate >= teamBig ? "good" : row.bigRate >= teamBig * 0.75 ? "warn" : "bad") : "",
+        bigClose: metricZone(row.bigClose, 0.25, false)
+      };
+      return row;
+    }
+    people.forEach(paint);
+    team.zones = {};
+    return {
+      asOf: end, l4Start: l4, yStart: yStart,
+      service: people.filter(function (p) { return p.group === "service"; }),
+      install: people.filter(function (p) { return p.group === "install"; }),
+      team: team
+    };
+  }
+  /* Labor Pct holds percentages only. Dollars never come from this tab. */
+  function readLaborPct(rows) {
+    rows = rows || [];
+    var headerAt = -1, h = {};
+    var i, j;
+    for (i = 0; i < rows.length; i++) {
+      var map = {};
+      var line = rows[i] || [];
+      for (j = 0; j < line.length; j++) {
+        var key = String(line[j] == null ? "" : line[j]).trim().toLowerCase().replace(/[\s-]+/g, "_");
+        if (key) map[key] = j;
+      }
+      if (map.tech != null && (map.labor_pct_revenue != null || map.labor_pct_sales != null)) { headerAt = i; h = map; break; }
+    }
+    if (headerAt < 0) return null;
+    function asPct(v) {
+      if (v == null || String(v).trim() === "") return null;
+      var n = num(v);
+      if (!isFinite(n)) return null;
+      if (Math.abs(n) > 1) n = n / 100;
+      return n;
+    }
+    var best = {};
+    rows.slice(headerAt + 1).forEach(function (r) {
+      if (!r) return;
+      var tech = cleanPersonName(r[h.tech] || "");
+      if (!tech) return;
+      var end = toDate(h.period_end == null ? "" : r[h.period_end]);
+      var endIso = end ? nyYMD(end) : "";
+      var rec = {
+        through: endIso,
+        revenue: h.labor_pct_revenue == null ? null : asPct(r[h.labor_pct_revenue]),
+        sales: h.labor_pct_sales == null ? null : asPct(r[h.labor_pct_sales])
+      };
+      if (rec.revenue == null && rec.sales == null) return;
+      var id = tech.toLowerCase();
+      if (!best[id] || rec.through > best[id].through) best[id] = rec;
+    });
+    var ids = Object.keys(best);
+    if (!ids.length) return null;
+    var through = "";
+    ids.forEach(function (id) { if (best[id].through > through) through = best[id].through; });
+    return { through: through, people: best };
+  }
   function letterGrade(score) {
     if (score == null || !isFinite(score)) return null;
     var grades = (SETTINGS.RULES.letterGrades || []).slice().sort(function (a, b) { return (+b.min || 0) - (+a.min || 0); });
@@ -2409,7 +2659,7 @@
       if (m.inverse) s = v <= 0 ? 1 : (target > 0 ? Math.max(0, 1 - (v / target) * (1 - at)) : 0);
       else if (target > 0) s = rules.capScoreAtTarget === false ? ((v || 0) / target) : Math.min(1, (v || 0) / target);
       else s = 0;
-      parts[m.k] = {v:v, s:s, target:target};
+      parts[m.k] = {v:v, s:s, target:target, zone: s == null ? "" : metricZone(v, target, m.inverse)};
       if (rules.omitZeroWeight === false || w > 0) { tw += w; tot += w * s; }
     });
     var score = tw ? Math.round(tot / tw * 100) : null;
@@ -2822,7 +3072,7 @@
     toDate:toDate, num:num, bool:bool, key:key, money:money, pct:pct, fmtM:fmtM, initials:initials, firstName:firstName, hashStr:hashStr,
     displayName:displayName, matchTech:matchTech, bindTechMeta:bindTechMeta, nameIsHidden:nameIsHidden, techIsHidden:techIsHidden,
     sheetRows:sheetRows, sumTo:sumTo, pick:pick, derive:derive, statsFor:statsFor, coStats:coStats,
-    monthsElapsed:monthsElapsed, letterGrade:letterGrade, scoreWith:scoreWith, scoreTech:scoreTech, roleOf:roleOf,
+    monthsElapsed:monthsElapsed, letterGrade:letterGrade, metricZone:metricZone, scoreWith:scoreWith, scoreTech:scoreTech, roleOf:roleOf,
     roster:roster, salesRoster:salesRoster, buildSnapshot:buildSnapshot, attachFeed:attachFeed,
     announcementActive:announcementActive, activeAnnouncements:activeAnnouncements, announcementSlots:announcementSlots,
     readAnnouncements:readAnnouncements, welcomeFaces:welcomeFaces,
@@ -2834,6 +3084,6 @@
     percentToGoal:percentToGoal, monthPace:monthPace, yearPace:yearPace, paceStatus:paceStatus, periodStart:periodStart,
     periodLabel:periodLabel, monthName:monthName, isStale:isStale, chooseDataMode:chooseDataMode,
     applySheetConfig:applySheetConfig, applyCompanyGoals:applyCompanyGoals, parseTechMeta:parseTechMeta, shiftLimitMinutes:shiftLimitMinutes,
-    mtdFraction:mtdFraction, readUnpaidInvoices:readUnpaidInvoices, readGoogleProfile:readGoogleProfile
+    mtdFraction:mtdFraction, readUnpaidInvoices:readUnpaidInvoices, readGoogleProfile:readGoogleProfile, readLaborPct:readLaborPct, buildFieldScorecard:buildFieldScorecard
   };
 });

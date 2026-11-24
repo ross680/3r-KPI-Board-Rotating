@@ -357,6 +357,19 @@ function teamMark(){
   if(src) return `<div class="sc-logo"><img src="${esc(src)}" alt="3R"></div>`;
   return `<div class="av sc-av">3R</div>`;
 }
+function paceNoteLine(){
+  return `<div class="sc-note">4-week pace = last 4 weeks of revenue ÷ (average day × 28). Average starts Jan 1, or Oct 21 for Justin. 100% = on goal.</div>`;
+}
+function paceTile(row){
+  const z=row.zones&&row.zones.pace?" z-"+row.zones.pace:"";
+  let extra="";
+  if(row.pace!=null && row.paceGoal){
+    const scale=1.5;
+    const fill=Math.max(0, Math.min(100, row.pace/scale*100));
+    extra=`<div class="math">${money(row.l4rev,true)} last 4 wks · goal ${money(row.paceGoal,true)}</div><i class="pbar" aria-hidden="true"><em style="width:${fill.toFixed(1)}%"></em><s style="left:${(100/scale).toFixed(1)}%"></s></i>`;
+  }
+  return `<div class="sc-m sc-pace${z}"><div class="row"><span>4-week pace</span><b class="num">${pct1(row.pace)}</b></div>${extra}</div>`;
+}
 function serviceBoardHTML(snap){
   const card=snap.scorecard;
   const rows=(card.service||[]).concat([card.team]);
@@ -365,7 +378,7 @@ function serviceBoardHTML(snap){
     const fresh=r.fresh?`<div class="sc-fresh">${esc(r.fresh)}</div>`:"";
     const face=r.group==="team"?teamMark():scoreFace(r.name);
     return `<div class="sc-card"><div class="sc-head">${face}<div class="sc-id"><div class="nm">${esc(r.label)}</div>${fresh}</div></div>
-      ${metric(r,"pace","4-week pace", pct1(r.pace))}
+      ${paceTile(r)}
       ${metric(r,"ticket","Paid ticket", r.ticket==null?"—":money(r.ticket,true))}
       ${metric(r,"conv","Conversion", pct1(r.conv))}
       ${metric(r,"mem","Memberships", `${r.mem} · ${pct1(r.memPct)}`)}
@@ -378,6 +391,7 @@ function serviceBoardHTML(snap){
   return `<div class="kicker">Service techs · ${esc(scWhen(card))} · Franco and Jon left out</div>
     <div class="big-h tight">Service scorecard</div>
     ${colorLegend()}
+    ${paceNoteLine()}
     <div class="sc-grid cols-4">${cards}</div>`;
 }
 function installBoardHTML(snap){
@@ -385,7 +399,7 @@ function installBoardHTML(snap){
   const metric=(row, key, label, text)=>`<div class="sc-m${row.zones&&row.zones[key]?" z-"+row.zones[key]:""}"><span>${label}</span><b class="num">${text}</b></div>`;
   const cards=(card.install||[]).map(r=>`<div class="sc-card"><div class="sc-head">${scoreFace(r.name)}<div class="sc-id"><div class="nm">${esc(r.label)}</div></div></div>
       ${metric(r,"instTicket","Install ticket", r.instTicket==null?"—":money(r.instTicket,true))}
-      ${metric(r,"pace","4-week pace", pct1(r.pace))}
+      ${paceTile(r)}
       ${metric(r,"cb","Service callbacks", pct1(r.cbPct))}
       ${laborBits(snap, r.name)}
       <div class="sc-context">${r.inst} installs · ${money(r.instRev,true)} · year ${r.jobs} jobs · ${money(r.rev,true)} · last 4 weeks ${r.l4jobs} · ${money(r.l4rev,true)}</div>
@@ -399,6 +413,7 @@ function installBoardHTML(snap){
   return `<div class="kicker">Install leads · ${esc(scWhen(card))} · Franco and Jon left out</div>
     <div class="big-h tight">Install scorecard</div>
     ${colorLegend()}
+    ${paceNoteLine()}
     <div class="sc-grid cols-3">${cards}${teamCard}</div>`;
 }
 function bigTicketHTML(snap){

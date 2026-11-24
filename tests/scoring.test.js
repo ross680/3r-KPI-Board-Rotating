@@ -1884,6 +1884,10 @@ describe("automatic flips, memberships, callbacks, and Google reviews", function
     assert.equal(nick.zones.cb, "bad");
     assert.equal(justin.fresh, "Started Oct 21");
     assert.ok(Math.abs(justin.pace - 33 / 28) < 1e-9);
+    assert.ok(Math.abs(justin.paceGoal - 900 / 33 * 28) < 1e-6);
+    assert.ok(Math.abs(justin.l4rev / justin.paceGoal - justin.pace) < 1e-9);
+    assert.ok(nick.paceGoal > 0);
+    assert.ok(Math.abs(nick.l4rev / nick.paceGoal - nick.pace) < 1e-9);
     assert.equal(justin.zones.pace, "great");
     assert.equal(justin.zones.ticket, "warn");
     assert.equal(justin.zones.conv, "great");
@@ -1898,6 +1902,7 @@ describe("automatic flips, memberships, callbacks, and Google reviews", function
     }}, Sc.nyDate(2026, 9, 30, 12, 0, 0));
     const earlyJustin = early.service.filter(function (p) { return p.label === "Justin"; })[0];
     assert.equal(earlyJustin.pace, null);
+    assert.equal(earlyJustin.paceGoal, null);
     assert.equal(earlyJustin.zones.pace, "");
     assert.equal(earlyJustin.zones.ticket, "warn");
     assert.equal(s.scorecard.service.some(function (p) { return /franco/i.test(p.name); }), false);

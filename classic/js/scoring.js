@@ -1,0 +1,2839 @@
+/* Grading, ranking, and sheet-to-snapshot math for the 3R KPI board.
+   No DOM. The TV page and the Node tests both load this file. */
+(function (root, factory) {
+  var settings = (typeof module === "object" && module.exports && typeof require === "function" && typeof document === "undefined")
+    ? require("./settings.js") : root.BOARD_SETTINGS;
+  var api = factory(settings);
+  if (typeof module === "object" && module.exports && typeof require === "function" && typeof document === "undefined") module.exports = api;
+  else root.Scoring = api;
+})(typeof globalThis !== "undefined" ? globalThis : this, function (SETTINGS) {
+  var TZ = SETTINGS.TIMEZONE;
+  var METRICS = SETTINGS.METRICS, SALES_METRICS = SETTINGS.SALES_METRICS, APP_METRICS = SETTINGS.APP_METRICS;
+  var MK = ["rev","jobs","paid","opp","conv","sold","soldN","estN","gm","hrs","leads","recall","booked","instRev","svcRev","instN","soldHrs","warr"];
+
+  function nyParts(date) {
+    var fmt = new Intl.DateTimeFormat("en-US", {
+      timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit",
+      weekday: "short", hourCycle: "h23"
+    });
+    var map = {};
+    fmt.formatToParts(date).forEach(function (p) { if (p.type !== "literal") map[p.type] = p.value; });
+    var hh = +map.hour;
+    if (hh === 24) hh = 0;
+    var wd = {Sun:0, Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6}[map.weekday];
+    return { y:+map.year, m:+map.month - 1, d:+map.day, hh:hh, mm:+map.minute, ss:+map.second, wd:wd };
+  }
+  function nyNow() { return new Date(); }
+  /* Wall-clock time in America/New_York, including the right DST offset. */
+  function nyDate(y, m, d, hh, mm, ss) {
+    hh = hh || 0; mm = mm || 0; ss = ss || 0;
+    var utcGuess = Date.UTC(y, m, d, hh, mm, ss);
+    var got = nyParts(new Date(utcGuess));
+    var gotUtc = Date.UTC(got.y, got.m, got.d, got.hh, got.mm, got.ss);
+    return new Date(utcGuess - (gotUtc - utcGuess));
+  }
+  function nyYMD(date) {
+    var p = nyParts(date);
+    return p.y + "-" + String(p.m + 1).padStart(2, "0") + "-" + String(p.d).padStart(2, "0");
+  }
+  function addNyDays(date, days) {
+    var p = nyParts(date);
+    return nyDate(p.y, p.m, p.d + days, p.hh, p.mm, p.ss);
+  }
+  function daysInMonth(y, m) { return new Date(Date.UTC(y, m + 1, 0)).getUTCDate(); }
+  function nyDayIndex(date) {
+    var p = nyParts(date);
+    return Math.round(Date.UTC(p.y, p.m, p.d) / 864e5);
+  }
+  function ymdParts(p) {
+    return p.y + "-" + String(p.m + 1).padStart(2, "0") + "-" + String(p.d).padStart(2, "0");
+  }
+
+  function fromExcel(v) {
+    var whole = Math.floor(v);
+    var frac = v - whole;
+    var utc = Date.UTC(1970, 0, 1) + Math.round((whole - 25569) * 864e5);
+    var dt = new Date(utc);
+    var totalMin = Math.round(frac * 1440);
+    var hh = Math.floor(totalMin / 60);
+    var mm = totalMin % 60;
+    var extra = 0;
+    if (hh >= 24) { extra = Math.floor(hh / 24); hh = hh % 24; }
+    var d = nyDate(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate(), hh, mm, 0);
+    return extra ? addNyDays(d, extra) : d;
+  }
+  function toDate(v) {
+    if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+    if (typeof v === "number" && isFinite(v) && v > 20000 && v < 80000) return fromExcel(v);
+    if (v == null || v === "") return null;
+    var s = String(v).trim();
+    var md = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?\s*([AaPp][Mm])?)?$/);
+    if (md) {
+      var y = +md[3]; if (md[3].length === 2) y += 2000;
+      var hh = +(md[4] || 0), mi = +(md[5] || 0), ss = +(md[6] || 0);
+      var ap = (md[7] || "").toLowerCase();
+      if (ap) { if (hh === 12) hh = 0; if (ap === "pm") hh += 12; }
+      return nyDate(y, +md[1] - 1, +md[2], hh, mi, ss);
+    }
+    var isoD = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoD) return nyDate(+isoD[1], +isoD[2] - 1, +isoD[3], 0, 0, 0);
+    var isoL = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d+)?)?$/);
+    if (isoL) return nyDate(+isoL[1], +isoL[2] - 1, +isoL[3], +isoL[4], +isoL[5], +(isoL[6] || 0));
+    var d = new Date(s);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  function num(v) {
+    if (typeof v === "number") return isFinite(v) ? v : 0;
+    if (v == null || v === "") return 0;
+    var s = String(v).trim();
+    var neg = /^\(.*\)$/.test(s) || /^-/.test(s.replace(/\$/, ""));
+    s = s.replace(/[^0-9.]/g, "");
+    var n = parseFloat(s) || 0;
+    return neg ? -n : n;
+  }
+  function bool(v) {
+    if (v === true || v === 1) return true;
+    if (v === false || v === 0 || v == null || v === "") return false;
+    return /^(true|yes|y|1)$/i.test(String(v).trim());
+  }
+  function cleanPersonName(name) {
+    return String(name || "").trim().replace(/\s+tech$/i, "").replace(/\s+/g, " ").trim();
+  }
+  function nameTokens(name) {
+    return cleanPersonName(name).split(" ").map(function (w) {
+      return w.toLowerCase().replace(/[^a-z0-9]/g, "");
+    }).filter(Boolean);
+  }
+  /* Identity of the name as written. "Sam Rivera" and "Sam Jones" are different keys.
+     A one-word name stays one word. Matching a bare first name to a full name is resolve(), not key(). */
+  function key(name) { return nameTokens(name).join(""); }
+  function firstToken(name) { var t = nameTokens(name); return t.length ? t[0] : ""; }
+  function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"); }
+  function parsePerson(name) {
+    var display = cleanPersonName(name);
+    if (!display || display.charAt(0) === "←") return null;
+    var tokens = nameTokens(display);
+    if (!tokens.length) return null;
+    return { display: display, first: tokens[0], firstWord: display.split(" ")[0], key: tokens.join(""), full: tokens.length > 1 };
+  }
+  function createNameIndex() {
+    var people = {};
+    var ambiguous = [];
+    var seen = {};
+    function note(source, name, matches) {
+      var id = source + "|" + name + "|" + matches.slice().sort().join("|");
+      if (seen[id]) return;
+      seen[id] = true;
+      ambiguous.push({ source: source || "Name", name: name, matches: matches });
+    }
+    function registerFull(parsed) {
+      var p = people[parsed.key];
+      if (!p) people[parsed.key] = { key: parsed.key, first: parsed.first, firstWord: parsed.firstWord, full: parsed.display, isFull: true };
+      else {
+        p.isFull = true;
+        if (parsed.display.length > p.full.length) { p.full = parsed.display; p.firstWord = parsed.firstWord; }
+      }
+    }
+    function see(name) {
+      if (SETTINGS.RULES.nameMatch === "first") return;
+      var parsed = parsePerson(name);
+      if (parsed && parsed.full) registerFull(parsed);
+    }
+    function resolve(name, source) {
+      var parsed = parsePerson(name);
+      if (!parsed) return null;
+      if (SETTINGS.RULES.nameMatch === "first") {
+        var fk = parsed.first;
+        if (!people[fk]) people[fk] = { key: fk, first: fk, firstWord: parsed.firstWord, full: parsed.display, isFull: false };
+        else if (parsed.display.length > people[fk].full.length) people[fk].full = parsed.display;
+        return fk;
+      }
+      if (parsed.full) {
+        var tokenSet = nameTokens(parsed.display).slice().sort().join("\n");
+        var swapped = [];
+        Object.keys(people).forEach(function (id) {
+          var p = people[id];
+          if (!p.isFull || p.key === parsed.key) return;
+          if (nameTokens(p.full).slice().sort().join("\n") === tokenSet) swapped.push(p);
+        });
+        if (swapped.length === 1) return swapped[0].key;
+        registerFull(parsed);
+        return parsed.key;
+      }
+      var hits = [];
+      Object.keys(people).forEach(function (k) {
+        var p = people[k];
+        if (p.isFull && p.first === parsed.first) hits.push(p);
+      });
+      if (hits.length === 1) return hits[0].key;
+      if (hits.length > 1) {
+        note(source, parsed.display, hits.map(function (h) { return h.full; }));
+        return null;
+      }
+      if (!people[parsed.key]) people[parsed.key] = { key: parsed.key, first: parsed.first, firstWord: parsed.firstWord, full: parsed.display, isFull: false };
+      return parsed.key;
+    }
+    return { see: see, resolve: resolve, note: note, people: people, ambiguous: ambiguous };
+  }
+  function indexNames(wb, names) {
+    function take(rows, headerTest, fields) {
+      var res = headerIndex(rows, headerTest);
+      if (res.i < 0) return;
+      rows.slice(res.i + 1).forEach(function (r) {
+        fields.forEach(function (f) {
+          var idx = typeof f === "number" ? f : res.h[f];
+          if (idx == null) return;
+          names.see(r[idx]);
+        });
+      });
+    }
+    take(sheetRows(wb, "Leaderboard"), function (r) { return String(r[0]).trim().toLowerCase() === "name"; }, ["name"]);
+    ["Call Back Record", "Install Record"].forEach(function (n) {
+      take(sheetRows(wb, n), function (r) { return String(r[0]).trim().toLowerCase() === "tech name"; }, [0]);
+    });
+    take(firstRows(wb, ["ST Jobs", "Automation Jobs"]), function (r) {
+      return r.some(function (c) { return String(c).trim().toLowerCase() === "primary technician"; });
+    }, ["primary technician", "lead generated by"]);
+    take(firstRows(wb, ["ST Estimates", "Automation Estimates"]), function (r) {
+      return r.some(function (c) { return String(c).trim().toLowerCase() === "estimate status"; });
+    }, ["sold by", "estimate created by"]);
+    take(sheetRows(wb, "ST Techs"), function (r) { return String(r[0]).trim().toLowerCase() === "name"; }, ["name"]);
+    take(sheetRows(wb, "ST Timesheets"), function (r) { return String(r[0]).trim().toLowerCase() === "employee"; }, ["employee"]);
+    take(sheetRows(wb, "ST Memberships"), function (r) { return String(r[0]).trim().toLowerCase() === "membership id"; }, ["sold by"]);
+    take(sheetRows(wb, "ST Reviews"), function (r) { return String(r[0]).trim().toLowerCase() === "published"; }, ["technician"]);
+    take(sheetRows(wb, "MP Reviews"), function (r) {
+      var cells = (r || []).map(function (c) { return String(c).trim().toLowerCase(); });
+      return cells.indexOf("published") >= 0 && cells.indexOf("review id") >= 0;
+    }, ["technician"]);
+    take(sheetRows(wb, "Board_Updates"), function (r) { return String(r[0]).trim().toLowerCase() === "posted"; }, ["tech"]);
+    ["Flips", SETTINGS.MEMBERSHIP_TAB, SETTINGS.REVIEW_TRACKER_TAB].forEach(function (tab) {
+      var head = flipHeader(sheetRows(wb, tab));
+      if (head.i >= 0 && head.tech != null) {
+        sheetRows(wb, tab).slice(head.i + 1).forEach(function (r) { names.see(r[head.tech]); });
+      }
+    });
+  }
+  /* Label on the board: the saved display name, otherwise the first name, otherwise the full name when that first name is shared. */
+  function displayName(t, techs, meta) {
+    if (meta && meta.display) return meta.display;
+    var full = (t && t.full) || "";
+    var first = firstName(full);
+    if (!techs || !first) return first || full;
+    var n = 0;
+    Object.keys(techs).forEach(function (k) {
+      if (firstName(techs[k].full).toLowerCase() === first.toLowerCase()) n++;
+    });
+    return n > 1 ? full : first;
+  }
+  /* Photo filenames are Last_First or First Last. A single name matches only when it is unique. */
+  function matchTech(techs, title) {
+    techs = techs || {};
+    var parts = String(title || "").replace(/\.[^.]+$/, "").split(/[_\s.-]+/).filter(Boolean);
+    if (!parts.length) return null;
+    function direct(label) {
+      var k = key(label);
+      if (k && techs[k]) return techs[k].k || k;
+      var found = null;
+      Object.keys(techs).forEach(function (id) {
+        if (key(techs[id].full) === k) found = techs[id].k || id;
+      });
+      return found;
+    }
+    var joined = direct(parts.join(" "));
+    if (joined) return joined;
+    if (parts.length >= 2) {
+      var flip = direct(parts.slice().reverse().join(" "));
+      if (flip) return flip;
+    }
+    function unique(pick) {
+      var hits = {};
+      Object.keys(techs).forEach(function (id) {
+        var words = nameTokens(techs[id].full || id);
+        if (!words.length) return;
+        var token = pick(words);
+        parts.forEach(function (p) { if (key(p) === token) hits[techs[id].k || id] = true; });
+      });
+      var ids = Object.keys(hits);
+      return ids.length === 1 ? ids[0] : null;
+    }
+    return unique(function (w) { return w[0]; }) || unique(function (w) { return w[w.length - 1]; });
+  }
+  /* Board_Techs is often keyed by first name. Attach that row only when it matches one person. */
+  function bindTechMeta(meta, techs) {
+    var out = {};
+    var ambiguous = [];
+    var seen = {};
+    Object.keys(meta || {}).forEach(function (mk) {
+      var raw = String(mk || "").trim();
+      if (!raw) return;
+      var direct = null;
+      Object.keys(techs || {}).forEach(function (k) {
+        if (k === raw || k === key(raw) || key((techs[k] && techs[k].full) || "") === key(raw)) direct = k;
+      });
+      if (direct) { out[direct] = meta[mk]; return; }
+      var first = firstToken(raw);
+      var hits = [];
+      Object.keys(techs || {}).forEach(function (k) {
+        if (first && firstToken((techs[k] && techs[k].full) || k) === first) hits.push(k);
+      });
+      if (hits.length === 1) out[hits[0]] = meta[mk];
+      else if (hits.length > 1) {
+        var id = "Board_Techs|" + raw;
+        if (!seen[id]) {
+          seen[id] = true;
+          ambiguous.push({ source: "Board_Techs", name: raw, matches: hits.map(function (k) { return techs[k].full; }) });
+        }
+      } else out[key(raw) || raw] = meta[mk];
+    });
+    return { meta: out, ambiguous: ambiguous };
+  }
+  function money(n, short) {
+    n = +n || 0;
+    if (short && Math.abs(n) >= 1e6) return "$" + (n / 1e6).toFixed(2).replace(/\.?0+$/, "") + "M";
+    if (short && Math.abs(n) >= 1e4) return "$" + Math.round(n / 1e3) + "K";
+    return (n < 0 ? "-" : "") + "$" + Math.round(Math.abs(n)).toLocaleString();
+  }
+  function pct(n) { return Math.round((+n || 0) * 100) + "%"; }
+  function fmtM(m, v) {
+    return m.fmt === "$" ? money(v) : m.fmt === "%" ? pct(v) : m.fmt === "★" ? (v ? (+v).toFixed(1) + "★" : "—") : String(Math.round((+v || 0) * 10) / 10);
+  }
+  function initials(n) { return String(n || "?").trim().split(/\s+/).map(function (w) { return w[0]; }).slice(0, 2).join("").toUpperCase(); }
+  function firstName(n) { return String(n || "").trim().split(/\s+/)[0]; }
+  function hashStr(s) { var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+
+  function sheetRows(wb, name) {
+    if (!wb) return [];
+    if (wb.__rows) return wb.__rows[String(name).trim().toLowerCase()] || [];
+    var XLSX = root.XLSX;
+    if (!XLSX || !wb.SheetNames) return [];
+    var n = wb.SheetNames.find(function (x) { return x.trim().toLowerCase() === name.toLowerCase(); });
+    if (!n) return [];
+    return XLSX.utils.sheet_to_json(wb.Sheets[n], {header:1, raw:true, defval:""});
+  }
+  function firstRows(wb, names) {
+    for (var i = 0; i < names.length; i++) { var r = sheetRows(wb, names[i]); if (r.length > 1) return r; }
+    return [];
+  }
+  function kvSheet(rows) {
+    var out = {};
+    for (var i = 1; i < rows.length; i++) {
+      var r = rows[i];
+      var k = String(r[0] == null ? "" : r[0]).trim();
+      if (k.toLowerCase() === "date") break;
+      if (k && !/^[💡⚠]/u.test(k)) out[k] = {v:num(r[1]), raw:r[1], label:String(r[2] || k), where:String(r[3] || "")};
+    }
+    return out;
+  }
+  function headerIndex(rows, test) {
+    var i = rows.findIndex(test); if (i < 0) return {i:-1, h:{}};
+    var h = {}; rows[i].forEach(function (c, j) { h[String(c).trim().toLowerCase()] = j; }); return {i:i, h:h};
+  }
+  function zeros() { return Array(12).fill(0); }
+  function newBucket() { var o = {}; MK.forEach(function (k) { o[k] = zeros(); }); return o; }
+  function newFlat() { var o = {}; MK.forEach(function (k) { o[k] = 0; }); return o; }
+  function sumTo(arr, M) { return (arr || []).slice(0, M + 1).reduce(function (a, b) { return a + (+b || 0); }, 0); }
+
+  function shiftLimitMinutes(shift) {
+    var m = String(shift || "08:00").match(/(\d{1,2}):(\d{2})/);
+    var sh = m ? +m[1] : 8;
+    var sm = m ? +m[2] : 0;
+    return sh * 60 + sm + SETTINGS.GRACE_MIN;
+  }
+
+  function pad2(n) { return String(n).padStart(2, "0"); }
+  function monthKeyFromParts(y, m) { return y + "-" + pad2(m + 1); }
+  function monthKeyOf(date) {
+    if (!date) return "";
+    var p = nyParts(date);
+    return monthKeyFromParts(p.y, p.m);
+  }
+  function monthKeyNow(now) {
+    var p = nyParts(now || nyNow());
+    return monthKeyFromParts(p.y, p.m);
+  }
+  function parseMonthKey(v) {
+    if (v instanceof Date) return monthKeyOf(v);
+    if (typeof v === "number" && isFinite(v) && v > 20000 && v < 80000) {
+      var excel = toDate(v);
+      return excel ? monthKeyOf(excel) : "";
+    }
+    var s = String(v == null ? "" : v).trim();
+    if (!s) return "";
+    var ym = s.match(/^(\d{4})[-/](\d{1,2})/);
+    if (ym) return ym[1] + "-" + pad2(+ym[2]);
+    var my = s.match(/^(\d{1,2})[-/](\d{4})$/);
+    if (my) return my[2] + "-" + pad2(+my[1]);
+    var months = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+    var named = s.match(/^([A-Za-z]+)\s+(\d{4})$/);
+    if (named && months[named[1].slice(0, 3).toLowerCase()]) return named[2] + "-" + pad2(months[named[1].slice(0, 3).toLowerCase()]);
+    return "";
+  }
+  function asDate(v) {
+    if (!v) return null;
+    if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+    if (typeof v === "number" && isFinite(v)) return new Date(v);
+    if (typeof v === "string") {
+      var d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    return null;
+  }
+  function dateHasTime(v) {
+    if (v == null || v === "") return false;
+    if (typeof v === "number" && isFinite(v)) return Math.abs(v - Math.floor(v)) > (1 / 1440);
+    if (v instanceof Date) {
+      var p = nyParts(v);
+      return !!(p.hh || p.mm || p.ss);
+    }
+    return /\d{1,2}:\d{2}/.test(String(v));
+  }
+  function convertedFlag(v) {
+    if (v === true) return true;
+    if (v === false) return false;
+    if (typeof v === "number") {
+      if (v === 1) return true;
+      if (v === 0) return false;
+    }
+    if (v == null) return null;
+    var s = String(v).trim();
+    if (!s) return null;
+    if (/^(y|yes|true|1)$/i.test(s)) return true;
+    if (/^(n|no|false|0)$/i.test(s)) return false;
+    return null;
+  }
+  function normHead(s) {
+    return String(s || "").trim().toLowerCase()
+      .replace(/\(.*?\)/g, " ")
+      .replace(/\$/g, "")
+      .replace(/['’]/g, "")
+      .replace(/\s*\/\s*/g, "/")
+      .replace(/#/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+  function headerMap(row) {
+    var h = {};
+    (row || []).forEach(function (c, i) {
+      var k = normHead(c);
+      if (k && h[k] == null) h[k] = i;
+    });
+    return h;
+  }
+  function pickCol(h, names) {
+    for (var i = 0; i < names.length; i++) if (h[names[i]] != null) return h[names[i]];
+    return null;
+  }
+  function wbHas(wb, name) {
+    if (!wb) return false;
+    var want = String(name).trim().toLowerCase();
+    if (wb.__rows) return Object.prototype.hasOwnProperty.call(wb.__rows, want);
+    if (wb.SheetNames) return wb.SheetNames.some(function (n) { return String(n).trim().toLowerCase() === want; });
+    return false;
+  }
+  /* "Bettcher Marc" is the same person as Marc Bettcher. Match the token set before creating a new name. */
+  function personByTokens(names, raw) {
+    if (!names || !names.people) return null;
+    var tokens = nameTokens(raw);
+    if (tokens.length < 2) return null;
+    var want = tokens.slice().sort().join("\n");
+    var hits = [];
+    Object.keys(names.people).forEach(function (id) {
+      var p = names.people[id];
+      if (!p || !p.isFull) return;
+      if (nameTokens(p.full).slice().sort().join("\n") === want) hits.push(id);
+    });
+    return hits.length === 1 ? hits[0] : null;
+  }
+  function resolvePerson(names, raw, source) {
+    var swapped = personByTokens(names, raw);
+    if (swapped) return swapped;
+    return names ? names.resolve(raw, source) : key(raw);
+  }
+  /* A flip is a lead. Jobs and estimates that share a job id count once.
+     The hand-typed Flips tab wins when it has rows. Canceled jobs are left out. */
+  function serviceTitanFlips(wb, names) {
+    var jobs = firstRows(wb, ["ST Jobs", "Automation Jobs"]);
+    var estimates = firstRows(wb, ["ST Estimates", "Automation Estimates"]);
+    var bonus = sheetRows(wb, "Bonus Flips");
+    var jh = headerIndex(jobs, function (r) {
+      return (r || []).some(function (c) { return String(c).trim().toLowerCase() === "lead generated by"; });
+    });
+    var seenJobs = {};
+    var used = {};
+    var entries = [];
+    var bonusAdded = 0;
+    function pushFlip(rawName, when, jobId) {
+      var name = cleanPersonName(rawName);
+      if (!name || !when) return;
+      var id = String(jobId == null ? "" : jobId).trim();
+      if (id && used[id]) return;
+      if (id) used[id] = true;
+      var techKey = resolvePerson(names, name, "Flips");
+      var label = (techKey && names && names.people[techKey] && names.people[techKey].full) || name;
+      entries.push({
+        techKey: techKey, techLabel: label, written: name, month: monthKeyOf(when), count: 1,
+        at: when, hasTime: dateHasTime(when), converted: null, sold: null,
+        type: "Lead", customer: id, notes: "", layout: "detail", source: "servicetitan"
+      });
+    }
+    if (jh.i >= 0) {
+      var h = jh.h;
+      jobs.slice(jh.i + 1).forEach(function (r) {
+        var id = String(r[h["job id"]] == null ? "" : r[h["job id"]]).trim();
+        if (id) seenJobs[id] = true;
+        if (/cancel/i.test(String(r[h.status] || ""))) return;
+        var by = cleanPersonName(r[h["lead generated by"]]);
+        if (!by) return;
+        var when = toDate(r[h["lead created"]]) || toDate(r[h["created date"]]);
+        pushFlip(by, when, id);
+      });
+    }
+    var eh = headerIndex(estimates, function (r) {
+      return (r || []).some(function (c) { return String(c).trim().toLowerCase() === "lead generated by"; });
+    });
+    if (eh.i >= 0) {
+      var eheader = eh.h;
+      estimates.slice(eh.i + 1).forEach(function (r) {
+        var by = cleanPersonName(r[eheader["lead generated by"]]);
+        if (!by) return;
+        var parent = String(r[eheader["parent job id"]] == null ? "" : r[eheader["parent job id"]]).trim();
+        if (parent && (used[parent] || seenJobs[parent])) return;
+        var when = toDate(r[eheader["creation date"]]);
+        pushFlip(by, when, parent || ("est:" + String(r[eheader["estimate id"]] == null ? "" : r[eheader["estimate id"]])));
+      });
+    }
+    var bh = headerIndex(bonus, function (r) {
+      var cells = (r || []).map(function (c) { return String(c).trim().toLowerCase(); });
+      return cells.indexOf("tech") >= 0 && (cells.indexOf("job id") >= 0 || cells.indexOf("date") >= 0);
+    });
+    if (bh.i >= 0) {
+      bonus.slice(bh.i + 1).forEach(function (r) {
+        var tech = cleanPersonName(r[bh.h.tech]);
+        if (!tech) return;
+        var id = bh.h["job id"] == null ? "" : String(r[bh.h["job id"]] == null ? "" : r[bh.h["job id"]]).trim();
+        if (id && used[id]) return;
+        var before = entries.length;
+        pushFlip(tech, toDate(r[bh.h.date]), id);
+        if (entries.length > before) bonusAdded++;
+      });
+    }
+    return { layout: entries.length ? "servicetitan" : "none", entries: entries, bonusAdded: bonusAdded };
+  }
+  /* Dated membership rows for the race. Grades still use the monthly counts on each tech. */
+  function serviceTitanMemberships(wb, names) {
+    var rows = sheetRows(wb, "ST Memberships");
+    var res = headerIndex(rows, function (r) { return String(r && r[0] || "").trim().toLowerCase() === "membership id"; });
+    if (res.i < 0) return { layout: "none", entries: [] };
+    var h = res.h;
+    var entries = [];
+    rows.slice(res.i + 1).forEach(function (r) {
+      var when = toDate(r[h.created]);
+      if (!when) return;
+      if (SETTINGS.RULES.excludeMembershipRenewals && SETTINGS.RULES.renewalPattern.test(String(r[h.type] || ""))) return;
+      var raw = cleanPersonName(r[h["sold by"]]);
+      var techKey = raw ? resolvePerson(names, raw, "ST Memberships") : null;
+      if (!techKey) return;
+      var label = (names && names.people[techKey] && names.people[techKey].full) || raw;
+      entries.push({
+        techKey: techKey, techLabel: label, written: raw, month: monthKeyOf(when), count: 1,
+        at: when, hasTime: false, converted: null, sold: null, type: String(r[h.type] || ""),
+        customer: String(r[h["membership id"]] || ""), notes: "", layout: "detail", source: "servicetitan"
+      });
+    });
+    return { layout: entries.length ? "servicetitan" : "none", entries: entries };
+  }
+  /* One row per Google review. The board computes the average and the count. */
+  function readGoogleProfile(rows) {
+    rows = rows || [];
+    var res = headerIndex(rows, function (r) {
+      var cells = (r || []).map(function (c) { return String(c == null ? "" : c).trim().toLowerCase(); });
+      var hasRating = cells.indexOf("rating") >= 0 || cells.indexOf("stars") >= 0;
+      var hasIdentity = cells.indexOf("date") >= 0 || cells.indexOf("reviewer") >= 0 || cells.indexOf("text") >= 0 || cells.indexOf("review") >= 0;
+      return hasRating && hasIdentity;
+    });
+    if (res.i < 0) return null;
+    var h = res.h;
+    var ratingCol = h.rating != null ? h.rating : h.stars;
+    var dateCol = h.date != null ? h.date : h.published;
+    var textCol = h.text != null ? h.text : h.review;
+    var sum = 0, count = 0, latest = null;
+    var places = {};
+    rows.slice(res.i + 1).forEach(function (r) {
+      var rating = num(r[ratingCol]);
+      if (!(rating > 0)) return;
+      count++;
+      sum += rating;
+      var when = dateCol == null ? null : toDate(r[dateCol]);
+      if (when && (!latest || when > latest)) latest = when;
+      var place = h.location != null ? String(r[h.location] || "").trim() : "";
+      if (place) {
+        var p = places[place] || (places[place] = { name: place, sum: 0, count: 0 });
+        p.sum += rating;
+        p.count++;
+      }
+    });
+    if (!count) return null;
+    var list = Object.keys(places).map(function (k) {
+      var p = places[k];
+      return { name: p.name, rating: Math.round((p.sum / p.count) * 10) / 10, count: p.count };
+    }).sort(function (a, b) { return b.count - a.count || a.name.localeCompare(b.name); });
+    return {
+      live: true,
+      asOf: latest ? nyYMD(latest) : "",
+      rating: Math.round((sum / count) * 10) / 10,
+      count: count,
+      places: list,
+      hasText: textCol != null
+    };
+  }
+  function flipHeader(rows) {
+    var aliases = {
+      date: ["date", "posted", "when"],
+      tech: ["tech", "technician", "name", "tech name"],
+      customer: ["customer/job", "customer", "job", "job number", "customer/job number"],
+      type: ["type", "kind"],
+      converted: ["converted", "converted y/n", "won"],
+      sold: ["sold", "sold amount", "amount"],
+      notes: ["notes", "note"],
+      month: ["month", "yyyy-mm"],
+      count: ["count", "flips", "flip count", "memberships", "membership", "reviews", "review", "total"]
+    };
+    rows = rows || [];
+    for (var r = 0; r < Math.min(rows.length, 15); r++) {
+      var h = headerMap(rows[r]);
+      var date = pickCol(h, aliases.date);
+      var tech = pickCol(h, aliases.tech);
+      var month = pickCol(h, aliases.month);
+      var count = pickCol(h, aliases.count);
+      if (tech == null) continue;
+      if (date != null) {
+        return {
+          i: r, layout: "detail", tech: tech, date: date,
+          customer: pickCol(h, aliases.customer), type: pickCol(h, aliases.type),
+          converted: pickCol(h, aliases.converted), sold: pickCol(h, aliases.sold),
+          notes: pickCol(h, aliases.notes)
+        };
+      }
+      if (month != null || count != null) {
+        return { i: r, layout: "summary", tech: tech, month: month, count: count };
+      }
+    }
+    return { i: -1, layout: "none", tech: null };
+  }
+  function cellAt(row, idx) { return idx == null ? "" : row[idx]; }
+  function readFlipEntries(rows, names, source) {
+    rows = rows || [];
+    var head = flipHeader(rows);
+    var entries = [];
+    if (head.i < 0) return { layout: "none", entries: entries };
+    rows.slice(head.i + 1).forEach(function (r) {
+      var rawName = cleanPersonName(cellAt(r, head.tech));
+      if (!rawName || rawName.charAt(0) === "←" || rawName.charAt(0) === "#") return;
+      if (/^(tech|technician|name|tech name)$/i.test(rawName)) return;
+      var techKey = names ? names.resolve(rawName, source || "Flips") : key(rawName);
+      var label = (techKey && names && names.people[techKey] && names.people[techKey].full) || rawName;
+      if (head.layout === "summary") {
+        var mk = parseMonthKey(cellAt(r, head.month));
+        var count = num(cellAt(r, head.count));
+        if (!mk || !(count > 0)) return;
+        entries.push({
+          techKey: techKey, techLabel: label, written: rawName, month: mk, count: count,
+          at: null, hasTime: false, converted: null, sold: null, type: "", customer: "", notes: "", layout: "summary"
+        });
+        return;
+      }
+      var rawDate = cellAt(r, head.date);
+      var at = toDate(rawDate);
+      if (!at) return;
+      var soldRaw = cellAt(r, head.sold);
+      var soldBlank = head.sold == null || soldRaw == null || String(soldRaw).trim() === "";
+      entries.push({
+        techKey: techKey, techLabel: label, written: rawName, month: monthKeyOf(at), count: 1,
+        at: at, hasTime: dateHasTime(rawDate), converted: convertedFlag(cellAt(r, head.converted)),
+        sold: soldBlank ? null : num(soldRaw),
+        type: String(cellAt(r, head.type) || "").trim(),
+        customer: String(cellAt(r, head.customer) || "").trim(),
+        notes: String(cellAt(r, head.notes) || "").trim(),
+        layout: "detail"
+      });
+    });
+    return { layout: head.layout, entries: entries };
+  }
+  function showOnValue(v) {
+    var s = String(v == null ? "" : v).trim().toLowerCase();
+    if (s === "slide" || s === "slides") return "slide";
+    if (s === "ticker" || s === "footer") return "ticker";
+    if (!s || s === "both" || s === "all") return "both";
+    return "both";
+  }
+  function ymdOrBlank(v) {
+    if (v == null || String(v).trim() === "") return "";
+    var d = toDate(v);
+    return d ? nyYMD(d) : "";
+  }
+  function readAnnouncements(rows) {
+    rows = rows || [];
+    if (!rows.length) return [];
+    var h = headerMap(rows[0]);
+    var named = h.message != null && (h["start date"] != null || h.start != null || h["end date"] != null || h.end != null || h.priority != null || h["show on"] != null || h.show != null || h.detail != null);
+    var start = (h.message != null || h.icon != null || h.badge != null) ? 1 : 0;
+    var out = [];
+    for (var i = start; i < rows.length; i++) {
+      var r = rows[i] || [];
+      if (/^[💡⚠]/u.test(String(r[0] || ""))) continue;
+      if (named) {
+        var msg = String(cellAt(r, h.message) || "").trim();
+        if (!msg || /^[💡⚠]/u.test(msg)) continue;
+        var detail = h.detail != null ? String(cellAt(r, h.detail) || "").trim() : "";
+        if (!detail && h.sub != null) detail = String(cellAt(r, h.sub) || "").trim();
+        var pri = String(h.priority != null ? cellAt(r, h.priority) : "").trim().toLowerCase();
+        out.push({
+          message: msg.slice(0, 240),
+          detail: detail.slice(0, 240),
+          start: ymdOrBlank(h["start date"] != null ? cellAt(r, h["start date"]) : (h.start != null ? cellAt(r, h.start) : "")),
+          end: ymdOrBlank(h["end date"] != null ? cellAt(r, h["end date"]) : (h.end != null ? cellAt(r, h.end) : "")),
+          priority: (pri === "high" || pri === "urgent") ? "high" : "normal",
+          showOn: showOnValue(h["show on"] != null ? cellAt(r, h["show on"]) : (h.show != null ? cellAt(r, h.show) : "")),
+          icon: h.icon != null ? String(cellAt(r, h.icon) || "").trim() : "",
+          badge: h.badge != null ? String(cellAt(r, h.badge) || "").trim() : "",
+          example: false, welcome: false, legacy: false, names: null
+        });
+      } else {
+        var msg2 = String(r[2] || "").trim();
+        if (!msg2) continue;
+        out.push({
+          message: msg2.slice(0, 240),
+          detail: String(r[3] == null ? "" : r[3]).trim().slice(0, 240),
+          start: "", end: "", priority: "normal", showOn: "slide",
+          icon: String(r[0] || "").trim(), badge: String(r[1] || "").trim(),
+          example: false, welcome: false, legacy: true, names: null
+        });
+      }
+    }
+    return out;
+  }
+  function announcementActive(a, now) {
+    if (!a || !String(a.message || a.m || "").trim()) return false;
+    now = now || nyNow();
+    var today = nyDayIndex(now);
+    if (a.start) {
+      var s = toDate(a.start);
+      if (s && nyDayIndex(s) > today) return false;
+    }
+    if (a.end) {
+      var e = toDate(a.end);
+      if (e && nyDayIndex(e) < today) return false;
+    }
+    return true;
+  }
+  function cloneAnn(a) {
+    return {
+      message: a.message, detail: a.detail || "", start: a.start || "", end: a.end || "",
+      priority: a.priority || "normal", showOn: a.showOn || "both", icon: a.icon || "",
+      badge: a.badge || "", example: !!a.example, welcome: !!a.welcome,
+      names: a.names || null, legacy: !!a.legacy
+    };
+  }
+  function activeAnnouncements(rows, now) {
+    now = now || nyNow();
+    var parsed = readAnnouncements(rows);
+    var base = parsed.length
+      ? parsed.map(cloneAnn)
+      : (SETTINGS.DEFAULT_ANNOUNCEMENTS || []).map(function (a) {
+        return cloneAnn(Object.assign({ detail: "", start: "", end: "", icon: "", badge: "Example" }, a));
+      });
+    var welcome = SETTINGS.WELCOME_ANNOUNCEMENT;
+    if (welcome) {
+      var msg = String(welcome.message || "").trim().toLowerCase();
+      var existing = null;
+      base.forEach(function (a) {
+        if (String(a.message || "").trim().toLowerCase() === msg) existing = a;
+      });
+      if (existing) {
+        existing.welcome = true;
+        existing.names = welcome.names;
+        if (existing.priority !== "high") existing.priority = "high";
+        if (!existing.badge) existing.badge = welcome.badge || "Welcome";
+        if (!existing.icon) existing.icon = welcome.icon || "";
+        if (!existing.showOn) existing.showOn = "both";
+      } else if (announcementActive(welcome, now)) {
+        base.unshift(cloneAnn(welcome));
+      }
+    }
+    var high = [], rest = [];
+    base.forEach(function (a) {
+      if (!announcementActive(a, now)) return;
+      (String(a.priority).toLowerCase() === "high" ? high : rest).push(a);
+    });
+    return high.concat(rest);
+  }
+  function announcementSlots(list) {
+    var high = [], rest = [];
+    (Array.isArray(list) ? list : []).forEach(function (a) { if (a) (String(a.priority).toLowerCase() === "high" ? high : rest).push(a); });
+    return high.concat(rest).concat(high);
+  }
+  function readContests(rows) {
+    rows = rows || [];
+    var headerAt = -1, h = {};
+    for (var i = 0; i < Math.min(rows.length, 15); i++) {
+      var map = headerMap(rows[i]);
+      if (map.month != null && (map.title != null || map.metric != null)) { headerAt = i; h = map; break; }
+    }
+    if (headerAt < 0) return [];
+    function prize(r, keys) {
+      for (var k = 0; k < keys.length; k++) if (h[keys[k]] != null) return String(r[h[keys[k]]] == null ? "" : r[h[keys[k]]]).trim();
+      return "";
+    }
+    var out = [];
+    rows.slice(headerAt + 1).forEach(function (r) {
+      var month = parseMonthKey(r[h.month]);
+      var title = String(h.title != null ? r[h.title] : "").trim();
+      if (!month || !title || title.charAt(0) === "←") return;
+      var whoIdx = h["whos eligible"] != null ? h["whos eligible"] : (h.eligible != null ? h.eligible : null);
+      var who = whoIdx == null ? "techs" : String(r[whoIdx] == null ? "" : r[whoIdx]).trim().toLowerCase();
+      var notesIdx = h["rules or notes"] != null ? h["rules or notes"] : (h.notes != null ? h.notes : (h.rules != null ? h.rules : null));
+      out.push({
+        month: month,
+        title: title.slice(0, 80),
+        metric: String(h.metric != null ? r[h.metric] : "flips").trim().toLowerCase() || "flips",
+        prize1: prize(r, ["prize 1", "prize1", "1st"]),
+        prize2: prize(r, ["prize 2", "prize2", "2nd"]),
+        prize3: prize(r, ["prize 3", "prize3", "3rd"]),
+        notes: notesIdx == null ? "" : String(r[notesIdx] == null ? "" : r[notesIdx]).trim().slice(0, 240),
+        eligible: who || "techs",
+        fallback: false
+      });
+    });
+    return out;
+  }
+  function contestForMonth(rows, now) {
+    now = now || nyNow();
+    var keyNow = monthKeyNow(now);
+    var list = readContests(rows);
+    var found = null;
+    list.forEach(function (c) { if (c.month === keyNow) found = c; });
+    if (found) return found;
+    if (!list.length) {
+      var d = SETTINGS.DEFAULT_CONTEST;
+      if (d && d.month === keyNow) return Object.assign({}, d);
+    }
+    return null;
+  }
+  function contestPrizes(contest) {
+    if (!contest) return [];
+    return [["1st", contest.prize1], ["2nd", contest.prize2], ["3rd", contest.prize3]].filter(function (pair) {
+      var text = String(pair[1] == null ? "" : pair[1]).trim();
+      return text && !/^tbd$/i.test(text);
+    });
+  }
+  function canonRaceMetric(v) {
+    var s = String(v || "").trim().toLowerCase();
+    if (s === "memberships" || s === "membership" || s === "mem") return "memberships";
+    if (s === "flips" || s === "flip") return "flips";
+    if (s === "reviews" || s === "review" || s === "rv") return "reviews";
+    return "";
+  }
+  function defaultRaceList() {
+    return (SETTINGS.DEFAULT_RACES || []).map(function (r) { return Object.assign({}, r); });
+  }
+  function cellText(r, h, names) {
+    var idx = pickCol(h, names);
+    if (idx == null) return "";
+    return String(r[idx] == null ? "" : r[idx]).trim();
+  }
+  function cellNumber(r, h, names) {
+    var idx = pickCol(h, names);
+    if (idx == null) return null;
+    var raw = r[idx];
+    if (raw == null || String(raw).trim() === "") return null;
+    var n = num(raw);
+    return isFinite(n) ? n : null;
+  }
+  function isRaceHeader(map) {
+    return map.metric != null && (map.goal != null || map.start != null || map["start date"] != null || map.prize != null);
+  }
+  function parseRaces(rows, names, base) {
+    var byMetric = {};
+    var seed = base && base.list && base.list.length ? base.list : defaultRaceList();
+    seed.forEach(function (r) { byMetric[r.metric] = Object.assign({}, r); });
+    var mode = "", h = {};
+    (rows || []).forEach(function (r) {
+      if (!r || !String(r.join ? r.join("") : "").trim()) return;
+      var map = headerMap(r);
+      if (isRaceHeader(map)) { mode = "race"; h = map; return; }
+      if (mode !== "race") return;
+      var metric = canonRaceMetric(cellText(r, h, ["metric"]));
+      var goal = cellNumber(r, h, ["goal", "target"]);
+      if (!metric || !(goal > 0)) return;
+      var title = cellText(r, h, ["race", "title", "name"]);
+      var prize = cellText(r, h, ["prize", "prize 1", "prize1"]) || "$500";
+      var start = ymdOrBlank(cellText(r, h, ["start", "start date", "starts"])) || "2026-10-26";
+      byMetric[metric] = {
+        metric: metric,
+        title: (title || ("First to " + goal + " " + metric)).slice(0, 80),
+        goal: goal,
+        prize: prize.slice(0, 40),
+        start: start
+      };
+    });
+    var order = ["memberships", "flips", "reviews"];
+    var list = [];
+    order.forEach(function (m) { if (byMetric[m]) list.push(byMetric[m]); });
+    Object.keys(byMetric).forEach(function (m) {
+      if (order.indexOf(m) < 0) list.push(byMetric[m]);
+    });
+    return { list: list };
+  }
+  function monthStartYmd(monthKey) {
+    var bits = String(monthKey || "").split("-");
+    if (bits.length < 2 || !+bits[1]) return "";
+    return bits[0] + "-" + pad2(+bits[1]) + "-01";
+  }
+  function trackerEntries(snap, metric) {
+    var feed = (snap && snap.feed) || {};
+    if (metric === "memberships") return asList(feed.memberships);
+    if (metric === "reviews") return asList(feed.reviews);
+    return asList(feed.flips);
+  }
+  function raceEventsFor(tech, race, snap, now) {
+    var start = race.start || "2026-10-26";
+    var today = nyYMD(now);
+    var times = [];
+    trackerEntries(snap, race.metric).forEach(function (e) {
+      if (!e || e.techKey !== tech.k) return;
+      var count = e.count || 1;
+      if (e.at) {
+        var ymd = nyYMD(e.at);
+        if (ymd < start || ymd > today) return;
+        for (var i = 0; i < count; i++) times.push(+e.at);
+        return;
+      }
+      var monthStart = monthStartYmd(e.month);
+      if (!monthStart || monthStart < start) return;
+      var stamp = toDate(monthStart);
+      for (var j = 0; j < count; j++) times.push(stamp ? +stamp : 0);
+    });
+    times.sort(function (a, b) { return a - b; });
+    var reached = times.length >= race.goal ? times[race.goal - 1] : null;
+    return { value: times.length, hitAt: reached, source: "dated" };
+  }
+  function raceStandings(snap, ctx) {
+    if (!snap) return null;
+    var now = (ctx && ctx.now) || nyNow();
+    var today = nyYMD(now);
+    var pack = snap.races && snap.races.list ? snap.races : parseRaces([], null);
+    var people = Object.keys(snap.techs || {}).map(function (k) { return snap.techs[k]; }).filter(function (t) {
+      if (!t) return false;
+      if (techIsHidden(t, ctx || { snap: snap })) return false;
+      if (!roleMatches(roleOf(t, ctx || { snap: snap, techs: {} }), "techs")) return false;
+      var meta = ((ctx && ctx.techs) || {})[t.k] || {};
+      if (meta.show === false) return false;
+      if (t.status === "inactive" && meta.show !== true) return false;
+      return true;
+    });
+    var anyStarted = false;
+    var races = (pack.list || []).map(function (race) {
+      var started = !!(race.start && race.start <= today);
+      if (started) anyStarted = true;
+      var scored = people.map(function (t) {
+        var prog = started ? raceEventsFor(t, race, snap, now) : { value: 0, hitAt: null, source: "dated" };
+        var meta = ((ctx && ctx.techs) || {})[t.k] || {};
+        return {
+          key: t.k,
+          name: displayName(t, snap.techs, meta),
+          value: prog.value,
+          hitAt: prog.hitAt,
+          source: prog.source
+        };
+      }).filter(function (r) { return r.value > 0; });
+      scored.sort(function (a, b) {
+        return b.value - a.value || (a.hitAt == null ? 1 : 0) - (b.hitAt == null ? 1 : 0) || (a.hitAt || 0) - (b.hitAt || 0) || String(a.name).localeCompare(String(b.name));
+      });
+      var finished = scored.filter(function (r) { return r.value >= race.goal && r.hitAt != null; });
+      finished.sort(function (a, b) { return a.hitAt - b.hitAt || String(a.name).localeCompare(String(b.name)); });
+      return {
+        metric: race.metric,
+        title: race.title,
+        goal: race.goal,
+        prize: race.prize || "$500",
+        start: race.start,
+        started: started,
+        source: "dated",
+        winner: finished.length ? finished[0] : null,
+        rows: scored.slice(0, 3)
+      };
+    });
+    return { active: anyStarted, title: "RACE TO THE TOP", races: races };
+  }
+  function daysLeftInMonth(now) {
+    var p = nyParts(now || nyNow());
+    return daysInMonth(p.y, p.m) - p.d + 1;
+  }
+  function roleMatches(role, eligible) {
+    var e = String(eligible || "all").trim().toLowerCase();
+    if (e === "all" || e === "everyone" || e === "company") return true;
+    if (e === "techs" || e === "tech" || e === "technicians" || e === "technician") return role === "tech";
+    if (e === "sales" || e === "sale") return role === "sales";
+    if (e === "apprentices" || e === "apprentice") return role === "apprentice";
+    return role === "tech";
+  }
+  function metricValue(st, metric) {
+    var k = String(metric || "").trim().toLowerCase();
+    var map = {
+      revenue: "rev", rev: "rev",
+      sold: "sold", "sold revenue": "sold",
+      memberships: "mem", membership: "mem", members: "mem",
+      reviews: "rv", review: "rv",
+      installs: "inst", install: "inst",
+      "close rate": "close", close: "close",
+      points: "pts", pts: "pts",
+      jobs: "jobs",
+      "avg ticket": "avg", average: "avg", avg: "avg",
+      leads: "leads", lead: "leads",
+      callbacks: "cb", callback: "cb",
+      flips: "flips", flip: "flips"
+    };
+    return +((st || {})[map[k] || k]) || 0;
+  }
+  function entryInFlipPeriod(e, P, m, ctx) {
+    var now = (ctx && ctx.now) || nyNow();
+    var snap = (ctx && ctx.snap) || {};
+    var p = nyParts(now);
+    var year = snap.year || p.y;
+    if (!e || !e.month) return false;
+    var bits = String(e.month).split("-");
+    var ey = +bits[0], em = +bits[1] - 1;
+    if (P === "l30") {
+      var at30 = asDate(e.at);
+      if (!at30) return false;
+      var start = addNyDays(now, -30);
+      return at30 >= start && at30 <= now;
+    }
+    if (P === "ytd") {
+      var through = m != null ? m : (snap.month != null ? snap.month : p.m);
+      return ey === year && em <= through;
+    }
+    var month = m != null ? m : (snap.month != null ? snap.month : p.m);
+    return ey === year && em === month;
+  }
+  function asList(v) { return Array.isArray(v) ? v : []; }
+  function countFlips(techKey, entries, P, m, ctx, kind) {
+    var n = 0;
+    asList(entries).forEach(function (e) {
+      if (!e || !techKey || e.techKey !== techKey) return;
+      if (!entryInFlipPeriod(e, P, m, ctx)) return;
+      if (kind === "conv") { if (e.converted === true) n += e.count || 1; }
+      else if (kind === "sold") { if (e.sold != null) n += e.sold; }
+      else n += e.count || 1;
+    });
+    return n;
+  }
+  function sameNyDay(a, b) {
+    a = asDate(a); b = asDate(b);
+    return !!(a && b) && nyYMD(a) === nyYMD(b);
+  }
+  function weekStartNy(now) {
+    var p = nyParts(now);
+    var back = p.wd === 0 ? 6 : p.wd - 1;
+    return nyDate(p.y, p.m, p.d - back, 0, 0, 0);
+  }
+  function inThisWeek(date, now) {
+    date = asDate(date);
+    if (!date) return false;
+    var start = weekStartNy(now);
+    var endP = nyParts(now);
+    var end = nyDate(endP.y, endP.m, endP.d, 23, 59, 59);
+    return date >= start && date <= end;
+  }
+  function blankCount(v) {
+    if (v == null) return null;
+    if (typeof v === "string" && v.trim() === "") return null;
+    var n = num(v);
+    return isFinite(n) ? n : null;
+  }
+  function callCells(r) {
+    return (r || []).map(function (c) { return String(c == null ? "" : c).trim().toLowerCase(); });
+  }
+  function isDailyHeader(r) {
+    var cells = callCells(r);
+    if (cells.indexOf("week of") >= 0) return false;
+    if (cells.indexOf("date") < 0) return false;
+    return cells.some(function (c) { return c === "inbound" || c === "inbound calls" || c === "total inbound"; });
+  }
+  /* Pivotl's weekly booking rate is booked ÷ bookable inbound calls.
+     Inbound is every call that came in. A blank cell is missing. Zero is a real zero.
+     Actuals ca/cb/br are not these columns. */
+  function readCallCenter(rows, now) {
+    now = now || nyNow();
+    rows = rows || [];
+    var found = headerIndex(rows, function (r) {
+      var cells = callCells(r);
+      return cells.indexOf("week of") >= 0 && cells.some(function (c) { return c === "bookable" || c.indexOf("bookable ") === 0; });
+    });
+    var week = null;
+    var weeks = [];
+    if (found.i >= 0) {
+      var h = found.h;
+      var weekCol = h["week of"];
+      var bookedCol = h.booked != null ? h.booked : h["inbound booked"];
+      var bookableCol = h.bookable != null ? h.bookable : h["bookable inbound"];
+      var abandonedCol = h.abandoned != null ? h.abandoned : h["abandoned calls"];
+      var owedCol = h["callbacks owed"] != null ? h["callbacks owed"] : h.owed;
+      var doneCol = h["callbacks completed"] != null ? h["callbacks completed"] : h["callbacks done"];
+      var inboundCol = h.inbound != null ? h.inbound : (h["inbound calls"] != null ? h["inbound calls"] : h["total inbound"]);
+      var monday = nyYMD(weekStartNy(now));
+      var current = null, latest = null;
+      for (var wi = found.i + 1; wi < rows.length; wi++) {
+        var wr = rows[wi];
+        if (isDailyHeader(wr)) break;
+        if (!wr) continue;
+        var wd = toDate(wr[weekCol]); if (!wd || wd > now) continue;
+        var item = {
+          weekOf: nyYMD(wd),
+          current: nyYMD(wd) === monday,
+          booked: bookedCol == null ? null : blankCount(wr[bookedCol]),
+          bookable: bookableCol == null ? null : blankCount(wr[bookableCol]),
+          abandoned: abandonedCol == null ? null : blankCount(wr[abandonedCol]),
+          inbound: inboundCol == null ? null : blankCount(wr[inboundCol]),
+          owed: owedCol == null ? null : blankCount(wr[owedCol]),
+          completed: doneCol == null ? null : blankCount(wr[doneCol])
+        };
+        if (item.current) current = item;
+        if (!latest || item.weekOf > latest.weekOf) latest = item;
+        weeks.push(item);
+      }
+      weeks.sort(function (a, b) { return a.weekOf < b.weekOf ? -1 : a.weekOf > b.weekOf ? 1 : 0; });
+      week = current || latest;
+    }
+    var dayFound = headerIndex(rows, isDailyHeader);
+    var day = null;
+    var days = [];
+    if (dayFound.i >= 0) {
+      var dh = dayFound.h;
+      var dateCol = dh.date;
+      var dayInCol = dh.inbound != null ? dh.inbound : (dh["inbound calls"] != null ? dh["inbound calls"] : dh["total inbound"]);
+      var dayAbCol = dh.abandoned != null ? dh.abandoned : dh["abandoned calls"];
+      var today = nyYMD(now);
+      var dayCurrent = null, dayLatest = null;
+      for (var di = dayFound.i + 1; di < rows.length; di++) {
+        var dr = rows[di];
+        if (!dr) continue;
+        if (isDailyHeader(dr) || callCells(dr).indexOf("week of") >= 0) break;
+        var dd = toDate(dr[dateCol]); if (!dd || dd > now) continue;
+        var dayItem = {
+          date: nyYMD(dd),
+          current: nyYMD(dd) === today,
+          inbound: dayInCol == null ? null : blankCount(dr[dayInCol]),
+          abandoned: dayAbCol == null ? null : blankCount(dr[dayAbCol])
+        };
+        if (dayItem.current) dayCurrent = dayItem;
+        if (!dayLatest || dayItem.date > dayLatest.date) dayLatest = dayItem;
+        days.push(dayItem);
+      }
+      days.sort(function (a, b) { return a.date < b.date ? -1 : a.date > b.date ? 1 : 0; });
+      day = dayCurrent || dayLatest;
+    }
+    return { week: week, day: day, weeks: weeks, days: days };
+  }
+  /* ST Reviews has no customer, phone, address, or job column. A match is possible only when
+     the review text contains a job id or a customer name, and a completed job sits within 30 days before it.
+     A date by itself is not a match. Appointments have no technician, so Install Board names are used when that job is listed there. */
+  function buildReviewJobIndex(jobRows, customerRows, installRows) {
+    var jobs = jobRows || [];
+    var jh = headerIndex(jobs, function (r) {
+      return (r || []).some(function (c) { return String(c).trim().toLowerCase() === "primary technician"; });
+    });
+    var byId = {};
+    var completed = [];
+    if (jh.i >= 0) {
+      var h = jh.h;
+      jobs.slice(jh.i + 1).forEach(function (r) {
+        var id = String(r[h["job id"]] == null ? "" : r[h["job id"]]).trim();
+        var num = String(r[h["job #"]] == null ? id : r[h["job #"]]).trim();
+        var done = toDate(r[h["completion date"]]);
+        var status = String(r[h.status] || "");
+        var tech = cleanPersonName(r[h["primary technician"]]);
+        var rec = { id: id, num: num, done: done, status: status, tech: tech, customer: "" };
+        if (id) byId[id] = rec;
+        if (num) byId[num] = rec;
+        if (done && !/cancel/i.test(status) && /complete/i.test(status)) completed.push(rec);
+      });
+    }
+    var customers = [];
+    var ch = headerIndex(customerRows || [], function (r) {
+      return (r || []).some(function (c) { return String(c).trim().toLowerCase() === "customer"; });
+    });
+    if (ch.i >= 0) {
+      var hh = ch.h;
+      (customerRows || []).slice(ch.i + 1).forEach(function (r) {
+        var name = cleanPersonName(r[hh.customer]);
+        if (!name) return;
+        var parts = name.split(" ").filter(Boolean);
+        var jobNum = hh["job #"] == null ? "" : String(r[hh["job #"]] == null ? "" : r[hh["job #"]]).trim();
+        var rec = { name: name, last: parts.length ? parts[parts.length - 1].toLowerCase() : "", jobNum: jobNum };
+        customers.push(rec);
+        var job = byId[jobNum];
+        if (job && !job.customer) job.customer = name.toLowerCase();
+      });
+    }
+    var crew = {};
+    var ih = headerIndex(installRows || [], function (r) {
+      return (r || []).some(function (c) { return String(c).trim().toLowerCase() === "techs"; });
+    });
+    if (ih.i >= 0) {
+      var ihh = ih.h;
+      (installRows || []).slice(ih.i + 1).forEach(function (r) {
+        var id = String(r[ihh["job id"]] == null ? r[ihh["job #"]] : r[ihh["job id"]]).trim();
+        var names = String(r[ihh.techs] || "").split(",").map(function (s) { return cleanPersonName(s); }).filter(Boolean);
+        if (id && names.length) crew[id] = names;
+      });
+    }
+    return { byId: byId, completed: completed, customers: customers, crew: crew };
+  }
+  function daysBefore(reviewAt, jobAt) {
+    if (!reviewAt || !jobAt) return null;
+    var gap = nyDayIndex(reviewAt) - nyDayIndex(jobAt);
+    return gap;
+  }
+  function closestJob(list, reviewAt) {
+    var best = null, bestGap = 9999;
+    list.forEach(function (job) {
+      var gap = daysBefore(reviewAt, job.done);
+      if (gap == null || gap < 0 || gap > 30) return;
+      if (gap < bestGap) { best = job; bestGap = gap; }
+    });
+    return best;
+  }
+  function textHasName(text, name) {
+    var raw = String(name || "").trim().toLowerCase();
+    if (raw.length < 8 || raw.split(" ").length < 2) return false;
+    return new RegExp("(?:^|[^a-z])" + escapeRe(raw) + "(?:[^a-z]|$)").test(String(text || "").toLowerCase());
+  }
+  function reviewJobMatch(text, when, index) {
+    text = String(text || "");
+    var ids = text.match(/\b\d{6,9}\b/g) || [];
+    var i;
+    var idJobs = [];
+    for (i = 0; i < ids.length; i++) if (index.byId[ids[i]]) idJobs.push(index.byId[ids[i]]);
+    var idHit = closestJob(idJobs, when);
+    if (idHit) return { confidence: "high", job: idHit, why: "job id" };
+    var nameHits = [];
+    index.customers.forEach(function (c) {
+      if (textHasName(text, c.name)) nameHits.push(c);
+    });
+    var uniqueNames = {};
+    nameHits.forEach(function (c) { uniqueNames[c.name.toLowerCase()] = c; });
+    var nameKeys = Object.keys(uniqueNames);
+    if (nameKeys.length === 1) {
+      var want = nameKeys[0];
+      var theirs = index.completed.filter(function (job) { return job.customer === want; });
+      var named = closestJob(theirs, when);
+      if (named) return { confidence: "high", job: named, why: "customer name" };
+    }
+    var lasts = {};
+    index.customers.forEach(function (c) {
+      if (c.last.length < 6) return;
+      if (!new RegExp("\\b" + escapeRe(c.last) + "\\b", "i").test(text)) return;
+      lasts[c.last] = lasts[c.last] || {};
+      lasts[c.last][c.name.toLowerCase()] = c;
+    });
+    var lastKeys = Object.keys(lasts).filter(function (k) { return Object.keys(lasts[k]).length === 1; });
+    if (lastKeys.length === 1) {
+      var only = Object.keys(lasts[lastKeys[0]])[0];
+      var lastJobs = index.completed.filter(function (job) { return job.customer === only; });
+      var lastHit = closestJob(lastJobs, when);
+      if (lastHit) return { confidence: "medium", job: lastHit, why: "last name" };
+    }
+    return { confidence: "none", job: null, why: "" };
+  }
+  /* ServiceTitan callback jobs (a job opened on an original job). Not a CSR callback request. */
+  function countCallbackJobs(rows, now) {
+    now = now || nyNow();
+    var res = headerIndex(rows || [], function (r) { return String((r && r[0]) || "").trim().toLowerCase() === "callback job id"; });
+    if (res.i < 0) return null;
+    var pNow = nyParts(now);
+    var week = 0, month = 0;
+    rows.slice(res.i + 1).forEach(function (r) {
+      var h = res.h;
+      var d = toDate(r[h.created]); if (!d || d > now) return;
+      if (/cancel/i.test(String(r[h.status] || ""))) return;
+      var dp = nyParts(d);
+      if (dp.y === pNow.y && dp.m === pNow.m) month++;
+      if (inThisWeek(d, now)) week++;
+    });
+    return { week: week, month: month };
+  }
+  function callCenterView(snap, now) {
+    now = now || nyNow();
+    var cc = (snap && snap.callCenter) || {};
+    var target = cc.target != null && isFinite(+cc.target) ? +cc.target : (SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET);
+    var week = cc.week || null;
+    var jobs = cc.jobs || {};
+    var monthCompleted = jobs.monthCompleted;
+    if (monthCompleted == null && jobs.known && snap && snap.co && snap.co.y && snap.co.y.jobs && snap.month != null) {
+      var rawMonth = snap.co.y.jobs[snap.month];
+      if (rawMonth != null && isFinite(+rawMonth)) monthCompleted = +rawMonth;
+    }
+    var day = cc.day || null;
+    var rate = week && week.bookable > 0 && week.booked != null ? week.booked / week.bookable : null;
+    var requestRate = week && week.owed > 0 && week.completed != null ? week.completed / week.owed : null;
+    var weekRate = jobs.known && jobs.weekCompleted > 0 ? jobs.week / jobs.weekCompleted : null;
+    var monthRate = jobs.known && monthCompleted > 0 ? jobs.month / monthCompleted : null;
+    var hasWeek = !!(week && (week.booked != null || week.bookable != null || week.abandoned != null || week.inbound != null || week.owed != null || week.completed != null));
+    var hasDay = !!(day && (day.inbound != null || day.abandoned != null));
+    return {
+      target: target,
+      rate: rate,
+      booked: week ? week.booked : null,
+      bookable: week ? week.bookable : null,
+      abandoned: week ? week.abandoned : null,
+      abandonedDay: day ? day.abandoned : null,
+      inboundWeek: week ? week.inbound : null,
+      inboundDay: day ? day.inbound : null,
+      dayOf: day ? day.date : "",
+      currentDay: !!(day && day.current),
+      weekOf: week ? week.weekOf : "",
+      currentWeek: !!(week && week.current),
+      owed: week ? week.owed : null,
+      completedReq: week ? week.completed : null,
+      requestRate: requestRate,
+      jobsKnown: !!jobs.known,
+      jobWeek: jobs.known ? jobs.week : null,
+      jobMonth: jobs.known ? jobs.month : null,
+      jobWeekRate: weekRate,
+      jobMonthRate: monthRate,
+      weekCompleted: jobs.known ? jobs.weekCompleted : null,
+      monthCompleted: jobs.known ? monthCompleted : null,
+      show: hasWeek || hasDay || !!jobs.known
+    };
+  }
+  function flipBoard(snap, now, meta, ctx) {
+    now = now || nyNow();
+    meta = meta || {};
+    var feed = (snap && snap.feed) || {};
+    var entries = asList(feed.flips);
+    var layout = feed.flipLayout || "none";
+    var keyNow = monthKeyNow(now);
+    var yearNow = (snap && snap.year) || nyParts(now).y;
+    var rowsMap = {};
+    entries.forEach(function (e) {
+      if (!e) return;
+      var bits = String(e.month || "").split("-");
+      var inYear = +bits[0] === yearNow;
+      var inMonth = e.month === keyNow;
+      if (!inYear && !inMonth) return;
+      var id = e.techKey || ("~" + String(e.written || e.techLabel || "Unknown").toLowerCase());
+      var row = rowsMap[id];
+      if (!row) row = rowsMap[id] = { key: e.techKey || "", name: e.techLabel || e.written || "Unknown", flips: 0, ytd: 0, conv: 0, sold: 0, soldKnown: false, matched: !!e.techKey };
+      if (inYear) row.ytd += e.count || 1;
+      if (!inMonth) return;
+      row.flips += e.count || 1;
+      if (e.converted === true) row.conv += e.count || 1;
+      if (e.sold != null) { row.sold += e.sold; row.soldKnown = true; }
+    });
+    var rows = Object.keys(rowsMap).map(function (id) { return rowsMap[id]; });
+    rows.forEach(function (r) {
+      if (r.key && snap && snap.techs && snap.techs[r.key]) r.name = displayName(snap.techs[r.key], snap.techs, meta[r.key] || {});
+    });
+    rows.sort(function (a, b) { return b.flips - a.flips || b.sold - a.sold || String(a.name).localeCompare(String(b.name)); });
+    var hideCtx = {
+      snap: snap,
+      techs: (ctx && ctx.techs) || meta || {},
+      cfg: (ctx && ctx.cfg) || SETTINGS.defaultCfg()
+    };
+    var hidden = hiddenList(hideCtx);
+    rows = rows.filter(function (r) {
+      var tech = r.key && snap && snap.techs ? snap.techs[r.key] : null;
+      if (tech && techIsHidden(tech, hideCtx)) return false;
+      if (nameIsHidden(r.name, hidden)) return false;
+      return true;
+    });
+    function sum(pred, val) {
+      var n = 0;
+      entries.forEach(function (e) { if (e && pred(e)) n += val(e); });
+      return n;
+    }
+    var yearNow = (snap && snap.year) || nyParts(now).y;
+    var monthNow = (snap && snap.month != null) ? snap.month : nyParts(now).m;
+    var company = {
+      mtd: sum(function (e) { return e.month === keyNow; }, function (e) { return e.count || 1; }),
+      l30: sum(function (e) {
+        var at30 = asDate(e.at);
+        if (!at30) return false;
+        return at30 >= addNyDays(now, -30) && at30 <= now;
+      }, function (e) { return e.count || 1; }),
+      ytd: sum(function (e) {
+        var bits = String(e.month || "").split("-");
+        return +bits[0] === yearNow && (+bits[1] - 1) <= monthNow;
+      }, function (e) { return e.count || 1; }),
+      today: sum(function (e) { return sameNyDay(e.at, now); }, function (e) { return e.count || 1; }),
+      week: sum(function (e) { return inThisWeek(e.at, now); }, function (e) { return e.count || 1; }),
+      conv: sum(function (e) { return e.month === keyNow && e.converted === true; }, function (e) { return e.count || 1; }),
+      sold: sum(function (e) { return e.month === keyNow && e.sold != null; }, function (e) { return e.sold || 0; })
+    };
+    company.rate = company.mtd ? company.conv / company.mtd : 0;
+    var soldKnown = layout === "detail" && entries.some(function (e) { return e && e.month === keyNow && e.sold != null; });
+    return { layout: layout, convKnown: layout === "detail", soldKnown: soldKnown, rows: rows, company: company };
+  }
+  function flipAlerts(snap, now, ctx) {
+    now = now || nyNow();
+    var hideCtx = {
+      snap: snap,
+      techs: (ctx && ctx.techs) || {},
+      cfg: (ctx && ctx.cfg) || SETTINGS.defaultCfg()
+    };
+    var hidden = hiddenList(hideCtx);
+    var hours = +SETTINGS.FLIP_ALERT_HOURS;
+    if (!isFinite(hours) || hours <= 0) hours = 6;
+    var cutoff = now.getTime() - hours * 3600e3;
+    var out = [];
+    asList(snap && snap.feed && snap.feed.flips).forEach(function (e) {
+      if (!e) return;
+      var at = asDate(e.at);
+      if (!e.hasTime || !at) return;
+      var t = at.getTime();
+      if (t < cutoff || t > now.getTime()) return;
+      var tech = e.techKey && snap.techs && snap.techs[e.techKey];
+      if (tech && techIsHidden(tech, hideCtx)) return;
+      if (!tech && (nameIsHidden(e.techLabel, hidden) || nameIsHidden(e.written, hidden))) return;
+      var name = tech ? displayName(tech, snap.techs, (hideCtx.techs || {})[tech.k] || {}) : (e.techLabel || e.written || "A tech");
+      out.push({ name: name, at: t, message: "Flip alert: " + name + " just flipped a call" });
+    });
+    out.sort(function (a, b) { return b.at - a.at; });
+    return out;
+  }
+  function contestStandings(contest, ctx) {
+    if (!contest || !ctx || !ctx.snap) return null;
+    var now = ctx.now || nyNow();
+    var bits = String(contest.month || "").split("-");
+    var monthIndex = (+bits[1] || 1) - 1;
+    var people = Object.keys(ctx.snap.techs || {}).map(function (k) { return ctx.snap.techs[k]; }).filter(function (t) {
+      if (techIsHidden(t, ctx)) return false;
+      if (!roleMatches(roleOf(t, ctx), contest.eligible)) return false;
+      var meta = (ctx.techs || {})[t.k] || {};
+      if (meta.show === false) return false;
+      if (t.status === "inactive" && meta.show !== true) return false;
+      return true;
+    });
+    var rows = people.map(function (t) {
+      var st = statsFor(t, "mtd", monthIndex, ctx);
+      var meta = (ctx.techs || {})[t.k] || {};
+      return { key: t.k, name: displayName(t, ctx.snap.techs, meta), value: metricValue(st, contest.metric), rev: st.rev || 0 };
+    });
+    rows.sort(function (a, b) { return b.value - a.value || b.rev - a.rev || String(a.name).localeCompare(String(b.name)); });
+    var positive = rows.filter(function (r) { return r.value > 0; });
+    return {
+      contest: contest,
+      rows: positive.slice(0, 5),
+      hasData: positive.length > 0,
+      leader: positive.length ? positive[0] : null,
+      daysLeft: daysLeftInMonth(now)
+    };
+  }
+  function welcomeFaces(names, techs, meta) {
+    techs = techs || {};
+    meta = meta || {};
+    var files = meta.photos || meta.photoFiles || [];
+    return (names || []).map(function (raw) {
+      var name = String(raw || "").trim();
+      var want = name.toLowerCase();
+      var hits = [];
+      Object.keys(techs).forEach(function (id) {
+        var full = (techs[id] && techs[id].full) || "";
+        if (want && firstName(full).toLowerCase() === want) hits.push(techs[id].k || id);
+      });
+      var unique = hits.length === 1 ? hits[0] : null;
+      var photo = "";
+      if (unique && meta[unique] && meta[unique].photo) photo = String(meta[unique].photo);
+      if (!photo && files.length) {
+        var matched = [];
+        files.forEach(function (f) {
+          var title = (f && (f.title || f.name)) ? (f.title || f.name) : String(f || "");
+          if (!title) return;
+          var k = matchTech(techs, title);
+          var fileHit = false;
+          if (k && hits.length === 1 && k === hits[0]) fileHit = true;
+          if (!fileHit && !k) {
+            var parts = title.replace(/\.[^.]+$/, "").split(/[_\s.-]+/).filter(Boolean);
+            if (parts.some(function (p) { return p.toLowerCase() === want; }) && parts.length <= 3 && hits.length <= 1) fileHit = true;
+          }
+          if (fileHit) matched.push(f);
+        });
+        if (matched.length === 1) {
+          var one = matched[0];
+          if (one && one.id) photo = "https://drive.google.com/thumbnail?id=" + one.id + "&sz=w480";
+          else if (one && one.url) photo = String(one.url);
+          else if (typeof one === "string") photo = one;
+        }
+      }
+      return { name: name, key: unique || "", photo: photo };
+    });
+  }
+  function tickerItems(snap, now, ctx) {
+    now = now || nyNow();
+    var hideCtx = ctx || { snap: snap, cfg: SETTINGS.defaultCfg() };
+    var out = [];
+    flipAlerts(snap, now, hideCtx).forEach(function (a) { out.push({ type: "ticker", ic: "", title: "", m: a.message }); });
+    asList(snap && snap.annLive).forEach(function (a) {
+      if (!a || (a.showOn !== "ticker" && a.showOn !== "both")) return;
+      out.push({ type: "ticker", ic: a.icon || "", title: a.welcome ? "" : (a.badge || ""), m: a.message });
+    });
+    asList(snap && snap.updates).forEach(function (u) {
+      if (!u || u.type !== "ticker") return;
+      if (u.tech && snap && snap.techs && snap.techs[u.tech] && techIsHidden(snap.techs[u.tech], hideCtx)) return;
+      out.push(u);
+    });
+    return out;
+  }
+  function legacyAnnouncements(anns) {
+    return (Array.isArray(anns) ? anns : []).filter(function (a) { return a && (a.message || a.m) && !a.welcome; }).map(function (a) {
+      if (a.message) return cloneAnn(a);
+      return {
+        message: a.m, detail: a.s || "", start: "", end: "", priority: "normal",
+        showOn: a.showOn || "slide", icon: a.ic || "", badge: a.b || "",
+        example: false, welcome: false, legacy: true, names: null
+      };
+    });
+  }
+  function attachFeed(snap, wb, now, names) {
+    if (!snap) return snap;
+    now = now || nyNow();
+    var useAnn = wbHas(wb, "Announcements");
+    var useContest = wbHas(wb, "Contest");
+    var useRaces = wbHas(wb, "Races");
+    var useFlips = wbHas(wb, "Flips");
+    var useMem = wbHas(wb, SETTINGS.MEMBERSHIP_TAB);
+    var useReviews = wbHas(wb, SETTINGS.REVIEW_TRACKER_TAB);
+    var callTab = SETTINGS.CALL_CENTER_TAB || "Call Center";
+    var useCalls = wbHas(wb, callTab);
+    var useCbJobs = wbHas(wb, "ST Callbacks");
+    if ((useAnn || useContest || useRaces || useFlips || useMem || useReviews) && !names) {
+      names = createNameIndex();
+      Object.keys(snap.techs || {}).forEach(function (k) {
+        if (snap.techs[k] && snap.techs[k].full) names.see(snap.techs[k].full);
+      });
+      [["Flips", useFlips], [SETTINGS.MEMBERSHIP_TAB, useMem], [SETTINGS.REVIEW_TRACKER_TAB, useReviews]].forEach(function (pair) {
+        if (!pair[1]) return;
+        var seen = flipHeader(sheetRows(wb, pair[0]));
+        if (seen.i >= 0 && seen.tech != null) sheetRows(wb, pair[0]).slice(seen.i + 1).forEach(function (r) { names.see(r[seen.tech]); });
+      });
+    }
+    var annLive = Array.isArray(snap.annLive) ? snap.annLive : null;
+    if (useAnn) annLive = activeAnnouncements(sheetRows(wb, "Announcements"), now);
+    else if (!annLive) {
+      var legacy = legacyAnnouncements(snap.anns);
+      if (legacy.length) {
+        var welcome = SETTINGS.WELCOME_ANNOUNCEMENT;
+        if (welcome && announcementActive(welcome, now) && !legacy.some(function (a) { return String(a.message).trim().toLowerCase() === String(welcome.message).trim().toLowerCase(); })) {
+          legacy.unshift(cloneAnn(welcome));
+        }
+        annLive = legacy.filter(function (a) { return announcementActive(a, now); });
+      } else annLive = activeAnnouncements([], now);
+    }
+    if (useRaces || useContest || !snap.races) {
+      var pack = parseRaces(useRaces ? sheetRows(wb, "Races") : [], names);
+      if (useContest) pack = parseRaces(sheetRows(wb, "Contest"), names, pack);
+      snap.races = pack;
+    }
+    function loadTracker(present, tab, source, prevLayout, prevEntries) {
+      var loaded = { layout: prevLayout || "none", entries: asList(prevEntries) };
+      if (present) loaded = readFlipEntries(sheetRows(wb, tab), names, source);
+      if (!Array.isArray(loaded.entries)) loaded.entries = [];
+      return loaded;
+    }
+    var reviewLog = loadTracker(useReviews, SETTINGS.REVIEW_TRACKER_TAB, "Review Tracker", snap.feed && snap.feed.reviewLayout, snap.feed && snap.feed.reviews);
+    var handFlips = useFlips ? readFlipEntries(sheetRows(wb, "Flips"), names, "Flips") : { layout: "none", entries: [] };
+    var handMem = useMem ? readFlipEntries(sheetRows(wb, SETTINGS.MEMBERSHIP_TAB), names, "Memberships") : { layout: "none", entries: [] };
+    if (!Array.isArray(handFlips.entries)) handFlips.entries = [];
+    if (!Array.isArray(handMem.entries)) handMem.entries = [];
+    var flips = handFlips;
+    var memberships = handMem;
+    var flipSource = handFlips.entries.length ? "sheet" : "";
+    var membershipSource = handMem.entries.length ? "sheet" : "";
+    if (!handFlips.entries.length && (wbHas(wb, "ST Jobs") || wbHas(wb, "Automation Jobs") || wbHas(wb, "ST Estimates") || wbHas(wb, "Automation Estimates") || wbHas(wb, "Bonus Flips"))) {
+      var autoFlips = serviceTitanFlips(wb, names);
+      if (autoFlips.entries.length) { flips = autoFlips; flipSource = "servicetitan"; }
+    } else if (!handFlips.entries.length && snap.feed && snap.feed.flipSource === "servicetitan") {
+      flips = { layout: snap.feed.flipLayout || "servicetitan", entries: asList(snap.feed.flips), bonusAdded: snap.feed.bonusAdded || 0 };
+      flipSource = "servicetitan";
+    }
+    if (!handMem.entries.length && wbHas(wb, "ST Memberships")) {
+      var autoMemLog = serviceTitanMemberships(wb, names);
+      if (autoMemLog.entries.length) { memberships = autoMemLog; membershipSource = "servicetitan"; }
+    } else if (!handMem.entries.length && snap.feed && snap.feed.membershipSource === "servicetitan") {
+      memberships = { layout: snap.feed.membershipLayout || "servicetitan", entries: asList(snap.feed.memberships) };
+      membershipSource = "servicetitan";
+    }
+    if (snap.techs) {
+      [flips, memberships, reviewLog].forEach(function (log) {
+        log.entries.forEach(function (e) {
+          if (!e || !e.techKey || snap.techs[e.techKey]) return;
+          snap.techs[e.techKey] = {
+            k: e.techKey, full: e.techLabel, y: newBucket(), l30: newFlat(), open: [], openAmt: 0, openN: 0,
+            onBoard: false, status: "not listed", role: "tech", mem: { mtd: 0, ytd: 0 }, rv: { mtd: 0, ytd: 0 }, cb: zeros(), inst: zeros()
+          };
+        });
+      });
+    }
+    snap.feed = {
+      ready: true,
+      flips: flips.entries, flipLayout: flips.layout, flipSource: flipSource, bonusAdded: flips.bonusAdded || 0,
+      memberships: memberships.entries, membershipLayout: memberships.layout, membershipSource: membershipSource,
+      reviews: reviewLog.entries, reviewLayout: reviewLog.layout
+    };
+    if (useCalls) {
+      if (!snap.callCenter) snap.callCenter = { target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET, week: null, day: null, jobs: { known: false, week: 0, month: 0, weekCompleted: null, monthCompleted: null } };
+      var parsedCalls = readCallCenter(sheetRows(wb, callTab), now);
+      snap.callCenter.week = parsedCalls.week;
+      snap.callCenter.day = parsedCalls.day;
+      snap.callCenter.weeks = parsedCalls.weeks || [];
+      snap.callCenter.days = parsedCalls.days || [];
+      snap.callCenter.target = SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET;
+    }
+    if (useCbJobs) {
+      var counted = countCallbackJobs(sheetRows(wb, "ST Callbacks"), now);
+      if (counted) {
+        if (!snap.callCenter) snap.callCenter = { target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET, week: null, day: null, jobs: {} };
+        var prevJobs = snap.callCenter.jobs || {};
+        snap.callCenter.jobs = {
+          known: true,
+          week: counted.week,
+          month: counted.month,
+          weekCompleted: prevJobs.weekCompleted == null ? null : prevJobs.weekCompleted,
+          monthCompleted: prevJobs.monthCompleted == null ? null : prevJobs.monthCompleted
+        };
+      }
+    }
+    snap.annLive = annLive;
+    snap.anns = announcementSlots(annLive);
+    snap.contest = null;
+    var prevSpot = Array.isArray(snap.spotlight) ? snap.spotlight : [];
+    if (wb && wbHas(wb, "Team Spotlight")) snap.spotlight = readTeamSpotlight(sheetRows(wb, "Team Spotlight"));
+    else snap.spotlight = prevSpot;
+    return snap;
+  }
+
+  function buildSnapshot(wb, now) {
+    now = now || nyNow();
+    var pNow = nyParts(now);
+    var Y = pNow.y, M = pNow.m;
+    var yStart = nyDate(Y, 0, 1, 0, 0, 0);
+    var l30 = addNyDays(now, -30);
+    var goals = kvSheet(sheetRows(wb, "Goals"));
+    var ytdGoals = kvSheet(sheetRows(wb, "YTD Goals"));
+    var actuals = kvSheet(sheetRows(wb, "Actuals"));
+    var names = createNameIndex();
+    indexNames(wb, names);
+
+    var lbRows = sheetRows(wb, "Leaderboard");
+    var lb = headerIndex(lbRows, function (r) { return String(r[0]).trim().toLowerCase() === "name"; });
+    var lbi = lb.i, lbh = lb.h;
+    var board = {};
+    var unassignedBoard = [];
+    if (lbi >= 0) lbRows.slice(lbi + 1).forEach(function (r) {
+      var nm = String(r[lbh.name] == null ? "" : r[lbh.name]).trim();
+      // Instruction rows ("💡 Set status…", "← Tech Name") are not people.
+      if (!nm || nm.charAt(0) === "←" || !/^[A-Za-z]/.test(nm)) return;
+      var g = function (c) { return num(r[lbh[c]]); };
+      var row = {name:nm, status:String(r[lbh.status] == null ? "active" : r[lbh.status]).trim().toLowerCase() || "active",
+        mem_mtd:g("mem_mtd"), rv_mtd:g("rv_mtd"), inst_mtd:g("inst_mtd"), mem_ytd:g("mem_ytd"), rv_ytd:g("rv_ytd"),
+        rev_ytd:g("rev_ytd"), sold_ytd:g("sold_ytd")};
+      var k = names.resolve(nm, "Leaderboard");
+      if (!k) { unassignedBoard.push(row); return; }
+      board[k] = row;
+    });
+    var rec = function (name) {
+      var rows = sheetRows(wb, name);
+      var i = headerIndex(rows, function (r) { return String(r[0]).trim().toLowerCase() === "tech name"; }).i;
+      var o = {};
+      if (i >= 0) rows.slice(i + 1).forEach(function (r) {
+        var nm = String(r[0]).trim(); if (!nm) return;
+        var months = []; for (var m = 1; m <= 12; m++) months.push(num(r[m]));
+        var k = names.resolve(nm, name);
+        if (k) o[k] = months;
+      });
+      return o;
+    };
+    var cbRec = rec("Call Back Record"), instRec = rec("Install Record");
+
+    var T = {};
+    var tech = function (nm, source) {
+      var k = names.resolve(nm, source || ""); if (!k) return null;
+      var label = (names.people[k] && names.people[k].full) || cleanPersonName(nm);
+      if (!T[k]) T[k] = {k:k, full:label, y:newBucket(), l30:newFlat(), open:[], openAmt:0, openRows:[]};
+      else if (label.length > T[k].full.length) T[k].full = label;
+      return T[k];
+    };
+    var co = {y:newBucket(), l30:newFlat()};
+    var maxDate = null, jobRows = 0, estRows = 0; var flags = [];
+    var doneWeek = 0, doneMonth = 0, jobsScanned = false;
+    var add = function (targets, d, f) {
+      if (!d) return;
+      var dp = nyParts(d);
+      var inY = dp.y === Y && d >= yStart && d <= now;
+      var in30 = d >= l30 && d <= now;
+      for (var i = 0; i < targets.length; i++) if (targets[i]) {
+        if (inY) f(targets[i].y, dp.m, true);
+        if (in30) f(targets[i].l30, null, false);
+      }
+    };
+    var inc = function (o, m, k, v) { if (m == null) o[k] += v; else o[k][m] += v; };
+
+    var jr = firstRows(wb, ["ST Jobs", "Automation Jobs"]);
+    var jhRes = headerIndex(jr, function (r) { return r.some(function (c) { return String(c).trim().toLowerCase() === "primary technician"; }); });
+    var ji = jhRes.i, jh = jhRes.h;
+    var col = function (r, n) { return jh[n] != null ? r[jh[n]] : ""; };
+    var apRows = sheetRows(wb, "ST Appointments");
+    var apRes = headerIndex(apRows, function (r) { return String(r[0]).trim().toLowerCase() === "job id"; });
+    var api = apRes.i, aph = apRes.h;
+    var apptHrs = {};
+    if (api >= 0) apRows.slice(api + 1).forEach(function (r) {
+      var id = String(r[aph["job id"]] == null ? "" : r[aph["job id"]]).trim();
+      if (!id) return;
+      // One job can have several appointments. The sheet comment says they add up.
+      apptHrs[id] = (apptHrs[id] || 0) + num(r[aph["appointment hours"]]);
+    });
+    var useAppt = api >= 0;
+    if (ji >= 0) { jobsScanned = true; jr.slice(ji + 1).forEach(function (r) {
+      var status = String(col(r, "status")).trim().toLowerCase(); if (!status) return; jobRows++;
+      var created = toDate(col(r, "created date"));
+      if (status !== "canceled" && status !== "cancelled") add([co], created, function (o, m) { inc(o, m, "booked", 1); });
+      var lead = String(col(r, "lead generated by")).trim();
+      var leadAt = SETTINGS.RULES.leadOn === "completion" ? toDate(col(r, "completion date")) : created;
+      if (lead) add([tech(lead, "Lead generated by"), co], leadAt, function (o, m) { inc(o, m, "leads", 1); });
+      if (status !== String(SETTINGS.RULES.revenueStatus || "completed").toLowerCase()) return;
+      var d = toDate(col(r, "completion date")); if (!d) return;
+      if (!maxDate || d > maxDate) maxDate = d;
+      var dp = nyParts(d);
+      if (d <= now && dp.y === Y && dp.m === M) doneMonth++;
+      if (inThisWeek(d, now)) doneWeek++;
+      var t = tech(col(r, "primary technician"), "ST Jobs");
+      var rev = num(col(r, "jobs total revenue") || col(r, "jobs total"));
+      var opp = bool(col(r, "opportunity")), conv = bool(col(r, "converted")), recall = bool(col(r, "recall"));
+      var gm = num(col(r, "jobs gross margin")), hrs = num(col(r, "total hours worked"));
+      var soldHrs = num(col(r, "sold hours")), warr = bool(col(r, "warranty"));
+      var isInst = SETTINGS.INSTALL_REVENUE.test(String(col(r, "business unit")) + " " + String(col(r, "job type")));
+      var jtype = String(col(r, "job type") || "");
+      var jobId = String(col(r, "job id") == null ? "" : col(r, "job id")).trim();
+      var hasAppt = useAppt && Object.prototype.hasOwnProperty.call(apptHrs, jobId);
+      // Missing appointment row falls back to hours worked. A recorded 0 stays 0.
+      var len = hasAppt ? apptHrs[jobId] : hrs;
+      if (len > SETTINGS.INSTALL_HOURS && (useAppt || jh["total hours worked"] != null) && dp.y === Y) {
+        if (SETTINGS.INSTALL_TYPE.test(jtype) && !SETTINGS.NOT_INSTALL.test(jtype)) add([t, co], d, function (o, m) { inc(o, m, "instN", 1); });
+        else flags.push({n:String(col(r, "job #") || col(r, "job id") || ""), d:nyYMD(d), tech:String(col(r, "primary technician") || "Unassigned").trim(), type:jtype || "(no job type)", hrs:Math.round(len * 10) / 10, rev:Math.round(rev), bu:String(col(r, "business unit") || "")});
+      }
+      add([t, co], d, function (o, m) {
+        inc(o, m, "rev", rev); inc(o, m, "jobs", 1); if (rev > SETTINGS.RULES.paidRevenueAbove) inc(o, m, "paid", 1); if (opp) inc(o, m, "opp", 1); if (opp && conv) inc(o, m, "conv", 1);
+        if (recall) inc(o, m, "recall", 1); inc(o, m, "gm", gm); inc(o, m, "hrs", hrs); inc(o, m, "soldHrs", soldHrs); if (warr) inc(o, m, "warr", 1); inc(o, m, isInst ? "instRev" : "svcRev", rev);
+      });
+    }); }
+
+    var er = firstRows(wb, ["ST Estimates", "Automation Estimates"]);
+    var ehRes = headerIndex(er, function (r) { return r.some(function (c) { return String(c).trim().toLowerCase() === "estimate status"; }); });
+    var ei = ehRes.i, eh = ehRes.h;
+    if (ei >= 0) er.slice(ei + 1).forEach(function (r) {
+      var st = String(r[eh["estimate status"]]).trim().toLowerCase(); if (!st) return; estRows++;
+      var t = tech(r[eh["sold by"]] || r[eh["estimate created by"]], "ST Estimates");
+      var amt = num(r[eh["estimates total"]]);
+      var cd = toDate(r[eh["creation date"]]), sd = toDate(r[eh["sold on"]]);
+      if (cd && (!maxDate || cd > maxDate)) maxDate = cd;
+      add([t, co], cd, function (o, m) { inc(o, m, "estN", 1); });
+      // A sold estimate with a blank sold-on date still counts, dated when it was written.
+      if (st === "sold") add([t, co], sd || cd, function (o, m) { inc(o, m, "sold", amt); inc(o, m, "soldN", 1); });
+      if (st === "open" && t) {
+        t.openAmt += amt;
+        var fu0 = toDate(r[eh["follow up date"]]);
+        // Due today is not overdue. Overdue starts the next New York morning.
+        var overdue = !!(fu0 && nyDayIndex(fu0) < nyDayIndex(now));
+        if (overdue) t.overdueN = (t.overdueN || 0) + 1;
+        var fu = fu0;
+        t.open.push({n:String(r[eh["estimate name"]] || "Estimate").slice(0, 60), a:Math.round(amt), d:cd ? nyYMD(cd) : "", fu:fu ? nyYMD(fu) : ""});
+        if (SETTINGS.RULES.scopeOpenPipelineToPeriod || SETTINGS.RULES.scopeOverdueToPeriod) t.openRows.push({ a: Math.round(amt), at: cd ? cd.getTime() : 0, overdue: overdue });
+      }
+    });
+    Object.keys(board).forEach(function (k) { if (!T[k]) tech(board[k].name, "Leaderboard"); });
+
+    var stRows = sheetRows(wb, "ST Techs");
+    var stRes = headerIndex(stRows, function (r) { return String(r[0]).trim().toLowerCase() === "name"; });
+    var sti = stRes.i, sth = stRes.h;
+    var stById = {};
+    if (sti >= 0) stRows.slice(sti + 1).forEach(function (r) {
+      var nm = String(r[sth.name] || "").replace(/\s+tech$/i, "").trim(); if (!nm) return;
+      var team = String(r[sth.team] || ""), active = String(r[sth.active] == null ? "TRUE" : r[sth.active]).toUpperCase() !== "FALSE";
+      var start = toDate(r[sth["start date"]]) || toDate(r[sth["created on"]]);
+      var info = {name:nm, id:String(r[sth["technician id"]] || ""), team:team, start:start ? nyYMD(start) : "", shift:String(r[sth["shift start"]] || "08:00"), active:active};
+      stById[info.id] = info;
+      var field = active && SETTINGS.FIELD_TEAM.test(team) && !/manager|office|part/i.test(team);
+      var resolved = names.resolve(nm, "ST Techs");
+      var t = (field || (active && /manager|sales/i.test(team + " " + (r[sth.positions] || "")))) ? tech(nm, "ST Techs") : (resolved ? T[resolved] : null);
+      if (!t) return;
+      var sells = active && /manager/i.test(team) && (t.y.sold.reduce(function (a, b) { return a + b; }, 0) + t.y.rev.reduce(function (a, b) { return a + b; }, 0)) > 0;
+      t.team = team; t.stId = info.id; t.startDate = info.start; t.shift = info.shift; t.stActive = active; t.autoShow = field || sells;
+      t.role = /apprentic/i.test(team) ? "apprentice" : "tech";
+      if (!SETTINGS.RULES.managersWhoSellStayTechs && sells && t.role !== "apprentice") t.role = "sales";
+    });
+
+    var tsRows = sheetRows(wb, "ST Timesheets");
+    var tsRes = headerIndex(tsRows, function (r) { return String(r[0]).trim().toLowerCase() === "employee"; });
+    var tsi = tsRes.i, tsh = tsRes.h;
+    var per = {}, holidays = {};
+    if (tsi >= 0) tsRows.slice(tsi + 1).forEach(function (r) {
+      var st = toDate(r[tsh.start]); if (!st) return;
+      var stp = nyParts(st); if (stp.y !== Y) return;
+      var nm = String((stById[String(r[tsh["employee id"]])] || {}).name || r[tsh.employee] || "").replace(/\s+tech$/i, "").trim();
+      var code = String(r[tsh.code] || ""), type = String(r[tsh["code type"]] || "");
+      var hrs = num(r[tsh.hours]);
+      var day = ymdParts(stp);
+      var isHoliday = SETTINGS.RULES.holidayPattern.test(code);
+      if (isHoliday && SETTINGS.RULES.holidayExcusesEveryone) holidays[day] = true;
+      var k = names.resolve(nm, "ST Timesheets"); if (!k || !T[k]) return;
+      var p = per[k] || (per[k] = {clock:{}, pto:{}, hrs:{}, holiday:{}});
+      if (isHoliday && !SETTINGS.RULES.holidayExcusesEveryone) p.holiday[day] = true;
+      if (type === "ClockInOut") {
+        var mins = stp.hh * 60 + stp.mm;
+        if (p.clock[day] == null || mins < p.clock[day]) p.clock[day] = mins;
+        p.hrs[day] = (p.hrs[day] || 0) + hrs;
+      } else if (type === "PaidTimeOff" && !isHoliday) {
+        p.pto[day] = (p.pto[day] || 0) + (hrs || SETTINGS.RULES.ptoDefaultHours);
+      }
+    });
+    var todayNoon = nyDate(Y, M, pNow.d, 12, 0, 0);
+    var yestNoon = addNyDays(todayNoon, -1);
+    var attEnd = SETTINGS.RULES.attendanceThrough === "today" ? todayNoon : yestNoon;
+    Object.keys(per).forEach(function (k) {
+      var p = per[k];
+      // PTO with no clock-ins is still attendance. A person with neither is left unscored.
+      if (!Object.keys(p.clock).length && !Object.keys(p.pto).length) return;
+      var t = T[k];
+      var limit = shiftLimitMinutes(t.shift);
+      var A = {sched:zeros(), days:zeros(), late:zeros(), missed:zeros(), pto:zeros(), hrs:zeros()};
+      var L = {sched:0, days:0, late:0, missed:0, pto:0, hrs:0};
+      var cursor = nyDate(Y, 0, 1, 12, 0, 0);
+      var guard = 0;
+      while (nyDayIndex(cursor) <= nyDayIndex(attEnd) && guard++ < 400) {
+        var dp = nyParts(cursor);
+        var k2 = ymdParts(dp);
+        var dayStart = nyDate(dp.y, dp.m, dp.d, 0, 0, 0);
+        var in30 = dayStart >= l30;
+        var wd = SETTINGS.RULES.attendanceWeekdaysOnly ? (dp.wd >= 1 && dp.wd <= 5) : true;
+        if (!(t.startDate && k2 < t.startDate)) {
+          var worked = p.clock[k2] != null, ptoH = p.pto[k2] || 0, hol = !!holidays[k2] || !!(p.holiday && p.holiday[k2]);
+          var addA = function (f, v) { A[f][dp.m] += v; if (in30) L[f] += v; };
+          if (ptoH) addA("pto", ptoH);
+          if (worked) {
+            addA("days", 1); addA("hrs", p.hrs[k2] || 0);
+            var late = SETTINGS.RULES.clockAtGraceIsOnTime ? p.clock[k2] > limit : p.clock[k2] >= limit;
+            if (late) addA("late", 1);
+          }
+          if (wd && !hol) { addA("sched", 1); if (!worked && !(SETTINGS.RULES.ptoExcusesWholeDay && ptoH)) addA("missed", 1); }
+        }
+        cursor = addNyDays(cursor, 1);
+      }
+      t.att = {y:A, l30:L};
+    });
+
+    var byStId = {}; Object.keys(stById).forEach(function (id) { byStId[id] = stById[id]; });
+    var nameKey = function (id) { var x = byStId[String(id)]; return x ? names.resolve(x.name, "ST Techs") : null; };
+    var auto = {mem:false, rv:false, cb:false};
+    var coMem = zeros(), coRv = zeros(), coMemL30 = 0, coRvL30 = 0;
+    var memUnassigned = { mtd: 0, l30: 0, ytd: 0, ids: {} };
+    var memRows = sheetRows(wb, "ST Memberships");
+    var memRes = headerIndex(memRows, function (r) { return String(r[0]).trim().toLowerCase() === "membership id"; });
+    if (memRes.i >= 0) {
+      auto.mem = true;
+      Object.keys(T).forEach(function (k) { T[k].memM = zeros(); T[k].memL30 = 0; });
+      memRows.slice(memRes.i + 1).forEach(function (r) {
+        var h = memRes.h;
+        var d = toDate(r[h.created]); if (!d || d > now) return;
+        if (SETTINGS.RULES.excludeMembershipRenewals && SETTINGS.RULES.renewalPattern.test(String(r[h.type] || ""))) return;
+        var dp = nyParts(d);
+        var soldName = cleanPersonName(r[h["sold by"]]);
+        var k = nameKey(r[h["sold by id"]]) || (soldName ? resolvePerson(names, soldName, "ST Memberships") : null);
+        var known = !!(k && T[k]);
+        if (dp.y === Y) {
+          coMem[dp.m]++;
+          if (known) T[k].memM[dp.m]++;
+          else {
+            memUnassigned.ytd++;
+            if (dp.m === M) memUnassigned.mtd++;
+            var sid = String(r[h["sold by id"]] == null ? "" : r[h["sold by id"]]).trim();
+            if (sid) memUnassigned.ids[sid] = (memUnassigned.ids[sid] || 0) + 1;
+          }
+        }
+        if (d >= l30) {
+          coMemL30++;
+          if (known) T[k].memL30++;
+          else memUnassigned.l30++;
+        }
+      });
+    }
+    var mpRows = sheetRows(wb, "MP Reviews");
+    var mpRes = headerIndex(mpRows, function (r) {
+      var cells = (r || []).map(function (c) { return String(c).trim().toLowerCase(); });
+      return cells.indexOf("published") >= 0 && cells.indexOf("review id") >= 0;
+    });
+    var autoReviews = [];
+    var reviewThrough = null, reviewRowsN = 0, reviewUntagged = 0;
+    var reviewMatch = { blank: 0, high: 0, medium: 0, unmatched: 0, namedInText: 0, tagged: 0, credited: 0 };
+    var reviewSource = "";
+    var reviewStars = { mtd: { s: 0, n: 0 }, l30: { s: 0, n: 0 }, ytd: { s: 0, n: 0 } };
+    var bumpStar = function (box, rating) {
+      if (!(rating >= 1 && rating <= 5)) return;
+      box.s += rating;
+      box.n += 1;
+    };
+    var starBox = function () { return { s: 0, n: 0 }; };
+    var mpReady = mpRes.i >= 0 && mpRows.slice(mpRes.i + 1).some(function (r) { return toDate(r[mpRes.h.published]); });
+    if (mpReady) {
+      reviewSource = "marketingpro";
+      auto.rv = true;
+      Object.keys(T).forEach(function (k) {
+        T[k].rvM = zeros();
+        T[k].rvL30 = 0;
+        T[k].rvMatched = { mtd: 0, l30: 0, ytd: 0 };
+        T[k].rvStars = { mtd: starBox(), l30: starBox(), ytd: starBox() };
+      });
+      mpRows.slice(mpRes.i + 1).forEach(function (r) {
+        var h = mpRes.h;
+        var d = toDate(r[h.published]); if (!d) return;
+        reviewRowsN++;
+        if (!reviewThrough || d > reviewThrough) reviewThrough = d;
+        var techName = cleanPersonName(r[h.technician] || "");
+        var techId = String(r[h["technician id"]] || "").trim();
+        var blankTech = !techName && !techId;
+        if (blankTech) { reviewUntagged++; reviewMatch.blank++; }
+        else reviewMatch.tagged++;
+        var rating = num(r[h.rating]);
+        var text = String(r[h.review] || "").replace(/\s+/g, " ").trim();
+        var author = cleanPersonName(r[h.author] || "");
+        autoReviews.push({
+          by: String(r[h.platform] || "Google"),
+          who: techName ? firstName(techName) : "",
+          author: author,
+          t: text.slice(0, 180),
+          s: rating || 0,
+          d: d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: TZ }),
+          at: d.getTime()
+        });
+        if (d > now) return;
+        var dp = nyParts(d);
+        var inYear = dp.y === Y;
+        var inMonth = inYear && dp.m === M;
+        var in30 = d >= l30;
+        if (inYear) coRv[dp.m]++;
+        if (in30) coRvL30++;
+        if (inYear) bumpStar(reviewStars.ytd, rating);
+        if (inMonth) bumpStar(reviewStars.mtd, rating);
+        if (in30) bumpStar(reviewStars.l30, rating);
+        var tk = nameKey(techId) || (techName ? names.resolve(techName, "MP Reviews") : null);
+        if (tk && !T[tk]) {
+          var known = byStId[String(techId)];
+          var label = (known && known.name) || techName;
+          if (label) tech(label, "MP Reviews");
+        }
+        if (!(tk && T[tk])) {
+          if (!blankTech) reviewMatch.unmatched++;
+          return;
+        }
+        reviewMatch.credited++;
+        if (!T[tk].rvM) T[tk].rvM = zeros();
+        if (T[tk].rvL30 == null) T[tk].rvL30 = 0;
+        if (!T[tk].rvStars) T[tk].rvStars = { mtd: starBox(), l30: starBox(), ytd: starBox() };
+        var stars = T[tk].rvStars;
+        if (inYear) {
+          T[tk].rvM[dp.m]++;
+          bumpStar(stars.ytd, rating);
+          if (inMonth) bumpStar(stars.mtd, rating);
+        }
+        if (in30) {
+          T[tk].rvL30++;
+          bumpStar(stars.l30, rating);
+        }
+      });
+    }
+    var rvRows = sheetRows(wb, "ST Reviews");
+    var rvRes = headerIndex(rvRows, function (r) { return String(r[0]).trim().toLowerCase() === "published"; });
+    if (!mpReady && rvRes.i >= 0) {
+      reviewSource = "st";
+      auto.rv = true;
+      Object.keys(T).forEach(function (k) { T[k].rvM = zeros(); T[k].rvL30 = 0; T[k].rvMatched = { mtd: 0, l30: 0, ytd: 0 }; });
+      var reviewIndex = buildReviewJobIndex(jr, sheetRows(wb, "ST Customers"), sheetRows(wb, "Install Board"));
+      var minLetters = SETTINGS.RULES.reviewNameMinLength || 3;
+      var groups = {};
+      Object.keys(names.people).forEach(function (id) {
+        var p = names.people[id];
+        var word = p.firstWord || "";
+        if (word.replace(/[^A-Za-z]/g, "").length < minLetters) return;
+        if (!groups[p.first]) groups[p.first] = { word: word, people: [] };
+        groups[p.first].people.push(p);
+      });
+      var textRules = Object.keys(groups).map(function (first) {
+        var g = groups[first];
+        return { word: g.word, re: new RegExp("\\b" + escapeRe(g.word) + "\\b", "i"), people: g.people };
+      });
+      rvRows.slice(rvRes.i + 1).forEach(function (r) {
+        var h = rvRes.h;
+        var d = toDate(r[h.published]); if (!d) return;
+        reviewRowsN++;
+        if (!reviewThrough || d > reviewThrough) reviewThrough = d;
+        var techName = cleanPersonName(r[h.technician] || "");
+        var techId = String(r[h["technician id"]] || "").trim();
+        var blankTech = !techName && !techId;
+        if (blankTech) { reviewUntagged++; reviewMatch.blank++; }
+        var rating = num(r[h.rating]);
+        var text = String(r[h.review] || "").trim();
+        if (text.length > 30 && (rating >= 4 || !rating)) autoReviews.push({by:String(r[h.platform] || "Google") + " review", who:techName, t:text.slice(0, 400), s:rating || 5, d:d.toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric", timeZone:TZ}), at:d.getTime()});
+        if (d > now) return;
+        var dp = nyParts(d);
+        if (dp.y === Y) coRv[dp.m]++;
+        if (d >= l30) coRvL30++;
+        var credited = {};
+        var tk = nameKey(r[h["technician id"]]) || (r[h.technician] ? names.resolve(r[h.technician], "ST Reviews") : null);
+        if (tk && T[tk]) credited[tk] = true;
+        textRules.forEach(function (f) {
+          if (!f.re.test(text)) return;
+          if (SETTINGS.RULES.reviewCreditUniqueFirstName && f.people.length !== 1) {
+            names.note("ST Reviews", f.word, f.people.map(function (p) { return p.full; }));
+            return;
+          }
+          f.people.forEach(function (p) { if (T[p.key]) credited[p.key] = true; });
+        });
+        if (blankTech && Object.keys(credited).length) reviewMatch.namedInText++;
+        if (blankTech && !Object.keys(credited).length) {
+          var linked = reviewJobMatch(text, d, reviewIndex);
+          if (linked.confidence === "high") {
+            reviewMatch.high++;
+            var crew = (reviewIndex.crew && (reviewIndex.crew[linked.job.id] || reviewIndex.crew[linked.job.num])) || [];
+            var creditNames = crew.length ? crew : [linked.job.tech];
+            creditNames.forEach(function (nm) {
+              var ck = nm ? resolvePerson(names, nm, "ST Reviews") : null;
+              if (ck && T[ck] && !credited[ck]) credited[ck] = "high";
+            });
+          } else if (linked.confidence === "medium") reviewMatch.medium++;
+          else reviewMatch.unmatched++;
+        }
+        Object.keys(credited).forEach(function (k) {
+          if (dp.y === Y && T[k]) {
+            T[k].rvM[dp.m]++;
+            if (credited[k] === "high") {
+              if (!T[k].rvMatched) T[k].rvMatched = { mtd: 0, l30: 0, ytd: 0 };
+              T[k].rvMatched.ytd++;
+              if (dp.m === M) T[k].rvMatched.mtd++;
+            }
+          }
+          if (d >= l30 && T[k]) {
+            T[k].rvL30++;
+            if (credited[k] === "high" && T[k].rvMatched) T[k].rvMatched.l30++;
+          }
+        });
+      });
+    }
+    var cbRows = sheetRows(wb, "ST Callbacks");
+    var cbRes = headerIndex(cbRows, function (r) { return String(r[0]).trim().toLowerCase() === "callback job id"; });
+    var callbackRoll = { month: 0, year: 0, unassignedMonth: 0, unassignedYear: 0 };
+    if (cbRes.i >= 0 && ji >= 0) {
+      auto.cb = true;
+      var jobTech = {};
+      var jIdCol = jh["job id"];
+      jr.slice(ji + 1).forEach(function (r) { jobTech[String(r[jIdCol])] = r[jh["primary technician"]]; });
+      Object.keys(T).forEach(function (k) { T[k].cbM = zeros(); T[k].cbL30 = 0; });
+      cbRows.slice(cbRes.i + 1).forEach(function (r) {
+        var h = cbRes.h;
+        var d = toDate(r[h.created]); if (!d || d > now) return;
+        if (/cancel/i.test(String(r[h.status] || ""))) return;
+        var dp = nyParts(d);
+        var orig = jobTech[String(r[h["original job id"]])];
+        var rawTech = cleanPersonName(orig);
+        var k = rawTech ? resolvePerson(names, rawTech, "ST Callbacks") : null;
+        var known = !!(k && T[k]);
+        if (dp.y === Y) {
+          callbackRoll.year++;
+          if (dp.m === M) callbackRoll.month++;
+          if (known) T[k].cbM[dp.m]++;
+          else {
+            callbackRoll.unassignedYear++;
+            if (dp.m === M) callbackRoll.unassignedMonth++;
+          }
+        }
+        if (d >= l30 && known) T[k].cbL30++;
+      });
+    }
+
+    [
+      ["Flips", "Flips"],
+      [SETTINGS.MEMBERSHIP_TAB, "Memberships"],
+      [SETTINGS.REVIEW_TRACKER_TAB, "Review Tracker"]
+    ].forEach(function (pair) {
+      readFlipEntries(sheetRows(wb, pair[0]), names, pair[1]).entries.forEach(function (e) {
+        if (e.techKey) tech(e.techLabel, pair[1]);
+      });
+    });
+
+    var round = function (o) {
+      Object.keys(o).forEach(function (k) {
+        o[k] = Array.isArray(o[k]) ? o[k].map(function (v) { return Math.round(v * 100) / 100; }) : Math.round(o[k] * 100) / 100;
+      });
+    };
+    Object.keys(T).forEach(function (k) {
+      var t = T[k];
+      t.openN = t.open.length; t.open.sort(function (a, b) { return b.a - a.a; }); t.open = t.open.slice(0, 15); t.openAmt = Math.round(t.openAmt);
+      var b = board[t.k] || {};
+      t.onBoard = !!board[t.k]; t.status = b.status || (board[t.k] ? "active" : "not listed");
+      t.cb = cbRec[t.k] || zeros(); t.inst = instRec[t.k] || zeros();
+      if (!instRec[t.k] && b.inst_mtd) t.inst[M] = b.inst_mtd;
+      t.mem = {mtd:b.mem_mtd || 0, ytd:b.mem_ytd || 0}; t.rv = {mtd:b.rv_mtd || 0, ytd:b.rv_ytd || 0};
+      if (auto.mem && t.memM) t.mem = {mtd:t.memM[M], ytd:t.memM.slice(0, M + 1).reduce(function (a, b) { return a + b; }, 0), m:t.memM, l30:t.memL30 || 0};
+      if (auto.rv && t.rvM) t.rv = {mtd:t.rvM[M], ytd:t.rvM.slice(0, M + 1).reduce(function (a, b) { return a + b; }, 0), m:t.rvM, l30:t.rvL30 || 0, stars: t.rvStars || null};
+      if (auto.cb && t.cbM) { t.cb = t.cbM; t.cbL30 = t.cbL30 || 0; }
+      if (useAppt || jh["total hours worked"] != null) { t.inst = t.y.instN.slice(); t.instL30 = t.l30.instN; }
+      round(t.y); round(t.l30); if (t.att) { round(t.att.y); round(t.att.l30); }
+      if (t.instL30 != null) t.instL30 = Math.round(t.instL30 * 100) / 100;
+    });
+    round(co.y); round(co.l30);
+
+    var wr = sheetRows(wb, "Weather"); var weather = null;
+    if (wr.length) {
+      var kv = kvSheet(wr);
+      var wRes = headerIndex(wr, function (r) { return String(r[0]).trim().toLowerCase() === "date"; });
+      var days = wRes.i < 0 ? [] : wr.slice(wRes.i + 1).filter(function (r) { return String(r[0]).trim(); }).map(function (r) {
+        var d = toDate(r[0]);
+        return {d: d ? nyYMD(d) : String(r[0]).trim(), c:num(r[wRes.h.code]), hi:num(r[wRes.h.hi]), lo:num(r[wRes.h.lo]), p:num(r[wRes.h.precip])};
+      }).slice(0, 7);
+      var up = kv.updated ? toDate(kv.updated.raw) : null;
+      weather = {place:String((kv.place || {}).raw || "Norwell, MA"), t:(kv.temp || {}).v, f:(kv.feels || {}).v, c:(kv.code || {}).v, w:(kv.wind || {}).v, up: up ? up.getTime() : 0, days:days};
+      if (kv.temp == null) weather = null;
+    }
+
+    var reviews = sheetRows(wb, "Reviews").slice(1).filter(function (r) { return String(r[2]).trim(); }).map(function (r) {
+      return {by:String(r[1]).trim(), t:String(r[2]).trim().slice(0, 400), s:num(r[3]) || 5, d: r[4] instanceof Date ? r[4].toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric", timeZone:TZ}) : String(r[4] || "")};
+    }).slice(0, 20);
+    var upRows = sheetRows(wb, "Board_Updates");
+    var upRes = headerIndex(upRows, function (r) { return String(r[0]).trim().toLowerCase() === "posted"; });
+    var updates = [];
+    if (upRes.i >= 0) upRows.slice(upRes.i + 1).forEach(function (r) {
+      var h = upRes.h;
+      var msg = String(r[h.message] || "").trim(); if (!msg) return;
+      var exp = toDate(r[h.expires]); if (exp && nyDayIndex(exp) < nyDayIndex(now)) return;
+      var st = String(r[h.status] || "").toLowerCase(); if (/off|hide|done/.test(st)) return;
+      var posted = toDate(r[h.posted]);
+      updates.push({type:String(r[h.type] || "announcement").trim().toLowerCase(), ic:String(r[h.icon] || "").trim(), title:String(r[h.title] || "").trim().slice(0, 60), m:msg.slice(0, 240), tech:names.resolve(String(r[h.tech] || ""), "Board_Updates") || "", at:posted ? posted.getTime() : 0});
+    });
+    updates.sort(function (a, b) { return b.at - a.at; });
+    var leaderSums = Object.keys(board).map(function (k) { return board[k]; }).concat(unassignedBoard).filter(function (b) { return b.status !== "inactive"; }).reduce(function (a, b) {
+      ["mem_mtd","rv_mtd","mem_ytd","rv_ytd","rev_ytd","sold_ytd"].forEach(function (k) { a[k] = (a[k] || 0) + b[k]; }); return a;
+    }, {});
+    if (auto.mem) { leaderSums.mem_mtd = coMem[M]; leaderSums.mem_ytd = coMem.slice(0, M + 1).reduce(function (a, b) { return a + b; }, 0); leaderSums.mem_l30 = coMemL30; }
+    if (auto.rv) { leaderSums.rv_mtd = coRv[M]; leaderSums.rv_ytd = coRv.slice(0, M + 1).reduce(function (a, b) { return a + b; }, 0); leaderSums.rv_l30 = coRvL30; }
+    var reviewsOut = autoReviews.length ? autoReviews.sort(function (a, b) { return b.at - a.at; }).slice(0, 8).map(function (x) { return {by:x.by, who:x.who || "", author:x.author || "", t:x.t, s:x.s, d:x.d}; }) : reviews;
+    auto.inst = useAppt || jh["total hours worked"] != null;
+    auto.instBy = useAppt ? "appointment" : "worked";
+    flags.sort(function (a, b) { return b.d.localeCompare(a.d); });
+    var cbCounts = countCallbackJobs(sheetRows(wb, "ST Callbacks"), now);
+    var callTab = SETTINGS.CALL_CENTER_TAB || "Call Center";
+    var callParsed = readCallCenter(sheetRows(wb, callTab), now);
+    var jobSheet = jr && jr.length ? jr : firstRows(wb, ["ST Jobs", "Automation Jobs"]);
+    var snapOut = {v:2, builtAt: now.getTime(), auto:auto, flags:flags.slice(0, 200), dataThrough: maxDate ? nyYMD(maxDate) : "", month:M, year:Y, jobRows:jobRows, estRows:estRows,
+      goals:goals, ytdGoals:ytdGoals, actuals:actuals, techs:T, co:co, reviews:reviewsOut, anns:[], annLive:null, contest:null, feed:null, updates:updates, leaderSums:leaderSums, weather:weather, ambiguous:names.ambiguous,
+      reviewThrough: reviewThrough ? nyYMD(reviewThrough) : "", reviewRows: reviewRowsN, reviewUntagged: reviewUntagged,
+      reviewMatch: reviewMatch, reviewSource: reviewSource, reviewStars: reviewStars,
+      memUnassigned: memUnassigned, callbacks: callbackRoll,
+      google: readGoogleProfile(sheetRows(wb, "Google Reviews")),
+      unpaid: readUnpaidInvoices(jobSheet, names),
+      sources: sheetSources(wb),
+      callCenter: {
+        target: SETTINGS.BOOKING_RATE_TARGET == null ? 0.8 : +SETTINGS.BOOKING_RATE_TARGET,
+        week: callParsed.week,
+        day: callParsed.day,
+        weeks: callParsed.weeks || [],
+        days: callParsed.days || [],
+        jobs: {
+          known: !!cbCounts,
+          week: cbCounts ? cbCounts.week : 0,
+          month: cbCounts ? cbCounts.month : 0,
+          weekCompleted: jobsScanned ? doneWeek : null,
+          monthCompleted: jobsScanned ? doneMonth : null
+        }
+      }};
+    return attachFeed(snapOut, wb, now, names);
+  }
+
+  function pick(bucket, flat, P, M, m) {
+    bucket = bucket || {};
+    if (P === "l30") return flat || {};
+    var o = {};
+    for (var i = 0; i < MK.length; i++) {
+      var k = MK[i];
+      o[k] = m != null ? ((bucket[k] || [])[m] || 0) : P === "mtd" ? ((bucket[k] || [])[M] || 0) : sumTo(bucket[k], M);
+    }
+    return o;
+  }
+  function derive(s) {
+    s = s || {};
+    return Object.assign({}, s, {
+      avg: s.paid ? s.rev / s.paid : 0,
+      close: s.opp ? s.conv / s.opp : 0,
+      gmPct: s.rev > 0 ? s.gm / s.rev : 0,
+      revHr: s.hrs > 0 ? s.rev / s.hrs : 0
+    });
+  }
+  /* Rate metrics with nothing underneath them are "no data", not a zero. */
+  var RATE_BASE = {
+    avg: function (st) { return st.paid > 0; },
+    close: function (st) { return st.opp > 0; },
+    gmPct: function (st) { return st.rev > 0; },
+    revHr: function (st) { return st.hrs > 0; },
+    cbRate: function (st) { return st.jobs > 0; },
+    eff: function (st) { return st.hrs > 0; },
+    estClose: function (st) { return st.estN > 0; },
+    avgSale: function (st) { return st.soldN > 0; },
+    attend: function (st) { return st.sched > 0; },
+    onTime: function (st) { return SETTINGS.RULES.onTimeDenominator === "scheduled" ? st.sched > 0 : st.daysW > 0; }
+  };
+
+  function statsFor(t, P, m, ctx) {
+    ctx = ctx || {};
+    var now = ctx.now || nyNow();
+    var snap = ctx.snap;
+    var M = snap ? snap.month : nyParts(now).m;
+    var s = derive(pick(t.y, t.l30, P, M, m));
+    var mem = t.mem || {mtd:0, ytd:0};
+    var rv = t.rv || {mtd:0, ytd:0};
+    var cb = t.cb || zeros();
+    var inst = t.inst || zeros();
+    s.cb = m != null ? (cb[m] || 0) : P === "ytd" ? sumTo(cb, M) : P === "l30" ? (t.cbL30 != null ? t.cbL30 : (cb[M] || 0)) : (cb[M] || 0);
+    s.inst = m != null ? (inst[m] || 0) : P === "ytd" ? sumTo(inst, M) : P === "l30" ? (t.instL30 != null ? t.instL30 : (inst[M] || 0)) : (inst[M] || 0);
+    s.mem = m != null ? (mem.m ? mem.m[m] : (m === M ? mem.mtd : null)) : P === "ytd" ? mem.ytd : P === "l30" ? (mem.l30 != null ? mem.l30 : mem.mtd) : mem.mtd;
+    s.rv = m != null ? (rv.m ? rv.m[m] : (m === M ? rv.mtd : null)) : P === "ytd" ? rv.ytd : P === "l30" ? (rv.l30 != null ? rv.l30 : rv.mtd) : rv.mtd;
+    var starPeriod = (rv.stars || {})[P === "ytd" ? "ytd" : P === "l30" ? "l30" : "mtd"];
+    s.rvAvg = starPeriod && starPeriod.n ? starPeriod.s / starPeriod.n : null;
+    s.rating = ((ctx.techs || {})[t.k] || {}).rating || 0;
+    s.openAmt = t.openAmt || 0; s.openN = t.openN || 0; s.overdue = t.overdueN || 0;
+    s.cbRate = s.jobs ? s.cb / s.jobs : 0;
+    s.eff = s.hrs ? (s.soldHrs || 0) / s.hrs : 0;
+    s.estClose = s.estN ? s.soldN / s.estN : 0;
+    s.avgSale = s.soldN ? s.sold / s.soldN : 0;
+    var a = t.att;
+    var pickA = function (f) {
+      if (!a) return 0;
+      if (m != null) return (a.y[f][m] || 0);
+      if (P === "ytd") return sumTo(a.y[f], M);
+      if (P === "l30") return (a.l30[f] || 0);
+      return (a.y[f][M] || 0);
+    };
+    s.sched = pickA("sched"); s.daysW = pickA("days"); s.late = pickA("late"); s.missed = pickA("missed"); s.pto = pickA("pto"); s.clockHrs = pickA("hrs");
+    s.hasAtt = !!a;
+    s.attend = s.sched ? Math.max(0, (s.sched - s.missed) / s.sched) : 0;
+    if (SETTINGS.RULES.onTimeDenominator === "scheduled") s.onTime = s.sched ? Math.max(0, (s.sched - s.late) / s.sched) : 0;
+    else s.onTime = s.daysW ? Math.max(0, (s.daysW - s.late) / s.daysW) : 0;
+    if ((SETTINGS.RULES.scopeOpenPipelineToPeriod || SETTINGS.RULES.scopeOverdueToPeriod) && t.openRows) {
+      var startAt = periodStart(P === "ytd" ? "ytd" : P === "l30" ? "l30" : "mtd", now).getTime();
+      var endAt = now.getTime();
+      var rows = t.openRows.filter(function (r) { return r.at >= startAt && r.at <= endAt; });
+      if (SETTINGS.RULES.scopeOpenPipelineToPeriod) {
+        s.openN = rows.length;
+        s.openAmt = rows.reduce(function (a, r) { return a + (r.a || 0); }, 0);
+      }
+      if (SETTINGS.RULES.scopeOverdueToPeriod) s.overdue = rows.filter(function (r) { return r.overdue; }).length;
+    }
+    var feedFlips = (snap && snap.feed && snap.feed.flips) || [];
+    s.flips = countFlips(t.k, feedFlips, P, m, ctx, "count");
+    s.flipConv = countFlips(t.k, feedFlips, P, m, ctx, "conv");
+    s.flipSold = countFlips(t.k, feedFlips, P, m, ctx, "sold");
+    s.flipRate = s.flips ? s.flipConv / s.flips : 0;
+    var pts = SETTINGS.RULES.points || {};
+    var div = function (n, d) { return d ? (n || 0) / d : 0; };
+    s.pts = Math.round(div(s.rev, pts.revenue) + div(s.sold, pts.sold) + (s.mem || 0) * (pts.membership || 0) + (s.rv || 0) * (pts.review || 0) + (s.inst || 0) * (pts.install || 0));
+    return s;
+  }
+
+  function coStats(P, m, ctx) {
+    var snap = ctx.snap, M = snap.month;
+    var s = derive(pick(snap.co.y, snap.co.l30, P, M, m));
+    var bookedKey = SETTINGS.RULES.actualsCallsBookedKey || "cb";
+    if (ctx.cfg.coSource === "actuals" && P === "mtd" && m == null) {
+      var A = snap.actuals || {};
+      if (A.rev) s.rev = A.rev.v;
+      if (A.sr) s.sold = A.sr.v;
+      if (A[bookedKey]) s.booked = A[bookedKey].v;
+      if (SETTINGS.RULES.actualsKeepJobRevenueSplit === false) {
+        if (A.install_rev) s.instRev = A.install_rev.v;
+        if (A.service_rev) s.svcRev = A.service_rev.v;
+      }
+    }
+    if (P === "mtd" && m == null && !snap.jobRows) {
+      var B = snap.actuals || {};
+      s.rev = (B.rev || {}).v || 0;
+      s.sold = (B.sr || {}).v || 0;
+      s.booked = (B[bookedKey] || {}).v || 0;
+    }
+    return s;
+  }
+
+  function monthsElapsed(snap, now) {
+    now = now || nyNow();
+    var p = nyParts(now);
+    var M = snap ? snap.month : p.m;
+    var dim = daysInMonth(p.y, p.m);
+    var frac;
+    if (!snap || (p.m === M && p.y === (snap.year || p.y))) frac = p.d / dim;
+    else if (p.y > (snap.year || p.y) || (p.y === (snap.year || p.y) && p.m > M)) frac = 1;
+    else frac = p.d / dim;
+    // Floor keeps a short January from becoming a one-day target. ytdMinMonths 1 is that floor.
+    var floor = SETTINGS.RULES.ytdMinMonths;
+    if (floor == null || !isFinite(+floor)) floor = 1;
+    return Math.max(+floor, M + frac);
+  }
+  function mtdFraction(now) {
+    var p = nyParts(now || nyNow());
+    var dim = daysInMonth(p.y, p.m) || 30;
+    var frac = p.d / dim;
+    var minDays = +SETTINGS.RULES.mtdMinDays;
+    if (isFinite(minDays) && minDays > 0) frac = Math.max(frac, Math.min(1, minDays / dim));
+    if (frac < 0) frac = 0;
+    if (frac > 1) frac = 1;
+    return frac;
+  }
+  /* Invoiced jobs that still have a balance. Canceled jobs and empty invoices are left out.
+     A balance of zero is paid. The company total includes hidden techs; the slide hides them. */
+  function readUnpaidInvoices(rows, names) {
+    rows = rows || [];
+    var res = headerIndex(rows, function (r) {
+      var cells = (r || []).map(function (c) { return String(c == null ? "" : c).trim().toLowerCase(); });
+      return cells.indexOf("balance") >= 0 && cells.indexOf("primary technician") >= 0;
+    });
+    if (res.i < 0) return null;
+    var h = res.h;
+    var groups = {};
+    var order = [];
+    var totalN = 0, totalAmt = 0, latest = null;
+    rows.slice(res.i + 1).forEach(function (r) {
+      if (/cancel/i.test(String(r[h.status] || ""))) return;
+      var invCol = h["invoice #"] != null ? h["invoice #"] : h.invoice;
+      if (invCol == null || !String(r[invCol] == null ? "" : r[invCol]).trim()) return;
+      if (h["empty invoice"] != null && /^true$/i.test(String(r[h["empty invoice"]] || "").trim())) return;
+      var bal = num(r[h.balance]);
+      if (!(bal > 0)) return;
+      var raw = cleanPersonName(r[h["primary technician"]]);
+      var resolved = raw && names ? names.resolve(raw, "Unpaid invoices") : null;
+      var id = resolved || (raw ? key(raw) : "");
+      var label = raw || "Unassigned";
+      if (resolved && names.people[resolved] && names.people[resolved].full) label = names.people[resolved].full;
+      var gid = id || ("name:" + label.toLowerCase());
+      var g = groups[gid];
+      if (!g) {
+        g = { key: id, name: label, count: 0, amount: 0 };
+        groups[gid] = g;
+        order.push(g);
+      }
+      g.count += 1;
+      g.amount += bal;
+      totalN += 1;
+      totalAmt += bal;
+      var d = toDate(r[h["invoice date"]]) || toDate(r[h["completion date"]]);
+      if (d && (!latest || d > latest)) latest = d;
+    });
+    order.forEach(function (g) { g.amount = Math.round(g.amount * 100) / 100; });
+    order.sort(function (a, b) { return b.amount - a.amount || b.count - a.count || String(a.name).localeCompare(String(b.name)); });
+    return { totalN: totalN, totalAmt: Math.round(totalAmt * 100) / 100, asOf: latest ? nyYMD(latest) : "", rows: order };
+  }
+  function latestColumnDate(rows, headerName) {
+    var want = String(headerName || "").toLowerCase();
+    var res = headerIndex(rows, function (r) {
+      return (r || []).some(function (c) { return String(c == null ? "" : c).trim().toLowerCase() === want; });
+    });
+    if (res.i < 0 || res.h[want] == null) return "";
+    var best = null;
+    rows.slice(res.i + 1).forEach(function (r) {
+      var d = toDate(r[res.h[want]]);
+      if (d && (!best || d > best)) best = d;
+    });
+    return best ? nyYMD(best) : "";
+  }
+  function sheetSources(wb) {
+    var callRows = sheetRows(wb, SETTINGS.CALL_CENTER_TAB || "Call Center");
+    return {
+      jobsCompleted: latestColumnDate(firstRows(wb, ["ST Jobs", "Automation Jobs"]), "completion date"),
+      estimatesSold: latestColumnDate(firstRows(wb, ["ST Estimates", "Automation Estimates"]), "sold on"),
+      estimatesCreated: latestColumnDate(firstRows(wb, ["ST Estimates", "Automation Estimates"]), "creation date"),
+      reviews: latestColumnDate(sheetRows(wb, "MP Reviews"), "published") || latestColumnDate(sheetRows(wb, "ST Reviews"), "published"),
+      memberships: latestColumnDate(sheetRows(wb, "ST Memberships"), "created"),
+      callbacks: latestColumnDate(sheetRows(wb, "ST Callbacks"), "created"),
+      timesheets: latestColumnDate(sheetRows(wb, "ST Timesheets"), "start"),
+      appointments: latestColumnDate(sheetRows(wb, "ST Appointments"), "last end"),
+      flips: latestColumnDate(sheetRows(wb, "Flips"), "date"),
+      callCenter: latestColumnDate(callRows, "date")
+    };
+  }
+  /* The Goals tab's average ticket is a per-job goal. Use it unless Board_Config set t_avg. */
+  function applyCompanyGoals(cfg, goals, raw) {
+    cfg = cfg || {};
+    raw = raw || {};
+    goals = goals || {};
+    var setOnSheet = raw.t_avg !== undefined && raw.t_avg !== "" && raw.t_avg != null;
+    var avg = goals.avg_ticket && +goals.avg_ticket.v;
+    if (!setOnSheet && avg > 0 && cfg.metrics && cfg.metrics.avg) cfg.metrics.avg.target = avg;
+    return cfg;
+  }
+  function letterGrade(score) {
+    if (score == null || !isFinite(score)) return null;
+    var grades = (SETTINGS.RULES.letterGrades || []).slice().sort(function (a, b) { return (+b.min || 0) - (+a.min || 0); });
+    for (var i = 0; i < grades.length; i++) {
+      if (score >= +grades[i].min) return grades[i].letter;
+    }
+    return "F";
+  }
+  function scoreWith(t, P, SET, CFGM, ctx) {
+    var st = statsFor(t, P, null, ctx);
+    var rules = SETTINGS.RULES;
+    var monthsIn = P === "ytd" ? monthsElapsed(ctx.snap, ctx.now) : 1;
+    var mtdFrac = 1;
+    if (rules.prorateMtdTargets && P !== "ytd" && P !== "l30") mtdFrac = mtdFraction((ctx && ctx.now) || nyNow());
+    var tw = 0, tot = 0, parts = {};
+    var apprentice = SET === APP_METRICS;
+    SET.forEach(function (m) {
+      var c = (CFGM && CFGM[m.k]) || {w:m.w, target:m.target};
+      var w = +c.w || 0;
+      var target = +c.target;
+      if (!isFinite(target)) target = m.target;
+      if (m.ytdScale && P === "ytd") target *= monthsIn;
+      else if (m.ytdScale && rules.prorateMtdTargets && P !== "l30") target *= mtdFrac;
+      var v = st[m.k];
+      if (m.k === "rating" && !v) { parts[m.k] = {v:v, s:null, target:target}; return; }
+      if (apprentice && !st.hasAtt && m.k !== "rating") { parts[m.k] = {v:v, s:null, target:target}; return; }
+      if (RATE_BASE[m.k] && !RATE_BASE[m.k](st)) { parts[m.k] = {v:v, s:null, target:target}; return; }
+      var s;
+      var at = rules.inverseScoreAtTarget;
+      if (!isFinite(+at)) at = 0.5;
+      if (m.inverse) s = v <= 0 ? 1 : (target > 0 ? Math.max(0, 1 - (v / target) * (1 - at)) : 0);
+      else if (target > 0) s = rules.capScoreAtTarget === false ? ((v || 0) / target) : Math.min(1, (v || 0) / target);
+      else s = 0;
+      parts[m.k] = {v:v, s:s, target:target};
+      if (rules.omitZeroWeight === false || w > 0) { tw += w; tot += w * s; }
+    });
+    var score = tw ? Math.round(tot / tw * 100) : null;
+    return {score:score, grade:letterGrade(score), parts:parts, st:st};
+  }
+  function hiddenList(ctx) {
+    if (ctx && ctx.cfg && Array.isArray(ctx.cfg.hiddenTechs)) return ctx.cfg.hiddenTechs;
+    return SETTINGS.HIDDEN_TECHS || ["Franco"];
+  }
+  /* "Franco" matches Franco, Franco DosSantos, and Franco X. A last name matches that token. */
+  function nameIsHidden(label, list) {
+    var tokens = nameTokens(label);
+    if (!tokens.length) return false;
+    return (list || []).some(function (raw) {
+      var want = nameTokens(raw);
+      if (!want.length) return false;
+      return want.every(function (w) { return tokens.indexOf(w) >= 0; });
+    });
+  }
+  function techIsHidden(t, ctx) {
+    if (!t) return false;
+    var meta = (ctx && ctx.techs && ctx.techs[t.k]) || {};
+    var list = hiddenList(ctx);
+    return nameIsHidden(t.full, list) || nameIsHidden(meta.display, list) || nameIsHidden(t.k, list);
+  }
+  function roleOf(t, ctx) { return ((ctx.techs || {})[t.k] || {}).role || t.role || "tech"; }
+  function scoreTech(t, P, ctx) {
+    var role = roleOf(t, ctx);
+    if (role === "apprentice") return scoreWith(t, P, APP_METRICS, (ctx.cfg && ctx.cfg.appMetrics) || {}, ctx);
+    if (role === "sales") return scoreWith(t, P, SALES_METRICS, (ctx.cfg && ctx.cfg.salesMetrics) || {}, ctx);
+    return scoreWith(t, P, METRICS, (ctx.cfg && ctx.cfg.metrics) || {}, ctx);
+  }
+  function roster(forBoard, which, ctx, period) {
+    if (!ctx || !ctx.snap) return [];
+    which = which || "tech";
+    var P = forBoard ? ((ctx.cfg && ctx.cfg.boardPeriod) || "mtd") : (period || "mtd");
+    return Object.keys(ctx.snap.techs || {}).map(function (k) { return ctx.snap.techs[k]; }).filter(function (t) {
+      var o = (ctx.techs || {})[t.k] || {};
+      var role = roleOf(t, ctx);
+      if (which !== "all") {
+        var onTech = which === "tech" && role === "apprentice" && SETTINGS.RULES.apprenticesOnTechBoard;
+        if (!onTech && role !== which) return false;
+      }
+      if (forBoard && techIsHidden(t, ctx)) return false;
+      if (o.show === true) return true;
+      if (o.show === false) return false;
+      return (t.onBoard && t.status !== "inactive") || t.autoShow;
+    }).map(function (t) {
+      var meta = (ctx.techs || {})[t.k] || {};
+      return Object.assign({t:t, name: displayName(t, ctx.snap.techs, meta)}, scoreTech(t, P, ctx));
+    }).sort(function (a, b) {
+      return (b.score == null ? -1 : b.score) - (a.score == null ? -1 : a.score)
+        || (b.st.rev || 0) - (a.st.rev || 0)
+        || String(a.name).localeCompare(String(b.name));
+    });
+  }
+  function salesRoster(forBoard, ctx, period) {
+    var P = forBoard ? ((ctx.cfg && ctx.cfg.boardPeriod) || "mtd") : (period || "mtd");
+    return roster(forBoard, "all", ctx, period).map(function (r) {
+      var y = statsFor(r.t, "ytd", null, ctx);
+      return Object.assign({}, r, {y:y, sc:scoreWith(r.t, P, SALES_METRICS, (ctx.cfg && ctx.cfg.salesMetrics) || {}, ctx), side:roleOf(r.t, ctx)});
+    }).filter(function (r) { return r.y.sold > 0 || r.y.estN > 0 || r.side === "sales"; })
+      .sort(function (a, b) {
+        if (SETTINGS.RULES.salesRankBy === "score") {
+          var as = a.sc ? a.sc.score : null, bs = b.sc ? b.sc.score : null;
+          return (bs == null ? -1 : bs) - (as == null ? -1 : as) || b.st.sold - a.st.sold || String(a.name).localeCompare(String(b.name));
+        }
+        return b.st.sold - a.st.sold || b.y.sold - a.y.sold || String(a.name).localeCompare(String(b.name));
+      });
+  }
+
+  function percentToGoal(actual, goal) {
+    var g = +goal || 0;
+    if (!g) return null;
+    return (+actual || 0) / g;
+  }
+  function monthPace(now) {
+    var p = nyParts(now || nyNow());
+    return p.d / daysInMonth(p.y, p.m);
+  }
+  function yearPace(now) {
+    now = now || nyNow();
+    var p = nyParts(now);
+    var start = nyDate(p.y, 0, 1, 0, 0, 0);
+    var end = nyDate(p.y + 1, 0, 1, 0, 0, 0);
+    return (now - start) / (end - start);
+  }
+  function paceStatus(actual, goal, now) {
+    var p = percentToGoal(actual, goal);
+    var pace = monthPace(now);
+    if (p == null) return {pct:null, pace:pace, ahead:null, behindBy:null};
+    var ahead = p >= pace;
+    return {pct:p, pace:pace, ahead:ahead, behindBy: ahead ? 0 : goal * pace - actual};
+  }
+  function periodStart(period, now) {
+    now = now || nyNow();
+    var p = nyParts(now);
+    if (period === "ytd") return nyDate(p.y, 0, 1, 0, 0, 0);
+    if (period === "l30") return addNyDays(now, -30);
+    return nyDate(p.y, p.m, 1, 0, 0, 0);
+  }
+  function periodLabel(P) { return {mtd:"Month to date", l30:"Last 30 days", ytd:"Year to date"}[P] || ""; }
+  function monthName(now) {
+    return new Intl.DateTimeFormat("en-US", {timeZone:TZ, month:"long"}).format(now || nyNow());
+  }
+  function isStale(at, now, hours) {
+    if (!at || !isFinite(+at)) return false;
+    var age = (now || Date.now()) - (+at);
+    var limit = (hours == null ? SETTINGS.STALE_HOURS : hours) * 3600e3;
+    return age > limit;
+  }
+  /* Which feed the TV should use. Sheet mode is the default so a TV with no
+     saved hub settings keeps reading the sheet the way it does today. */
+  function chooseDataMode(opts) {
+    opts = opts || {};
+    var q = new URLSearchParams(opts.search || "");
+    var storage = opts.storage || {};
+    var settings = opts.settings || SETTINGS;
+    if (q.get("mode") === "sheet" || q.get("sheet")) return "sheet";
+    var url = q.get("hub") || storage["3r-hub-url"] || settings.HUB_URL || "";
+    var tok = q.get("t") || storage["3r-hub-t"] || "";
+    if (q.get("hub") && url && tok) return "hub";
+    if ((storage["3r-data-mode"] || "") === "hub" && url && tok) return "hub";
+    return "sheet";
+  }
+  function applySheetConfig(c) {
+    c = c || {};
+    var cfg = SETTINGS.defaultCfg();
+    if (c.rotateSec) cfg.rotateSec = Math.min(120, Math.max(5, +c.rotateSec || 15));
+    ["boardPeriod", "spotMode", "coSource"].forEach(function (k) { if (c[k]) cfg[k] = String(c[k]); });
+    if (c.tvGrades !== undefined && c.tvGrades !== "") cfg.tvGrades = !/^(n|no|false|0)$/i.test(String(c.tvGrades));
+    if (c.logoPlate !== undefined && c.logoPlate !== "") cfg.logoPlate = !/^(n|no|false|0)$/i.test(String(c.logoPlate));
+    var goalRaw = (c.flip_goal != null && c.flip_goal !== "") ? c.flip_goal : c.flipGoal;
+    if (goalRaw != null && goalRaw !== "") {
+      var fg = +goalRaw;
+      if (isFinite(fg)) cfg.flipGoal = fg;
+    }
+    if (Object.prototype.hasOwnProperty.call(c, "hidden_techs") || Object.prototype.hasOwnProperty.call(c, "hiddenTechs")) {
+      var hiddenRaw = c.hidden_techs != null ? c.hidden_techs : (c.hiddenTechs != null ? c.hiddenTechs : "");
+      cfg.hiddenTechs = String(hiddenRaw).split(/[,|;]/).map(function (x) { return x.trim(); }).filter(Boolean);
+    }
+    String(c.slidesOff || "").split(",").map(function (x) { return x.trim(); }).filter(Boolean).forEach(function (k) { cfg.slides[k] = false; });
+    var applySet = function (set, cfgMap, wp, tp) {
+      set.forEach(function (m) {
+        var wKey = wp + m.k, tKey = tp + m.k;
+        if (c[wKey] !== undefined && c[wKey] !== "") cfgMap[m.k].w = +c[wKey] || 0;
+        if (c[tKey] !== undefined && c[tKey] !== "") {
+          var n = +c[tKey];
+          cfgMap[m.k].target = isFinite(n) ? n : m.target;
+        }
+      });
+    };
+    applySet(METRICS, cfg.metrics, "w_", "t_");
+    applySet(APP_METRICS, cfg.appMetrics, "aw_", "at_");
+    applySet(SALES_METRICS, cfg.salesMetrics, "sw_", "slt_");
+    return cfg;
+  }
+  /* Team Spotlight tab. Rows stay on the snapshot; the TV decides who is on screen today. */
+  function drivePhotoUrl(raw) {
+    var s = String(raw == null ? "" : raw).trim();
+    if (!s) return "";
+    if (/^data:image\//i.test(s)) return s;
+    var id = "";
+    var file = s.match(/drive\.google\.com\/file\/d\/([a-zA-Z0-9_-]+)/i);
+    if (file) id = file[1];
+    if (!id && /drive\.google\.com/i.test(s)) {
+      var q = s.match(/[?&]id=([a-zA-Z0-9_-]+)/i);
+      if (q) id = q[1];
+    }
+    if (!id && /^[a-zA-Z0-9_-]{25,}$/.test(s)) id = s;
+    if (id) return "https://drive.google.com/thumbnail?id=" + id + "&sz=w480";
+    if (/^https?:\/\//i.test(s)) return s;
+    return "";
+  }
+  function spotlightType(v) {
+    var s = String(v || "").trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+    if (s === "new hire" || s === "newhire" || s === "hire") return "hire";
+    if (s === "birthday" || s === "bday") return "birthday";
+    if (s === "anniversary" || s === "anniv") return "anniversary";
+    if (s === "tech of the month" || s === "tech of month" || s === "technician of the month") return "tech";
+    if (s === "shoutout" || s === "shout out") return "shoutout";
+    return "";
+  }
+  function spotlightShown(v) {
+    if (v === true || v === 1) return true;
+    if (v === false || v === 0) return false;
+    if (v == null) return true;
+    var s = String(v).trim();
+    if (!s) return true;
+    return !/^(false|no|n|0|off)$/i.test(s);
+  }
+  function spotlightDate(v) {
+    if (v == null || String(v).trim() === "") return null;
+    if (typeof v === "number" && isFinite(v)) {
+      var excel = toDate(v);
+      if (!excel) return null;
+      var ep = nyParts(excel);
+      return { y: ep.y, m: ep.m, d: ep.d, hasYear: true };
+    }
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      var dp = nyParts(v);
+      return { y: dp.y, m: dp.m, d: dp.d, hasYear: true };
+    }
+    var s = String(v).trim();
+    var md = s.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+    if (md) {
+      var month = +md[1] - 1, day = +md[2];
+      if (month < 0 || month > 11 || day < 1 || day > 31) return null;
+      return { y: null, m: month, d: day, hasYear: false };
+    }
+    var parsed = toDate(s);
+    if (!parsed) return null;
+    var p = nyParts(parsed);
+    return { y: p.y, m: p.m, d: p.d, hasYear: true };
+  }
+  function clampDom(y, m, d) {
+    var dim = daysInMonth(y, m);
+    var day = d > dim ? dim : d;
+    if (day < 1) day = 1;
+    return nyDate(y, m, day, 12, 0, 0);
+  }
+  function dayOnOrBetween(now, start, end) {
+    var t = nyDayIndex(now);
+    return nyDayIndex(start) <= t && t <= nyDayIndex(end);
+  }
+  function readTeamSpotlight(rows) {
+    rows = rows || [];
+    var headerAt = -1, h = {};
+    for (var i = 0; i < Math.min(rows.length, 8); i++) {
+      var map = headerMap(rows[i]);
+      if (map.type != null && map.name != null) { headerAt = i; h = map; break; }
+    }
+    if (headerAt < 0) return [];
+    var out = [];
+    rows.slice(headerAt + 1).forEach(function (r) {
+      if (!r) return;
+      var type = spotlightType(cellText(r, h, ["type"]));
+      var name = cleanPersonName(cellText(r, h, ["name"])).slice(0, 80);
+      if (!type || !name) return;
+      if (!spotlightShown(cellAt(r, pickCol(h, ["active"])))) return;
+      var date = spotlightDate(cellAt(r, pickCol(h, ["date"])));
+      out.push({
+        type: type,
+        name: name,
+        first: firstName(name),
+        detail: cellText(r, h, ["detail", "sub"]).slice(0, 180),
+        photo: drivePhotoUrl(cellAt(r, pickCol(h, ["photo url", "photo", "image", "headshot"]))),
+        date: date,
+        showFrom: ymdOrBlank(cellAt(r, pickCol(h, ["show from", "from"]))),
+        showUntil: ymdOrBlank(cellAt(r, pickCol(h, ["show until", "until", "show to"])))
+      });
+    });
+    return out;
+  }
+  function serviceYears(date, now) {
+    if (!date || !date.hasYear || date.y == null) return null;
+    var n = nyParts(now);
+    var bestY = null, bestDist = 1e9;
+    for (var off = -1; off <= 1; off++) {
+      var y = n.y + off;
+      var occ = clampDom(y, date.m, date.d);
+      var dist = Math.abs(nyDayIndex(occ) - nyDayIndex(now));
+      if (dist < bestDist) { bestDist = dist; bestY = y; }
+    }
+    var years = bestY - date.y;
+    return years > 0 ? years : null;
+  }
+  function spotlightInWindow(item, now) {
+    var from = item.showFrom || "";
+    var until = item.showUntil || "";
+    if (from || until) {
+      var today = nyDayIndex(now);
+      if (from) {
+        var s = toDate(from);
+        if (s && nyDayIndex(s) > today) return false;
+      }
+      if (until) {
+        var e = toDate(until);
+        if (e && nyDayIndex(e) < today) return false;
+      }
+      return true;
+    }
+    if (item.type === "tech" || item.type === "shoutout") return true;
+    if (!item.date) return false;
+    if (item.type === "birthday" || item.type === "anniversary") {
+      var n = nyParts(now);
+      for (var off = -1; off <= 1; off++) {
+        var occ = clampDom(n.y + off, item.date.m, item.date.d);
+        if (dayOnOrBetween(now, addNyDays(occ, -3), addNyDays(occ, 2))) return true;
+      }
+      return false;
+    }
+    if (item.type === "hire") {
+      if (!item.date.hasYear) return false;
+      var start = clampDom(item.date.y, item.date.m, item.date.d);
+      return dayOnOrBetween(now, start, addNyDays(start, 20));
+    }
+    return false;
+  }
+  function spotlightHidden(name, ctx) {
+    if (nameIsHidden(name, hiddenList(ctx))) return true;
+    var techs = (ctx && ctx.snap && ctx.snap.techs) || {};
+    var tokens = nameTokens(name);
+    if (tokens.length !== 1) {
+      var ids = Object.keys(techs);
+      for (var i = 0; i < ids.length; i++) {
+        var tech = techs[ids[i]];
+        if (!tech) continue;
+        if ((key(tech.full) === key(name) || nameIsHidden(tech.full, [name])) && techIsHidden(tech, ctx)) return true;
+      }
+      return false;
+    }
+    var hits = [];
+    Object.keys(techs).forEach(function (id) {
+      var t = techs[id];
+      if (t && firstToken(t.full) === tokens[0]) hits.push(t);
+    });
+    return hits.length === 1 && techIsHidden(hits[0], ctx);
+  }
+  function spotlightCopy(item, now) {
+    var first = String(item.first || firstName(item.name) || "").toUpperCase();
+    var years = item.type === "anniversary" ? serviceYears(item.date, now) : null;
+    var badge = "Shoutout", line = item.detail || "SHOUTOUT", confetti = false;
+    if (item.type === "birthday") {
+      badge = "Birthday";
+      line = "HAPPY BIRTHDAY, " + first + "!";
+      confetti = true;
+    } else if (item.type === "hire") {
+      badge = "New Hire";
+      line = "WELCOME TO THE TEAM";
+    } else if (item.type === "anniversary") {
+      badge = "Anniversary";
+      line = years ? (years + (years === 1 ? " YEAR" : " YEARS") + " WITH 3R") : ("HAPPY ANNIVERSARY, " + first + "!");
+    } else if (item.type === "tech") {
+      badge = "Tech of the Month";
+      line = "TECH OF THE MONTH";
+      confetti = true;
+    }
+    return { badge: badge, line: line, years: years, confetti: confetti };
+  }
+  function activeSpotlight(entries, ctx) {
+    var now = (ctx && ctx.now) || nyNow();
+    var list = [];
+    (entries || []).forEach(function (item) {
+      if (!item || !item.name || !item.type) return;
+      if (spotlightHidden(item.name, ctx)) return;
+      if (!spotlightInWindow(item, now)) return;
+      list.push(Object.assign({}, item, spotlightCopy(item, now)));
+    });
+    return list;
+  }
+  function spotlightDeck(items) {
+    items = items || [];
+    var hires = [];
+    items.forEach(function (it) { if (it && it.type === "hire") hires.push(it); });
+    var slides = [];
+    var grouped = false;
+    items.forEach(function (it) {
+      if (!it) return;
+      if (it.type === "hire" && hires.length >= 2) {
+        if (!grouped) { slides.push({ kind: "hires", items: hires }); grouped = true; }
+        return;
+      }
+      slides.push({ kind: "one", items: [it] });
+    });
+    return slides;
+  }
+  /* Drop a celebration in after a few KPI slides. KPI slides keep their own duration. */
+  function weaveSpotlight(kpi, spots) {
+    kpi = Array.isArray(kpi) ? kpi.slice() : [];
+    spots = Array.isArray(spots) ? spots : [];
+    if (!spots.length) return kpi;
+    if (!kpi.length) return spots.slice();
+    var gap = 3;
+    if (Math.floor(kpi.length / gap) < spots.length) gap = Math.max(1, Math.floor(kpi.length / spots.length));
+    var natural = Math.floor(kpi.length / gap);
+    var limit = Math.max(spots.length, Math.min(natural, spots.length * 2));
+    var out = [];
+    var placed = 0;
+    for (var i = 0; i < kpi.length; i++) {
+      out.push(kpi[i]);
+      if ((i + 1) % gap === 0 && placed < limit) {
+        out.push(spots[placed % spots.length]);
+        placed++;
+      }
+    }
+    while (placed < spots.length) {
+      out.push(spots[placed % spots.length]);
+      placed++;
+    }
+    return out;
+  }
+  function parseTechMeta(rows) {
+    var meta = {};
+    (rows || []).slice(1).forEach(function (r) {
+      var k = String(r[0] || "").trim().toLowerCase(); if (!k) return;
+      meta[k] = {
+        display: String(r[1] || ""),
+        show: (r[2] === "" || r[2] == null) ? undefined : /^(y|yes|true|1)$/i.test(String(r[2])),
+        photo: String(r[3] || ""),
+        rating: +r[4] || 0,
+        role: String(r[5] || "") || undefined
+      };
+    });
+    return meta;
+  }
+
+  return {
+    nyNow:nyNow, nyParts:nyParts, nyDate:nyDate, nyYMD:nyYMD, addNyDays:addNyDays, daysInMonth:daysInMonth,
+    toDate:toDate, num:num, bool:bool, key:key, money:money, pct:pct, fmtM:fmtM, initials:initials, firstName:firstName, hashStr:hashStr,
+    displayName:displayName, matchTech:matchTech, bindTechMeta:bindTechMeta, nameIsHidden:nameIsHidden, techIsHidden:techIsHidden,
+    sheetRows:sheetRows, sumTo:sumTo, pick:pick, derive:derive, statsFor:statsFor, coStats:coStats,
+    monthsElapsed:monthsElapsed, letterGrade:letterGrade, scoreWith:scoreWith, scoreTech:scoreTech, roleOf:roleOf,
+    roster:roster, salesRoster:salesRoster, buildSnapshot:buildSnapshot, attachFeed:attachFeed,
+    announcementActive:announcementActive, activeAnnouncements:activeAnnouncements, announcementSlots:announcementSlots,
+    readAnnouncements:readAnnouncements, welcomeFaces:welcomeFaces,
+    drivePhotoUrl:drivePhotoUrl, readTeamSpotlight:readTeamSpotlight, activeSpotlight:activeSpotlight,
+    spotlightDeck:spotlightDeck, weaveSpotlight:weaveSpotlight,
+    readFlipEntries:readFlipEntries, flipBoard:flipBoard, flipAlerts:flipAlerts, tickerItems:tickerItems,
+    readCallCenter:readCallCenter, countCallbackJobs:countCallbackJobs, callCenterView:callCenterView,
+    contestForMonth:contestForMonth, contestPrizes:contestPrizes, contestStandings:contestStandings, raceStandings:raceStandings, daysLeftInMonth:daysLeftInMonth,
+    percentToGoal:percentToGoal, monthPace:monthPace, yearPace:yearPace, paceStatus:paceStatus, periodStart:periodStart,
+    periodLabel:periodLabel, monthName:monthName, isStale:isStale, chooseDataMode:chooseDataMode,
+    applySheetConfig:applySheetConfig, applyCompanyGoals:applyCompanyGoals, parseTechMeta:parseTechMeta, shiftLimitMinutes:shiftLimitMinutes,
+    mtdFraction:mtdFraction, readUnpaidInvoices:readUnpaidInvoices, readGoogleProfile:readGoogleProfile
+  };
+});

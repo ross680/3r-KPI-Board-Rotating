@@ -205,10 +205,12 @@ body.tv-ui .tv-ctl,#tv.paused .tv-ctl{opacity:1;pointer-events:auto}
 .sc-m{display:flex;justify-content:space-between;align-items:center;gap:.6vw;border-radius:.6vh;padding:.3vh .5vw;flex:1;min-height:0}
 .sc-pace{flex:0 0 auto;flex-direction:column;align-items:stretch;justify-content:center;gap:.45vh;padding:.7vh .6vw}
 .sc-pace .row{display:flex;justify-content:space-between;align-items:baseline;gap:.4vw}
-.sc-pace .math{font-size:1.9vh;font-weight:800;line-height:1.15;text-align:right;color:#fff;white-space:nowrap}
+.sc-pace .math{font-size:1.65vh;font-weight:800;line-height:1.2;text-align:right;color:#fff;white-space:normal}
 .sc-pace .pbar{position:relative;height:.85vh;border-radius:1vh;background:rgba(0,0,0,.35)}
 .sc-pace .pbar em{display:block;height:100%;border-radius:1vh;background:#fff}
 .sc-pace .pbar s{position:absolute;top:0;bottom:0;width:.45vh;margin-left:-.22vh;background:#fff;box-shadow:0 0 0 .2vh #04140c;border-radius:.2vh;text-decoration:none}
+.sc-pace .pbar s.star{background:#00ff88}
+.am-r .c small,.st-r .c small,.rv-r .c small,.flip-r .c small{display:block;font-size:1.35vh;font-weight:800;font-stretch:100%;line-height:1.1}
 .sc-pace.z-great b.num::after{content:" ★";color:#00ff88;font-weight:900}
 .sc-m span{font-size:1.7vh;font-weight:800;color:#E7F6FC;white-space:nowrap}
 .sc-m b{font-stretch:115%;font-weight:900;font-size:2.5vh;white-space:nowrap;text-align:right}

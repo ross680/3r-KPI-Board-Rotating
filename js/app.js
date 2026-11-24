@@ -219,12 +219,12 @@ function slideHTML(sl){
     if(!R.length) return "";
     const sm=v=>money(v, Math.abs(v)>=10000);
     // [label, value, relative width] — widths sized to the longest value each column can show
-    const cols=[["Revenue","rev",r=>money(r.st.rev,true),1.2],["Avg ticket","avg",r=>r.st.paid?sm(r.st.avg):"—",1.25],["Close rate","close",r=>r.st.opp?pct(r.st.close):"—",1.05],["Sold","sold",r=>money(r.st.sold,true),1.15],["Members","mem",r=>r.st.mem,.9],["Reviews","rv",r=>r.st.rv,.9],["Callbacks","cb",r=>r.st.cb,1.05]];
+    const cols=[["Revenue","rev",r=>money(r.st.rev,true),1.2],["Avg ticket","avg",r=>r.st.paid?sm(r.st.avg):"—",1.25],["Close rate","close",r=>r.st.opp?pct(r.st.close):"—",1.15],["Sold","sold",r=>money(r.st.sold,true),1.25],["Members","mem",r=>r.st.mem,.9],["Reviews","rv",r=>String(r.st.rv||0),1.05],["Callbacks","cb",r=>r.st.cb,1.05]];
     const gc=`minmax(0,2.5fr) ${cols.map(c=>`minmax(0,${c[3]}fr)`).join(" ")}`;
-    return `<div class="kicker">${esc(periodLabel(P))}${paceNote()} · color is against today's pace</div><div class="big-h" style="margin-bottom:1.4vh">Team scoreboard</div>
+    return `<div class="kicker">${esc(periodLabel(P))}${paceNote()} · close 45% service, 50% sales · sold $25K techs, $75K sales · reviews 4 a month</div><div class="big-h" style="margin-bottom:1.4vh">Team scoreboard</div>
       ${colorLegend()}
       <div class="am-h" style="grid-template-columns:${gc}"><span style="text-align:left">Name</span>${cols.map(c=>`<span>${c[0]}</span>`).join("")}</div>
-      <div class="scrollbox"><div class="scrollin am">${R.map(r=>`<div class="am-r ${r.sales?"sales":""}" style="grid-template-columns:${gc}"><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}${r.sales?"<em>Sales</em>":""}</b></div>${cols.map(c=>`<div class="c num${zoneClass(r.parts,c[1])}">${c[2](r)}</div>`).join("")}</div>`).join("")}</div></div>`;
+      <div class="scrollbox"><div class="scrollin am">${R.map(r=>`<div class="am-r ${r.sales?"sales":""}" style="grid-template-columns:${gc}"><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}${r.sales?"<em>Sales</em>":""}</b></div>${cols.map(c=>scoreCell(r,c)).join("")}</div>`).join("")}</div></div>`;
   }
   if (sl.k==="stats"){
     const R = roster(true).map(r=>({...r, y:statsFor(r.t,"ytd"), m:statsFor(r.t,"mtd")}));
@@ -282,10 +282,22 @@ function slideHTML(sl){
   if (sl.k==="sales"){
     const R=salesRoster(true).map(r=>({...r, m:statsFor(r.t,"mtd")}));
     const gc="5vh minmax(0,1.7fr) repeat(7,minmax(0,1fr))";
-    return `<div class="kicker">Everyone's sales · ${esc(monthName())} big · year to date small</div><div class="big-h">Sales board</div>
+    const g=paceGoals();
+    const soldCell=(r)=>{
+      const target=(r.parts&&r.parts.sold&&r.parts.sold.target)||0;
+      const zone=(r.parts&&r.parts.sold&&r.parts.sold.zone)||"";
+      return `<div class="c${zone?" z-"+zone:""}">${bigSmall(money(r.m.sold,true), target?`of ${moneyGoal(target)}`:"this month")}</div>`;
+    };
+    const closeCell=(r)=>{
+      const target=r.side==="sales"?g.closeSales:g.closeService;
+      const zone=r.m.estN?Sc.metricZone(r.m.estClose, target, false):"";
+      return `<div class="c${zone?" z-"+zone:""}">${bigSmall(r.m.estN?pct(r.m.estClose):"—", `of ${pct(target)}`)}</div>`;
+    };
+    return `<div class="kicker">Everyone's sales · ${esc(monthName())} big · close goal ${pct(g.closeSales)} sales, ${pct(g.closeService)} service</div><div class="big-h">Sales board</div>
+      ${colorLegend()}
       <div class="st-t"><div class="st-h" style="grid-template-columns:${gc}"><span></span><span></span><span>Sold</span><span>Sold #</span><span>Close %</span><span>Avg sale</span><span>Estimates</span><span>Open pipeline</span><span>Members</span></div>
       <div class="scrollbox"><div class="scrollin">${R.map((r,i)=>`<div class="st-r ${i===0&&r.m.sold?"top":""}" style="grid-template-columns:${gc}"><div class="rk num">${i+1}</div><div class="who">${av(r.t.k,r.name)}<b>${esc(r.name)}${r.side==="sales"?"<em>Sales</em>":r.side==="apprentice"?"<em>Apprentice</em>":"<em>Tech</em>"}</b></div>
-        <div class="c">${bigSmall(money(r.m.sold,true),money(r.y.sold,true))}</div><div class="c">${bigSmall(r.m.soldN,r.y.soldN)}</div><div class="c">${bigSmall(r.m.estN?pct(r.m.estClose):"—",r.y.estN?pct(r.y.estClose):"—")}</div><div class="c">${bigSmall(r.m.soldN?money(r.m.avgSale,true):"—",r.y.soldN?money(r.y.avgSale,true):"—")}</div><div class="c">${bigSmall(r.m.estN,r.y.estN)}</div><div class="c">${bigSmall(r.m.openN,money(r.m.openAmt,true))}</div><div class="c">${bigSmall(r.m.mem,r.y.mem)}</div></div>`).join("")}</div></div></div>`;
+        ${soldCell(r)}<div class="c">${bigSmall(r.m.soldN,r.y.soldN)}</div>${closeCell(r)}<div class="c">${bigSmall(r.m.soldN?money(r.m.avgSale,true):"—",r.y.soldN?money(r.y.avgSale,true):"—")}</div><div class="c">${bigSmall(r.m.estN,r.y.estN)}</div><div class="c">${bigSmall(r.m.openN,money(r.m.openAmt,true))}</div><div class="c">${bigSmall(r.m.mem,r.y.mem)}</div></div>`).join("")}</div></div></div>`;
   }
   if (sl.k==="mem") return fieldSlideHTML(snap);
   if (sl.k==="calls") return callSlideHTML(snap, now);
@@ -310,6 +322,22 @@ function slideHTML(sl){
 function zoneClass(parts, key){
   const z=parts&&parts[key]&&parts[key].zone;
   return z?" z-"+z:"";
+}
+function scoreCell(r, c){
+  const key=c[1], g=paceGoals();
+  const part=r.parts&&r.parts[key];
+  let zone=part&&part.zone||"";
+  let target=part&&isFinite(+part.target)?+part.target:null;
+  if(key==="close"){
+    target=r.sales?g.closeSales:g.closeService;
+    zone=r.st.opp?Sc.metricZone(r.st.close, target, false):"";
+  } else if(key==="rv" && !(target>0)){
+    target=g.reviewsMonth*Sc.mtdFraction(Sc.nyNow());
+    zone=Sc.metricZone(r.st.rv||0, target, false);
+  }
+  const sub=(key==="close"||key==="sold"||key==="rv")&&target>0
+    ? `<small>of ${key==="close"?pct(target):key==="sold"?moneyGoal(target):countTxt(target)}</small>` : "";
+  return `<div class="c num${zone?" z-"+zone:""}">${c[2](r)}${sub}</div>`;
 }
 function colorLegend(){
   return `<div class="zlegend"><span class="z-great">★ Crushing it (15%+ over goal)</span><span class="z-good">On goal</span><span class="z-warn">Close (within 15%)</span><span class="z-bad">Below goal</span></div>`;
@@ -357,16 +385,30 @@ function teamMark(){
   if(src) return `<div class="sc-logo"><img src="${esc(src)}" alt="3R"></div>`;
   return `<div class="av sc-av">3R</div>`;
 }
+function moneyGoal(n){
+  n=+n||0;
+  if(Math.abs(n)>=1e6) return "$"+(n/1e6).toFixed(2).replace(/\.?0+$/,"")+"M";
+  if(Math.abs(n)>=1000){ const k=n/1000; return "$"+(Math.round(k*10)/10).toFixed(1).replace(/\.0$/,"")+"K"; }
+  return money(n);
+}
+function countTxt(n){
+  if(n==null||!isFinite(+n)) return "—";
+  const r=Math.round(+n*10)/10;
+  return Math.abs(r-Math.round(r))<0.05?String(Math.round(r)):String(r);
+}
+function paceGoals(){ return (S.cfg&&S.cfg.paceGoals)||SETTINGS.PACE_GOALS; }
 function paceNoteLine(){
-  return `<div class="sc-note">4-week pace = last 4 weeks of revenue ÷ (average day × 28). Average starts Jan 1, or Oct 21 for Justin. 100% = on goal.</div>`;
+  return `<div class="sc-note">4-week pace = revenue in the last 4 weeks vs. goal ($29.6K service, $100K install; source: Pivotl targets). ★ = $40K+ service.</div>`;
 }
 function paceTile(row){
   const z=row.zones&&row.zones.pace?" z-"+row.zones.pace:"";
   let extra="";
-  if(row.pace!=null && row.paceGoal){
-    const scale=1.5;
-    const fill=Math.max(0, Math.min(100, row.pace/scale*100));
-    extra=`<div class="math">${money(row.l4rev,true)} last 4 wks · goal ${money(row.paceGoal,true)}</div><i class="pbar" aria-hidden="true"><em style="width:${fill.toFixed(1)}%"></em><s style="left:${(100/scale).toFixed(1)}%"></s></i>`;
+  if(row.paceGoal){
+    const superRatio=row.paceSuper>0?row.paceSuper/row.paceGoal:1.15;
+    const scale=Math.max(1.6, row.pace||0, superRatio);
+    const fill=row.pace==null?0:Math.max(0, Math.min(100, row.pace/scale*100));
+    const math=row.pace==null?"Not 4 weeks yet":`${moneyGoal(row.l4rev)} last 4 wks · goal ${moneyGoal(row.paceGoal)} · ★ at ${moneyGoal(row.paceSuper)}`;
+    extra=`<div class="math">${math}</div><i class="pbar" aria-hidden="true"><em style="width:${fill.toFixed(1)}%"></em><s class="at" style="left:${(100/scale).toFixed(1)}%"></s><s class="star" style="left:${(superRatio/scale*100).toFixed(1)}%"></s></i>`;
   }
   return `<div class="sc-m sc-pace${z}"><div class="row"><span>4-week pace</span><b class="num">${pct1(row.pace)}</b></div>${extra}</div>`;
 }
@@ -457,7 +499,9 @@ function reviewSlideHTML(snap){
   const body=rows.length?rows.map(r=>{
     const hit=(snap.techs&&snap.techs[r.k]&&snap.techs[r.k].rvMatched)||{};
     const mark=n=>n?`<small>+${n} matched</small>`:"";
-    return `<div class="rv-r"><div class="who">${av(r.k,r.name)}<b>${esc(r.name)}</b></div><div class="c num">${r.m}${mark(hit.mtd)}</div><div class="c num">${r.l30}${mark(hit.l30)}</div><div class="c num">${r.y}${mark(hit.ytd)}</div><div class="c num star">${starLabel(r.avg)}</div></div>`;
+    const goal=paceGoals().reviewsMonth*Sc.mtdFraction(Sc.nyNow());
+    const z=Sc.metricZone(r.m, goal, false);
+    return `<div class="rv-r"><div class="who">${av(r.k,r.name)}<b>${esc(r.name)}</b></div><div class="c num${z?" z-"+z:""}">${r.m}<small>of ${countTxt(goal)}</small>${mark(hit.mtd)}</div><div class="c num">${r.l30}${mark(hit.l30)}</div><div class="c num">${r.y}${mark(hit.ytd)}</div><div class="c num star">${starLabel(r.avg)}</div></div>`;
   }).join(""):`<div class="empty-tv"><div><b>No techs on the board</b></div></div>`;
   const newest=(snap.reviews||[]).slice(0,3);
   const ticker=newest.length?`<div class="rv-new">${newest.map(q=>{
@@ -478,8 +522,9 @@ function reviewSlideHTML(snap){
         : `${untagged} of ${total} reviews have no technician. None could be tied to a job. ${rm.namedInText||0} already name a tech in the text and are counted. The export has no customer, phone, address, or job column.`)
       : "Tagged from the ServiceTitan review export.");
   const src=mp?"Marketing Pro":"ServiceTitan reviews";
-  return `${googleLine(snap)}<div class="kicker">${src}${throughTxt?" · latest "+esc(throughTxt):""}${stale?" · no dated reviews":""}</div>
+  return `${googleLine(snap)}<div class="kicker">${src}${throughTxt?" · latest "+esc(throughTxt):""}${stale?" · no dated reviews":""} · goal ${paceGoals().reviewsMonth} a month per tech, paced to today</div>
     <div class="big-h tight">Reviews by tech</div>
+    ${colorLegend()}
     <div class="rv-top">
       <div class="rv-co"><div class="l">Company</div><div class="rv-co-n"><b class="num">${sums.rv_mtd||0}</b><span>this month</span></div><div class="rv-co-n"><b class="num">${sums.rv_l30||0}</b><span>last 30 days</span></div><div class="rv-co-n"><b class="num">${sums.rv_ytd||0}</b><span>this year</span></div><div class="rv-co-n"><b class="num">${starLabel(coAvg)}</b><span>avg this year</span></div></div>
       ${ticker}
@@ -699,16 +744,18 @@ function flipSlideHTML(snap, now){
   const soldTxt=board.soldKnown?money(c.sold, true):"—";
   const head=`<div class="lbh flip-h"><span></span><span></span><span style="text-align:left">Tech</span><span>Flips</span><span>${auto?"This year":"Sold from flips"}</span></div>`;
   const second=r=>auto?String(r.ytd||0):(board.soldKnown&&r.soldKnown?money(r.sold,true):"—");
-  const paced=goal&&ps?(goal*(ps.pace||0)):0;
+  const per=paceGoals().flipsMonth;
+  const perNow=per*Sc.mtdFraction(now);
   const list=board.rows.length?`${head}<div class="scrollbox"><div class="ld scrollin flip-list">${board.rows.map((r,i)=>{
-    const z=paced?Sc.metricZone(r.flips, paced, false):"";
-    return `<div class="ld-r flip-r ${i===0?"top":""}"><div class="rk num">${i+1}</div>${r.key?av(r.key,r.name):`<div class="av">${esc(Sc.initials(r.name))}</div>`}<div class="nm">${esc(r.name)}${r.matched?"":"<small>Name did not match a tech</small>"}</div><div class="c${z?" z-"+z:""}">${bigSmall(r.flips, board.convKnown?r.conv+" converted":"this month")}</div><div class="c"><b class="num">${second(r)}</b><span>${auto?"this year":"sold"}</span></div></div>`;
+    const z=perNow?Sc.metricZone(r.flips, perNow, false):"";
+    return `<div class="ld-r flip-r ${i===0?"top":""}"><div class="rk num">${i+1}</div>${r.key?av(r.key,r.name):`<div class="av">${esc(Sc.initials(r.name))}</div>`}<div class="nm">${esc(r.name)}${r.matched?"":"<small>Name did not match a tech</small>"}</div><div class="c${z?" z-"+z:""}">${bigSmall(r.flips, `${countTxt(r.flips)} of ${countTxt(perNow)}`)}</div><div class="c"><b class="num">${second(r)}</b><span>${auto?"this year":"sold"}</span></div></div>`;
   }).join("")}</div></div>`
     :`<div class="empty-tv"><div><b>No flips this month</b>${auto?"No ServiceTitan leads are dated this month.":"Add a row on the Flips tab and it shows up here."}</div></div>`;
-  const kicker=auto?`${esc(monthName())} · ServiceTitan leads, one per job`:`${esc(monthName())} · the office logs these by hand`;
+  const kicker=auto?`${esc(monthName())} · ServiceTitan leads, one per job · each tech's goal is ${per} this month, paced to today`:`${esc(monthName())} · the office logs these by hand · each tech's goal is ${per} this month`;
   const yearTile=auto?`<div class="tile"><div class="l">This year</div><div class="v num">${c.ytd||0}</div><div class="s">lead generated by</div></div><div class="tile"><div class="l">Last 30 days</div><div class="v num">${c.l30||0}</div><div class="s">de-duplicated</div></div>`
     :`<div class="tile"><div class="l">Converted</div><div class="v num">${convTxt}</div><div class="s">${esc(convSub)}</div></div><div class="tile"><div class="l">Sold from flips</div><div class="v num">${soldTxt}</div><div class="s">${board.soldKnown?"this month":"optional"}</div></div>`;
-  const flipZone=paced?Sc.metricZone(c.mtd, paced, false):"";
+  const companyPaced=goal&&ps?(goal*(ps.pace||0)):0;
+  const flipZone=companyPaced?Sc.metricZone(c.mtd, companyPaced, false):"";
   return `<div class="kicker">${kicker}</div><div class="big-h tight">Flip tracker</div>
     ${colorLegend()}
     <div class="goal-big flip-goal"><div class="goal-num num${flipZone?" z-"+flipZone:""}">${c.mtd}</div><div class="goal-of">${goal?`of <b>${goal}</b> flips this month<br>${ps.ahead?"Ahead of pace":"Behind pace by "+Math.max(0, Math.round(ps.behindBy))}`:"Set flip_goal on Board_Config"}</div></div>
@@ -1273,6 +1320,7 @@ function hubMode(){
       if (snap.logoPdf && snap.logoPdfHash !== (S.portalLogo||{}).h) renderPortalLogo(snap.logoPdf).then(P=>{ P.h=snap.logoPdfHash; applyPortalLogo(P); }).catch(e=>console.warn("portal logo",e));
       S.cfg=Sc.applySheetConfig(c);
       if (Sc.applyCompanyGoals) Sc.applyCompanyGoals(S.cfg, snap.goals, c);
+      if (Sc.applyPaceGoals) Sc.applyPaceGoals(S.cfg, []);
       applyPeople(snap, snap.techMeta||{}); applySnapshot(snap, snap.builtAt, "hub");
       await mergeManualTabs(snap);
       S.sync={state:"ok",msg:"Live from the 3R Data Hub"}; render(true);
@@ -1373,6 +1421,7 @@ function sheetMode(){
       const cfgRows=rows["board_config"]||[]; const c={}; cfgRows.slice(1).forEach(r=>{ if(String(r[0]||"").trim()) c[String(r[0]).trim()]=r[1]; });
       S.cfg=Sc.applySheetConfig(c);
       if (Sc.applyCompanyGoals) Sc.applyCompanyGoals(S.cfg, snap.goals, c);
+      if (Sc.applyPaceGoals) Sc.applyPaceGoals(S.cfg, rows["pace goals"]||[]);
       applyPeople(snap, Sc.parseTechMeta(rows["board_techs"]||[])); applySnapshot(snap, Date.now(), "sheet");
       S.sync={state:"ok",msg:"Live from the KPI sheet"}; saveCached(); render(true);
     }catch(e){ S.sync={state:"error",msg:(e&&e.message)||"Couldn't reach the sheet. Showing the last numbers."}; if(!S.snap) render(); }

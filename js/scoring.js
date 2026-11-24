@@ -2378,6 +2378,54 @@
     if (!setOnSheet && avg > 0 && cfg.metrics && cfg.metrics.avg) cfg.metrics.avg.target = avg;
     return cfg;
   }
+  /* Pace Goals tab overrides the constants. Missing keys keep the defaults. */
+  function paceGoalTable(wb) {
+    var base = SETTINGS.PACE_GOALS || {};
+    var over = {};
+    sheetRows(wb, "Pace Goals").forEach(function (r) {
+      if (!r) return;
+      var k = String(r[0] == null ? "" : r[0]).trim().toLowerCase();
+      if (!k || k === "key") return;
+      var n = num(r[1]);
+      if (isFinite(n)) over[k] = n;
+    });
+    function pick(key, fallback) { return over[key] != null ? over[key] : fallback; }
+    return {
+      l4Service: pick("l4_service", base.l4Service || 29600),
+      l4ServiceSuper: pick("l4_service_super", base.l4ServiceSuper || 40000),
+      l4Install: pick("l4_install", base.l4Install || 100000),
+      l4InstallSuper: pick("l4_install_super", base.l4InstallSuper || 115000),
+      closeService: pick("close_service", base.closeService || 0.45),
+      closeSales: pick("close_sales", base.closeSales || 0.5),
+      reviewsMonth: pick("reviews_month", base.reviewsMonth || 4),
+      flipsMonth: pick("flips_month", base.flipsMonth || 2),
+      soldTechMonth: pick("sold_tech_month", base.soldTechMonth || 25000),
+      soldSalesMonth: pick("sold_sales_month", base.soldSalesMonth || 75000)
+    };
+  }
+  function applyPaceGoals(cfg, rows) {
+    cfg = cfg || {};
+    var g = paceGoalTable({ __rows: { "pace goals": rows || [] } });
+    if (cfg.metrics) {
+      if (cfg.metrics.close) cfg.metrics.close.target = g.closeService;
+      if (cfg.metrics.sold) cfg.metrics.sold.target = g.soldTechMonth;
+      if (cfg.metrics.rv) cfg.metrics.rv.target = g.reviewsMonth;
+      if (cfg.metrics.flips) cfg.metrics.flips.target = g.flipsMonth;
+    }
+    if (cfg.salesMetrics) {
+      if (cfg.salesMetrics.sold) cfg.salesMetrics.sold.target = g.soldSalesMonth;
+      if (cfg.salesMetrics.estClose) cfg.salesMetrics.estClose.target = g.closeSales;
+    }
+    cfg.paceGoals = g;
+    return cfg;
+  }
+  function dollarZone(rev, goal, superAt) {
+    if (rev == null || !isFinite(+rev) || !(+goal > 0)) return "";
+    if (+superAt > 0 && +rev >= +superAt) return "great";
+    if (+rev >= +goal) return "good";
+    if (+rev >= +goal * 0.85) return "warn";
+    return "bad";
+  }
   /* Super green is 15% past the goal. Green is at the goal. Yellow is within 15% short.
      Lower-is-better metrics mirror that: super green is 15% better than the green line. */
   function metricZone(value, target, inverse) {
@@ -2525,18 +2573,19 @@
         box[meta.tech].openAmt += open;
       }
     });
-    var days = ymdSpan(yStart, end);
+    var pg = paceGoalTable(wb);
+    var svcN = roster.filter(function (p) { return p.group === "service"; }).length;
+    var instN = roster.filter(function (p) { return p.group === "install"; }).length;
+    function bandFor(person) {
+      if (person.group === "install") return { goal: pg.l4Install, superAt: pg.l4InstallSuper };
+      if (person.group === "team") return { goal: pg.l4Service * svcN + pg.l4Install * instN, superAt: pg.l4ServiceSuper * svcN + pg.l4InstallSuper * instN };
+      return { goal: pg.l4Service, superAt: pg.l4ServiceSuper };
+    }
     function pack(person, raw) {
-      var paceDays = days;
-      var pace = null;
-      var paceGoal = null;
       var started = person.started || "";
-      if (started && started > l4) paceDays = 0;
-      else if (started && started > yStart) paceDays = ymdSpan(started, end);
-      if (raw.rev > 0 && paceDays > 0) {
-        paceGoal = raw.rev / paceDays * 28;
-        pace = raw.l4rev / paceGoal;
-      }
+      var tooNew = !!(started && started > l4);
+      var band = bandFor(person);
+      var pace = !tooNew && band.goal > 0 ? raw.l4rev / band.goal : null;
       var ticket = raw.paidN ? raw.paidRev / raw.paidN : null;
       var conv = raw.opp ? raw.conv / raw.opp : null;
       var memPct = raw.svc ? raw.mem / raw.svc : null;
@@ -2550,7 +2599,7 @@
         jobs: raw.jobs, rev: Math.round(raw.rev), l4jobs: raw.l4jobs, l4rev: Math.round(raw.l4rev),
         svc: raw.svc, paidN: raw.paidN, inst: raw.inst, instRev: Math.round(raw.instRev),
         mem: raw.mem, big: raw.big, bigSold: raw.bigSold, openN: raw.openN, openAmt: Math.round(raw.openAmt),
-        pace: pace, paceGoal: paceGoal, ticket: ticket, conv: conv, memPct: memPct, zeroPct: zeroPct, cbPct: cbPct,
+        pace: pace, paceGoal: band.goal, paceSuper: band.superAt, ticket: ticket, conv: conv, memPct: memPct, zeroPct: zeroPct, cbPct: cbPct,
         instTicket: instTicket, bigRate: bigRate, bigClose: bigClose
       };
     }
@@ -2568,7 +2617,7 @@
     function paint(row) {
       var teamBig = team.bigRate;
       row.zones = {
-        pace: metricZone(row.pace, 1, false),
+        pace: row.pace == null ? "" : dollarZone(row.l4rev, row.paceGoal, row.paceSuper),
         ticket: row.ticket == null ? "" : (row.ticket >= 1380 ? "great" : row.ticket >= 1200 ? "good" : row.ticket >= 850 ? "warn" : metricZone(row.ticket, 850, false)),
         conv: row.conv == null ? "" : (row.conv >= 0.92 ? "great" : row.conv >= 0.8 ? "good" : metricZone(row.conv, 0.8, false)),
         mem: row.memPct == null ? "" : (row.memPct >= 0.1725 ? "great" : row.memPct >= 0.15 ? "good" : row.memPct >= 0.075 ? "warn" : "bad"),
@@ -2581,7 +2630,7 @@
       return row;
     }
     people.forEach(paint);
-    team.zones = {};
+    team.zones = { pace: team.pace == null ? "" : dollarZone(team.l4rev, team.paceGoal, team.paceSuper) };
     return {
       asOf: end, l4Start: l4, yStart: yStart,
       service: people.filter(function (p) { return p.group === "service"; }),
@@ -3090,7 +3139,7 @@
     contestForMonth:contestForMonth, contestPrizes:contestPrizes, contestStandings:contestStandings, raceStandings:raceStandings, daysLeftInMonth:daysLeftInMonth,
     percentToGoal:percentToGoal, monthPace:monthPace, yearPace:yearPace, paceStatus:paceStatus, periodStart:periodStart,
     periodLabel:periodLabel, monthName:monthName, isStale:isStale, chooseDataMode:chooseDataMode,
-    applySheetConfig:applySheetConfig, applyCompanyGoals:applyCompanyGoals, parseTechMeta:parseTechMeta, shiftLimitMinutes:shiftLimitMinutes,
+    applySheetConfig:applySheetConfig, applyCompanyGoals:applyCompanyGoals, applyPaceGoals:applyPaceGoals, paceGoalTable:paceGoalTable, dollarZone:dollarZone, parseTechMeta:parseTechMeta, shiftLimitMinutes:shiftLimitMinutes,
     mtdFraction:mtdFraction, readUnpaidInvoices:readUnpaidInvoices, readGoogleProfile:readGoogleProfile, readLaborPct:readLaborPct, buildFieldScorecard:buildFieldScorecard
   };
 });

@@ -33,8 +33,8 @@
   var METRICS = [
     {k:"rev",   label:"Revenue",          fmt:"$",  target:40000, w:25, ytdScale:true,  hint:"Completed revenue per month"},
     {k:"avg",   label:"Average ticket",   fmt:"$",  target:650,   w:15, hint:"Revenue ÷ paid completed jobs"},
-    {k:"close", label:"Close rate",       fmt:"%",  target:0.55,  w:20, hint:"Converted ÷ opportunities"},
-    {k:"sold",  label:"Sold revenue",     fmt:"$",  target:50000, w:10, ytdScale:true, hint:"Estimates sold per month"},
+    {k:"close", label:"Close rate",       fmt:"%",  target:0.45,  w:20, hint:"Converted ÷ opportunities. Pivotl service goal."},
+    {k:"sold",  label:"Sold revenue",     fmt:"$",  target:25000, w:10, ytdScale:true, hint:"Estimates sold per month. Proposed from recent service months."},
     {k:"cb",    label:"Callbacks",        fmt:"#",  target:2,     w:15, inverse:true, ytdScale:true, hint:"Allowed per month (lower is better)"},
     {k:"mem",   label:"Memberships",      fmt:"#",  target:3,     w:5,  ytdScale:true, hint:"Sold per month"},
     {k:"rv",    label:"Google reviews",   fmt:"#",  target:4,     w:5,  ytdScale:true, hint:"Per month"},
@@ -49,11 +49,11 @@
     {k:"estClose",label:"Estimate close %",fmt:"%",  target:0.45,  w:0,  hint:"Estimates sold ÷ estimates written"},
     {k:"avgSale",label:"Average sale",     fmt:"$",  target:3500,  w:0,  hint:"Sold $ ÷ estimates sold"},
     {k:"overdue",label:"Overdue follow-ups",fmt:"#", target:3,     w:0,  inverse:true, hint:"Open estimates past their follow-up date"},
-    {k:"flips", label:"Flips",            fmt:"#",  target:4,     w:0,  ytdScale:true, hint:"Logged by hand on the Flips tab. Weight 0 leaves it out of the grade."}
+    {k:"flips", label:"Flips",            fmt:"#",  target:2,     w:0,  ytdScale:true, hint:"Per tech per month. Proposed from the last 30 days."}
   ];
   var SALES_METRICS = [
     {k:"sold",    label:"Sold revenue",      fmt:"$", target:75000, w:35, ytdScale:true, hint:"Estimates sold per month"},
-    {k:"estClose",label:"Estimate close %",  fmt:"%", target:0.45,  w:20, hint:"Estimates sold ÷ written"},
+    {k:"estClose",label:"Estimate close %",  fmt:"%", target:0.50,  w:20, hint:"Estimates sold ÷ written. Pivotl sales goal."},
     {k:"avgSale", label:"Average sale",      fmt:"$", target:3500,  w:15, hint:"Sold $ ÷ estimates sold"},
     {k:"estN",    label:"Estimates written", fmt:"#", target:25,    w:10, ytdScale:true, hint:"Per month"},
     {k:"overdue", label:"Overdue follow-ups",fmt:"#", target:3,     w:10, inverse:true, hint:"Open estimates past follow-up date"},
@@ -235,8 +235,25 @@
   var LOGO_PDF = "1tMvDw9K76yDncbEaJl6JhQDlVD1iiHYY";  // "3R LOGO FILE.pdf"
   var PHOTO_FOLDER = "11gVMpNygKLHh7vHBqly2c3lj9WwNef_j";
 
+  /* Easy-to-edit goals. A Pace Goals tab on the KPI sheet overrides these.
+     Keys: l4_service, l4_service_super, l4_install, l4_install_super,
+     close_service, close_sales, reviews_month, flips_month,
+     sold_tech_month, sold_sales_month. */
+  var PACE_GOALS = {
+    l4Service: 29600,
+    l4ServiceSuper: 40000,
+    l4Install: 100000,
+    l4InstallSuper: 115000,
+    closeService: 0.45,
+    closeSales: 0.50,
+    reviewsMonth: 4,
+    flipsMonth: 2,
+    soldTechMonth: 25000,
+    soldSalesMonth: 75000
+  };
+
   // Tab names must match the sheet exactly. "Automation Estimates" has no leading space.
-  var SHEET_TABS = ["Goals","YTD Goals","Actuals","Leaderboard","Reviews","Google Reviews","Announcements","Team Spotlight","Contest","Races","Flips","Memberships","Review Tracker","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","MP Reviews","ST Reviews","Labor Pct","ST Callbacks","ST Customers","Install Board","Call Center","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
+  var SHEET_TABS = ["Goals","YTD Goals","Pace Goals","Actuals","Leaderboard","Reviews","Google Reviews","Announcements","Team Spotlight","Contest","Races","Flips","Memberships","Review Tracker","Call Back Record","Install Record","ST Jobs","ST Estimates","ST Techs","ST Timesheets","ST Appointments","ST Memberships","MP Reviews","ST Reviews","Labor Pct","ST Callbacks","ST Customers","Install Board","Call Center","Automation Jobs","Automation Estimates","Weather","Board_Config","Board_Techs","Board_Updates"];
 
   function defaultCfg() {
     return {
@@ -263,7 +280,7 @@
     FLIP_GOAL: FLIP_GOAL, FLIP_ALERT_HOURS: FLIP_ALERT_HOURS,
     BOOKING_RATE_TARGET: BOOKING_RATE_TARGET, CALL_CENTER_TAB: CALL_CENTER_TAB,
     BONUS_SHEET: BONUS_SHEET, BONUS_TAB: BONUS_TAB, GOOGLE_SNAPSHOT: GOOGLE_SNAPSHOT,
-    HIDDEN_TECHS: HIDDEN_TECHS,
+    HIDDEN_TECHS: HIDDEN_TECHS, PACE_GOALS: PACE_GOALS,
     LOGO_FILE: LOGO_FILE, LOGO_PDF: LOGO_PDF, PHOTO_FOLDER: PHOTO_FOLDER,
     SHEET_TABS: SHEET_TABS, defaultCfg: defaultCfg
   };

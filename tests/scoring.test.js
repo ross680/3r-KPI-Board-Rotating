@@ -1882,8 +1882,24 @@ describe("automatic flips, memberships, callbacks, and Google reviews", function
     assert.equal(nick.big, 1);
     assert.equal(nick.bigSold, 1);
     assert.equal(nick.zones.cb, "bad");
-    assert.equal(justin.fresh, "New, started Oct 21");
-    assert.deepEqual(justin.zones, {});
+    assert.equal(justin.fresh, "Started Oct 21");
+    assert.ok(Math.abs(justin.pace - 33 / 28) < 1e-9);
+    assert.equal(justin.zones.pace, "great");
+    assert.equal(justin.zones.ticket, "warn");
+    assert.equal(justin.zones.conv, "great");
+    assert.equal(justin.zones.mem, "bad");
+    assert.equal(justin.zones.zero, "great");
+    assert.equal(justin.zones.cb, "great");
+    const early = Sc.buildFieldScorecard({ __rows: {
+      "st jobs": [
+        ["Job ID", "Job #", "Primary Technician", "Status", "Business Unit", "Job Type", "Completion Date", "Jobs Total Revenue", "Opportunity", "Converted", "Recall", "Zero Dollar Job"],
+        ["5", "5", "Justin Romano", "Completed", "Plumbing - Service", "Faucet", "10/25/2026", 900, "TRUE", "TRUE", "FALSE", "FALSE"]
+      ]
+    }}, Sc.nyDate(2026, 9, 30, 12, 0, 0));
+    const earlyJustin = early.service.filter(function (p) { return p.label === "Justin"; })[0];
+    assert.equal(earlyJustin.pace, null);
+    assert.equal(earlyJustin.zones.pace, "");
+    assert.equal(earlyJustin.zones.ticket, "warn");
     assert.equal(s.scorecard.service.some(function (p) { return /franco/i.test(p.name); }), false);
     assert.equal(s.scorecard.team.jobs, 4);
     assert.equal(s.labor.through, "2026-10-31");

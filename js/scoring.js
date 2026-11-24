@@ -2414,7 +2414,7 @@
   }
   /* Service and install scorecards for the five techs on the v2 card.
      Franco and Jon are left out of the rows and out of the team totals.
-     Justin is shown and marked new; his cells are not colored. */
+     Justin is colored on the same tiers. His 4-week pace uses days since Oct 21, and stays blank until he has a full four weeks. */
   function buildFieldScorecard(wb, now) {
     now = now || nyNow();
     var end = nyYMD(now);
@@ -2424,7 +2424,7 @@
     var roster = [
       { name: "Nick Yukich", label: "Nick", group: "service" },
       { name: "Kaio Reis", label: "Kaio", group: "service" },
-      { name: "Justin Romano", label: "Justin", group: "service", fresh: "New, started Oct 21" },
+      { name: "Justin Romano", label: "Justin", group: "service", fresh: "Started Oct 21", started: "2026-10-21" },
       { name: "Mitchell Cooper", label: "Mitch", group: "install" },
       { name: "Bryan Welch", label: "Bryan", group: "install" }
     ];
@@ -2527,7 +2527,12 @@
     });
     var days = ymdSpan(yStart, end);
     function pack(person, raw) {
-      var pace = !person.fresh && raw.rev > 0 && days > 0 ? raw.l4rev / (raw.rev / days * 28) : null;
+      var paceDays = days;
+      var pace = null;
+      var started = person.started || "";
+      if (started && started > l4) paceDays = 0;
+      else if (started && started > yStart) paceDays = ymdSpan(started, end);
+      if (raw.rev > 0 && paceDays > 0) pace = raw.l4rev / (raw.rev / paceDays * 28);
       var ticket = raw.paidN ? raw.paidRev / raw.paidN : null;
       var conv = raw.opp ? raw.conv / raw.opp : null;
       var memPct = raw.svc ? raw.mem / raw.svc : null;
@@ -2557,10 +2562,6 @@
     installers.forEach(function (p) { instRev += p.instRev; instN += p.inst; });
     team.installerTicket = instN ? instRev / instN : null;
     function paint(row) {
-      if (row.fresh) {
-        row.zones = {};
-        return row;
-      }
       var teamBig = team.bigRate;
       row.zones = {
         pace: metricZone(row.pace, 1, false),

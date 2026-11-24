@@ -360,7 +360,7 @@ function teamMark(){
 function serviceBoardHTML(snap){
   const card=snap.scorecard;
   const rows=(card.service||[]).concat([card.team]);
-  const metric=(row, key, label, text)=>`<div class="sc-m${row.fresh?"":(row.zones&&row.zones[key]?" z-"+row.zones[key]:"")}"><span>${label}</span><b class="num">${text}</b></div>`;
+  const metric=(row, key, label, text)=>`<div class="sc-m${row.zones&&row.zones[key]?" z-"+row.zones[key]:""}"><span>${label}</span><b class="num">${text}</b></div>`;
   const cards=rows.map(r=>{
     const fresh=r.fresh?`<div class="sc-fresh">${esc(r.fresh)}</div>`:"";
     const face=r.group==="team"?teamMark():scoreFace(r.name);
@@ -404,7 +404,7 @@ function installBoardHTML(snap){
 function bigTicketHTML(snap){
   const card=snap.scorecard;
   const rows=(card.service||[]).concat(card.install||[]);
-  const metric=(row, key, label, text)=>`<div class="sc-m${row.fresh?"":(row.zones&&row.zones[key]?" z-"+row.zones[key]:"")}"><span>${label}</span><b class="num">${text}</b></div>`;
+  const metric=(row, key, label, text)=>`<div class="sc-m${row.zones&&row.zones[key]?" z-"+row.zones[key]:""}"><span>${label}</span><b class="num">${text}</b></div>`;
   const cards=rows.map(r=>`<div class="sc-card"><div class="nm">${esc(r.label)}${r.fresh?`<small>${esc(r.fresh)}</small>`:""}</div>
       ${metric(r,"bigRate","$5K+ quote rate", `${pct1(r.bigRate)}<small>${r.big} of ${r.svc}</small>`)}
       ${metric(r,"bigClose","$5K+ close rate", `${pct1(r.bigClose)}<small>${r.bigSold} of ${r.big}</small>`)}

@@ -292,7 +292,7 @@ function zoneClass(parts, key){
   return z?" z-"+z:"";
 }
 function colorLegend(){
-  return `<div class="zlegend"><span class="z-good">At or above the goal</span><span class="z-warn">Close</span><span class="z-bad">Below the goal</span></div>`;
+  return `<div class="zlegend"><span class="z-great">Super green</span><span class="z-good">At or above</span><span class="z-warn">Close</span><span class="z-bad">Below</span></div>`;
 }
 function pct1(n){
   if(n==null||!isFinite(+n)) return "—";
@@ -301,8 +301,12 @@ function pct1(n){
 }
 function laborZone(kind, n){
   if(n==null||!isFinite(+n)) return "";
-  if(kind==="sales") return n<=0.2?"good":n<=0.3?"warn":"bad";
-  return n<=0.19?"good":n<=0.25?"warn":"bad";
+  const green=kind==="sales"?0.2:0.19;
+  const yellow=kind==="sales"?0.3:0.25;
+  if(n<=green*0.85) return "great";
+  if(n<=green) return "good";
+  if(n<=yellow) return "warn";
+  return "bad";
 }
 function laborFor(snap, name){
   const lab=snap&&snap.labor;
@@ -457,11 +461,16 @@ function unpaidSlideHTML(snap){
     return true;
   });
   const max=Math.max(1, ...rows.map(r=>r.amount||0));
+  const avg=rows.length?rows.reduce((a,r)=>a+(r.amount||0),0)/rows.length:0;
   const asOf=nyShort(snap.dataThrough)||nyShort(u.asOf);
-  const list=rows.length?rows.map((r,i)=>`<div class="pay-r ${i===0?"top":""}"><div class="rk num">${i+1}</div>${r.key?av(r.key,r.name):`<div class="av">${esc(Sc.initials(r.name))}</div>`}<div class="nm">${esc(r.name)}</div><div class="pay-bar"><i style="width:${Math.max(4, r.amount/max*100)}%"></i></div><div class="c"><b class="num">${r.count}</b><span>${r.count===1?"invoice":"invoices"}</span></div><div class="c"><b class="num">${money(r.amount)}</b><span>still due</span></div></div>`).join("")
+  const list=rows.length?rows.map((r,i)=>{
+    const z=avg>0?Sc.metricZone(r.amount, avg, true):"";
+    return `<div class="pay-r ${i===0?"top":""}${z?" z-"+z:""}"><div class="rk num">${i+1}</div>${r.key?av(r.key,r.name):`<div class="av">${esc(Sc.initials(r.name))}</div>`}<div class="nm">${esc(r.name)}</div><div class="pay-bar"><i style="width:${Math.max(4, r.amount/max*100)}%"></i></div><div class="c"><b class="num">${r.count}</b><span>${r.count===1?"invoice":"invoices"}</span></div><div class="c"><b class="num">${money(r.amount)}</b><span>still due</span></div></div>`;
+  }).join("")
     :`<div class="empty-tv"><div><b>No open balances for the techs on this board</b></div></div>`;
-  return `<div class="kicker">Invoiced jobs with a balance still due${asOf?" · through "+esc(asOf):""}</div>
+  return `<div class="kicker">Invoiced jobs with a balance still due${asOf?" · through "+esc(asOf):""} · lower than the group is better</div>
     <div class="big-h tight">Unpaid invoices</div>
+    ${colorLegend()}
     <div class="goal-big pay-hero"><div class="goal-num num">${money(u.totalAmt,true)}</div><div class="goal-of"><b class="num">${u.totalN}</b> open invoice${u.totalN===1?"":"s"}<br>Company total, including techs hidden on this board</div></div>
     <div class="pay-h"><span></span><span></span><span style="text-align:left">Tech</span><span></span><span>Count</span><span>Balance</span></div>
     <div class="scrollbox"><div class="scrollin pay-list">${list}</div></div>`;
@@ -612,14 +621,21 @@ function fieldSlideHTML(snap){
     const m=statsFor(r.t,"mtd"), l=statsFor(r.t,"l30"), y=statsFor(r.t,"ytd");
     return { name:r.name, k:r.t.k, m:m.mem||0, l30:l.mem||0, y:y.mem||0, cb:m.cb||0 };
   }).sort((a,b)=>b.m-a.m||b.cb-a.cb||b.y-a.y||a.name.localeCompare(b.name));
-  const body=rows.map(r=>`<div class="field-r"><div class="who">${av(r.k,r.name)}<b>${esc(r.name)}</b></div><div class="c num">${r.m}</div><div class="c num">${r.l30}</div><div class="c num">${r.y}</div><div class="c num cb">${r.cb}</div></div>`).join("");
+  const frac=Sc.mtdFraction(Sc.nyNow());
+  const memT=3*frac, cbT=2*frac;
+  const body=rows.map(r=>{
+    const mz=Sc.metricZone(r.m, memT, false);
+    const cz=Sc.metricZone(r.cb, cbT, true);
+    return `<div class="field-r"><div class="who">${av(r.k,r.name)}<b>${esc(r.name)}</b></div><div class="c num${mz?" z-"+mz:""}">${r.m}</div><div class="c num">${r.l30}</div><div class="c num">${r.y}</div><div class="c num cb${cz?" z-"+cz:""}">${r.cb}</div></div>`;
+  }).join("");
   const u=snap.memUnassigned||{};
   const ids=Object.keys(u.ids||{});
   const notes=["Company totals include techs hidden on this board."];
   if (u.ytd) notes.push(`Unassigned${ids.length?" ("+ids.join(", ")+")":""} is not on ST Techs: ${u.mtd} this month, ${u.l30} in the last 30 days, ${u.ytd} this year. Counted in the company total only.`);
   if (cbs.unassignedMonth) notes.push(`${cbs.unassignedMonth} callback${cbs.unassignedMonth===1?"":"s"} this month ${cbs.unassignedMonth===1?"is":"are"} on a job that is not in ST Jobs.`);
-  return `<div class="kicker">${esc(monthName())} · memberships from ServiceTitan · callbacks joined from the original job</div>
+  return `<div class="kicker">${esc(monthName())} · memberships from ServiceTitan · callbacks joined from the original job · colored to today's pace</div>
     <div class="big-h tight">Memberships and callbacks</div>
+    ${colorLegend()}
     <div class="field-co"><div><div class="l">Memberships</div><b class="num">${sums.mem_mtd||0}</b><span>this month</span></div><div><div class="l">Last 30 days</div><b class="num">${sums.mem_l30||0}</b><span>memberships</span></div><div><div class="l">This year</div><b class="num">${sums.mem_ytd||0}</b><span>memberships</span></div><div><div class="l">Callbacks</div><b class="num">${cbs.month||0}</b><span>this month</span></div></div>
     <div class="field-h"><span>Tech</span><span>This month</span><span>Last 30 days</span><span>This year</span><span>Callbacks</span></div>
     <div class="scrollbox"><div class="scrollin">${body}</div></div>
@@ -649,13 +665,19 @@ function flipSlideHTML(snap, now){
   const soldTxt=board.soldKnown?money(c.sold, true):"—";
   const head=`<div class="lbh flip-h"><span></span><span></span><span style="text-align:left">Tech</span><span>Flips</span><span>${auto?"This year":"Sold from flips"}</span></div>`;
   const second=r=>auto?String(r.ytd||0):(board.soldKnown&&r.soldKnown?money(r.sold,true):"—");
-  const list=board.rows.length?`${head}<div class="scrollbox"><div class="ld scrollin flip-list">${board.rows.map((r,i)=>`<div class="ld-r flip-r ${i===0?"top":""}"><div class="rk num">${i+1}</div>${r.key?av(r.key,r.name):`<div class="av">${esc(Sc.initials(r.name))}</div>`}<div class="nm">${esc(r.name)}${r.matched?"":"<small>Name did not match a tech</small>"}</div><div class="c">${bigSmall(r.flips, board.convKnown?r.conv+" converted":"this month")}</div><div class="c"><b class="num">${second(r)}</b><span>${auto?"this year":"sold"}</span></div></div>`).join("")}</div></div>`
+  const paced=goal&&ps?(goal*(ps.pace||0)):0;
+  const list=board.rows.length?`${head}<div class="scrollbox"><div class="ld scrollin flip-list">${board.rows.map((r,i)=>{
+    const z=paced?Sc.metricZone(r.flips, paced, false):"";
+    return `<div class="ld-r flip-r ${i===0?"top":""}"><div class="rk num">${i+1}</div>${r.key?av(r.key,r.name):`<div class="av">${esc(Sc.initials(r.name))}</div>`}<div class="nm">${esc(r.name)}${r.matched?"":"<small>Name did not match a tech</small>"}</div><div class="c${z?" z-"+z:""}">${bigSmall(r.flips, board.convKnown?r.conv+" converted":"this month")}</div><div class="c"><b class="num">${second(r)}</b><span>${auto?"this year":"sold"}</span></div></div>`;
+  }).join("")}</div></div>`
     :`<div class="empty-tv"><div><b>No flips this month</b>${auto?"No ServiceTitan leads are dated this month.":"Add a row on the Flips tab and it shows up here."}</div></div>`;
   const kicker=auto?`${esc(monthName())} · ServiceTitan leads, one per job`:`${esc(monthName())} · the office logs these by hand`;
   const yearTile=auto?`<div class="tile"><div class="l">This year</div><div class="v num">${c.ytd||0}</div><div class="s">lead generated by</div></div><div class="tile"><div class="l">Last 30 days</div><div class="v num">${c.l30||0}</div><div class="s">de-duplicated</div></div>`
     :`<div class="tile"><div class="l">Converted</div><div class="v num">${convTxt}</div><div class="s">${esc(convSub)}</div></div><div class="tile"><div class="l">Sold from flips</div><div class="v num">${soldTxt}</div><div class="s">${board.soldKnown?"this month":"optional"}</div></div>`;
+  const flipZone=paced?Sc.metricZone(c.mtd, paced, false):"";
   return `<div class="kicker">${kicker}</div><div class="big-h tight">Flip tracker</div>
-    <div class="goal-big flip-goal"><div class="goal-num num">${c.mtd}</div><div class="goal-of">${goal?`of <b>${goal}</b> flips this month<br>${ps.ahead?"Ahead of pace":"Behind pace by "+Math.max(0, Math.round(ps.behindBy))}`:"Set flip_goal on Board_Config"}</div></div>
+    ${colorLegend()}
+    <div class="goal-big flip-goal"><div class="goal-num num${flipZone?" z-"+flipZone:""}">${c.mtd}</div><div class="goal-of">${goal?`of <b>${goal}</b> flips this month<br>${ps.ahead?"Ahead of pace":"Behind pace by "+Math.max(0, Math.round(ps.behindBy))}`:"Set flip_goal on Board_Config"}</div></div>
     ${goal?`<div class="gbar flip-bar"><i style="width:${Math.min(100,(ps.pct||0)*100)}%"></i><div class="pace" style="left:${ps.pace*100}%"></div><div class="pct num">${pct(ps.pct||0)}</div></div>`:""}
     <div class="tiles flip-tiles">
       <div class="tile"><div class="l">Today</div><div class="v num">${board.layout==="summary"?"—":c.today}</div><div class="s">${board.layout==="summary"?"needs a date":"flips"}</div></div>

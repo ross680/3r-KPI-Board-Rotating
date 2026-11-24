@@ -242,6 +242,8 @@ When `coSource` is `actuals`, month-to-date company revenue, sold revenue, and c
 
 `Board_Techs`: key, display name, show (`yes` / `no` / blank), photo, rating (1–5), role (`tech`, `apprentice`, or `sales`). A full-name key attaches to that person. A first-name key attaches only when one person has that first name. If two people share it, the row is skipped and the admin page lists it. A blank show lets the automatic rule decide.
 
+TV headshots are the files in `img/techs/` (Nick, Kaio, Mitch, Bryan, Justin, David, Nolan, and Jack). The board uses those instead of Google Drive thumbnails. Someone with no file there still shows initials. The Play, previous, next, and full-screen buttons hide after a few seconds with no mouse or keyboard activity, and come back while the board is paused.
+
 `Board_Updates`: `posted`, `message`, `expires`, `status` (`off`, `hide`, or `done` hides it), `type` (`ticker` scrolls the footer; anything else is a slide), `icon`, `title`, `tech`. An expiry before today in New York hides the row.
 
 People match on the full name when the sheet has one. "Sam" attaches to Sam Rivera only when nobody else is named Sam. Mike Smith and Mike Jones stay two people. A row that only says "Mike" is left unassigned, its numbers still count in the company total, and the admin page names both Mikes. Headshots named `Last_First` still match. A file named `Mike.jpeg` does not, when two Mikes are on the roster.

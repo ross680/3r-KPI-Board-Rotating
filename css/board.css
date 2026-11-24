@@ -195,7 +195,9 @@ body.tv .hdr{display:none}
 .sc-card .nm small,.sc-fresh{display:block;font-size:1.6vh;font-weight:800;color:#E7F6FC}
 .sc-m{display:flex;justify-content:space-between;align-items:center;gap:.6vw;border-radius:.6vh;padding:.3vh .5vw;flex:1;min-height:0}
 .sc-m span{font-size:1.7vh;font-weight:800;color:#E7F6FC;white-space:nowrap}
-.sc-m b{font-stretch:115%;font-weight:900;font-size:2.5vh;white-space:nowrap}
+.sc-m b{font-stretch:115%;font-weight:900;font-size:2.5vh;white-space:nowrap;text-align:right}
+.sc-m b small{display:block;font-size:1.5vh;font-weight:800;font-stretch:100%;line-height:1.1}
+.sc-grid.cols-5 .sc-m span{white-space:normal}
 .sc-context{font-size:1.5vh;font-weight:800;color:#E7F6FC;margin-top:.2vh;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lbh span{text-align:right}
 

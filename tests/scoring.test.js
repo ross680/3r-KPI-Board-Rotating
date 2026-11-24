@@ -1841,10 +1841,12 @@ describe("automatic flips, memberships, callbacks, and Google reviews", function
   });
 
   it("colors pace metrics and keeps Franco out of the field scorecard", function () {
+    assert.equal(Sc.metricZone(115, 100, false), "great");
     assert.equal(Sc.metricZone(100, 100, false), "good");
     assert.equal(Sc.metricZone(86, 100, false), "warn");
     assert.equal(Sc.metricZone(70, 100, false), "bad");
-    assert.equal(Sc.metricZone(2, 3, true), "good");
+    assert.equal(Sc.metricZone(2.5, 3, true), "great");
+    assert.equal(Sc.metricZone(2.8, 3, true), "good");
     assert.equal(Sc.metricZone(3.2, 3, true), "warn");
     assert.equal(Sc.metricZone(4, 3, true), "bad");
     const now = Sc.nyDate(2026, 10, 22, 18, 0, 0);

@@ -2378,16 +2378,18 @@
     if (!setOnSheet && avg > 0 && cfg.metrics && cfg.metrics.avg) cfg.metrics.avg.target = avg;
     return cfg;
   }
-  /* Green is at or above the goal. Yellow is within 15% of it. Red is further away.
-     Lower-is-better metrics flip the same band. No letter is attached. */
+  /* Super green is 15% past the goal. Green is at the goal. Yellow is within 15% short.
+     Lower-is-better metrics mirror that: super green is 15% better than the green line. */
   function metricZone(value, target, inverse) {
     if (value == null || !isFinite(+value) || !(+target > 0)) return "";
     var v = +value, t = +target;
     if (inverse) {
+      if (v <= t * 0.85) return "great";
       if (v <= t) return "good";
       if (v <= t * 1.15) return "warn";
       return "bad";
     }
+    if (v >= t * 1.15) return "great";
     if (v >= t) return "good";
     if (v >= t * 0.85) return "warn";
     return "bad";
@@ -2562,13 +2564,13 @@
       var teamBig = team.bigRate;
       row.zones = {
         pace: metricZone(row.pace, 1, false),
-        ticket: row.ticket == null ? "" : (row.ticket >= 1200 ? "good" : row.ticket >= 850 ? "warn" : metricZone(row.ticket, 850, false)),
-        conv: row.conv == null ? "" : (row.conv >= 0.8 ? "good" : metricZone(row.conv, 0.8, false)),
-        mem: row.memPct == null ? "" : (row.memPct >= 0.15 ? "good" : row.memPct >= 0.075 ? "warn" : "bad"),
-        zero: row.zeroPct == null ? "" : (row.zeroPct <= 0.35 ? "good" : row.zeroPct <= 0.42 ? "warn" : "bad"),
-        cb: row.cbPct == null ? "" : (row.cbPct <= 0.03 ? "good" : row.cbPct <= 0.06 ? "warn" : "bad"),
+        ticket: row.ticket == null ? "" : (row.ticket >= 1380 ? "great" : row.ticket >= 1200 ? "good" : row.ticket >= 850 ? "warn" : metricZone(row.ticket, 850, false)),
+        conv: row.conv == null ? "" : (row.conv >= 0.92 ? "great" : row.conv >= 0.8 ? "good" : metricZone(row.conv, 0.8, false)),
+        mem: row.memPct == null ? "" : (row.memPct >= 0.1725 ? "great" : row.memPct >= 0.15 ? "good" : row.memPct >= 0.075 ? "warn" : "bad"),
+        zero: row.zeroPct == null ? "" : (row.zeroPct <= 0.2975 ? "great" : row.zeroPct <= 0.35 ? "good" : row.zeroPct <= 0.42 ? "warn" : "bad"),
+        cb: row.cbPct == null ? "" : (row.cbPct <= 0.0255 ? "great" : row.cbPct <= 0.03 ? "good" : row.cbPct <= 0.06 ? "warn" : "bad"),
         instTicket: row.group === "install" ? metricZone(row.instTicket, 12000, false) : "",
-        bigRate: teamBig > 0 ? (row.bigRate >= teamBig ? "good" : row.bigRate >= teamBig * 0.75 ? "warn" : "bad") : "",
+        bigRate: teamBig > 0 ? (row.bigRate >= teamBig * 1.15 ? "great" : row.bigRate >= teamBig ? "good" : row.bigRate >= teamBig * 0.75 ? "warn" : "bad") : "",
         bigClose: metricZone(row.bigClose, 0.25, false)
       };
       return row;

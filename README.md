@@ -234,7 +234,7 @@ The Flip Tracker slide ranks this month's flips, shows converted flips and the c
 
 A target of `0` is kept. Percent targets are fractions (`0.55`, not `55`). Weights do not have to add to 100. A weight of 0 leaves that metric out.
 
-The TV does not show letter grades. A metric is green at or above its goal, yellow within about 15% of the goal, and red further away. Month-to-date counts and dollars use the same pace-adjusted goal as before. The service, install, and big-ticket slides cover Nick, Kaio, Justin, Mitch, and Bryan only. Justin is marked new and is not colored. Franco and Jon are left out of those slides and out of their team totals.
+The TV does not show letter grades. Super green is at least 15% past the goal. Green is at or above the goal. Yellow is within about 15% short. Red is further away. Lower-is-better metrics mirror that, so super green is 15% better than the green line. Month-to-date counts and dollars use the same pace-adjusted goal as before. The service, install, and big-ticket slides cover Nick, Kaio, Justin, Mitch, and Bryan only. Justin is marked new and is not colored. Franco and Jon are left out of those slides and out of their team totals.
 
 `Labor Pct` is optional. Header: `tech`, `period_start`, `period_end`, `labor_pct_revenue`, `labor_pct_sales`. Dates are `YYYY-MM-DD`. Percentages are decimals (`0.24`). One row may use `tech` = `TEAM`. The tiles show the percent and `through` the period end. A missing or empty tab hides the tiles. The sheet must not put pay dollars on this tab. Revenue labor uses the v2 bands: green at or below 19%, yellow through 25%, red above 25%. Sales labor uses green at or below 20%, yellow through 30%, red above 30%.
 

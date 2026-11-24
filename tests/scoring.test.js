@@ -606,6 +606,7 @@ describe("goals, pace, stale data, and sheet settings", function () {
     assert.ok(Settings.SHEET_TABS.includes("ST Memberships"));
     assert.ok(Settings.SHEET_TABS.includes("ST Reviews"));
     assert.ok(Settings.SHEET_TABS.includes("MP Reviews"));
+    assert.ok(Settings.SHEET_TABS.includes("Labor Pct"));
     assert.ok(Settings.SHEET_TABS.includes("ST Callbacks"));
     assert.ok(Settings.SHEET_TABS.includes("Memberships"));
     assert.ok(Settings.SHEET_TABS.includes("Review Tracker"));
@@ -1837,6 +1838,58 @@ describe("automatic flips, memberships, callbacks, and Google reviews", function
     assert.equal(s.callCenter.weeks.length, 2);
     assert.equal(s.callCenter.days.length, 2);
     assert.equal(s.callCenter.weeks[1].booked, 8);
+  });
+
+  it("colors pace metrics and keeps Franco out of the field scorecard", function () {
+    assert.equal(Sc.metricZone(100, 100, false), "good");
+    assert.equal(Sc.metricZone(86, 100, false), "warn");
+    assert.equal(Sc.metricZone(70, 100, false), "bad");
+    assert.equal(Sc.metricZone(2, 3, true), "good");
+    assert.equal(Sc.metricZone(3.2, 3, true), "warn");
+    assert.equal(Sc.metricZone(4, 3, true), "bad");
+    const now = Sc.nyDate(2026, 10, 22, 18, 0, 0);
+    const s = snap({
+      "ST Jobs": [
+        ["Job ID", "Job #", "Primary Technician", "Status", "Business Unit", "Job Type", "Completion Date", "Jobs Total Revenue", "Opportunity", "Converted", "Recall", "Zero Dollar Job"],
+        ["1", "1", "Nick Yukich", "Completed", "Plumbing - Service", "No hot water", "11/01/2026", 1000, "TRUE", "TRUE", "FALSE", "FALSE"],
+        ["2", "2", "Nick Yukich", "Completed", "Plumbing - Service", "CALL BACK ( Plumbing)", "11/02/2026", 0, "TRUE", "FALSE", "FALSE", "TRUE"],
+        ["3", "3", "Franco DosSantos", "Completed", "Plumbing - Service", "Leak", "11/03/2026", 5000, "TRUE", "TRUE", "FALSE", "FALSE"],
+        ["4", "4", "Mitchell Cooper", "Completed", "Plumbing - Install", "Boiler Install", "10/01/2026", 20000, "TRUE", "TRUE", "FALSE", "FALSE"],
+        ["5", "5", "Justin Romano", "Completed", "Plumbing - Service", "Faucet", "11/10/2026", 900, "TRUE", "TRUE", "FALSE", "FALSE"]
+      ],
+      "ST Estimates": [
+        ["Estimate Status", "Estimate Name", "Estimates Total", "Parent Job Number", "Sold By"],
+        ["Sold", "Water heater", 6000, "1", "Nick Yukich"],
+        ["Open", "Boiler", 8000, "1", "Nick Yukich"]
+      ],
+      "ST Memberships": [
+        ["Membership ID", "Created", "Type", "Sold By ID", "Sold By"],
+        ["9", "11/05/2026", "New", "", "Nick Yukich"]
+      ],
+      "Labor Pct": [
+        ["tech", "period_start", "period_end", "labor_pct_revenue", "labor_pct_sales"],
+        ["Nick Yukich", "2026-10-01", "2026-10-31", 0.24, 0.18],
+        ["TEAM", "2026-10-01", "2026-10-31", 0.19, ""]
+      ]
+    }, now);
+    const nick = s.scorecard.service.filter(function (p) { return p.label === "Nick"; })[0];
+    const justin = s.scorecard.service.filter(function (p) { return p.label === "Justin"; })[0];
+    assert.equal(nick.svc, 2);
+    assert.equal(nick.zeroPct, 0.5);
+    assert.equal(nick.mem, 1);
+    assert.equal(nick.big, 1);
+    assert.equal(nick.bigSold, 1);
+    assert.equal(nick.zones.cb, "bad");
+    assert.equal(justin.fresh, "New, started Oct 21");
+    assert.deepEqual(justin.zones, {});
+    assert.equal(s.scorecard.service.some(function (p) { return /franco/i.test(p.name); }), false);
+    assert.equal(s.scorecard.team.jobs, 4);
+    assert.equal(s.labor.through, "2026-10-31");
+    assert.equal(s.labor.people["nick yukich"].revenue, 0.24);
+    assert.equal(s.labor.people["nick yukich"].sales, 0.18);
+    assert.equal(s.labor.people.team.revenue, 0.19);
+    assert.equal(Sc.readLaborPct([["tech", "labor_pct_revenue"]]), null);
+    assert.equal(Sc.readLaborPct([]), null);
   });
 
   it("averages the Google Reviews tab and ignores a header with no rows", function () {

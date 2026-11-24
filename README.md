@@ -223,9 +223,9 @@ The Flip Tracker slide ranks this month's flips, shows converted flips and the c
 | `boardPeriod` | `mtd`, `l30`, or `ytd` |
 | `spotMode` | `rotate` or `top` |
 | `coSource` | `auto` (from jobs) or `actuals` |
-| `tvGrades` | `no` hides letter grades on the TV. Admin still shows them. |
+| `tvGrades` | Kept for older TV links. The board no longer prints letter grades. |
 | `logoPlate` | `no` turns off the white plate behind the logo |
-| `slidesOff` | Comma-separated slide keys to hide: `goal`, `calls`, `calls2`, `trend`, `all`, `lb`, `unpaid`, `flips`, `mem`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
+| `slidesOff` | Comma-separated slide keys to hide: `goal`, `calls`, `calls2`, `trend`, `all`, `svcboard`, `instboard`, `bigticket`, `lb`, `unpaid`, `flips`, `mem`, `contest`, `stats`, `spot`, `leads`, `ytd`, `wx`, `rv`, `ann`, `celebrate`, `sales` |
 | `flip_goal` | Company flip goal for the month. Replaces the 20 in `js/settings.js`. |
 | `hidden_techs` | Comma-separated names left off individual slides, grades, the flip tracker, the races, flip alerts, and the team spotlight. Defaults to `Franco`. A blank value shows everyone again. Their jobs and dollars stay in the company, team, monthly, and goal totals. A name matches any person who has each of its words, ignoring case, so `Franco` also covers `Franco DosSantos`. |
 | `w_<metric>` / `t_<metric>` | Technician weight and monthly target |
@@ -233,6 +233,10 @@ The Flip Tracker slide ranks this month's flips, shows converted flips and the c
 | `sw_<metric>` / `slt_<metric>` | Sales weight and target |
 
 A target of `0` is kept. Percent targets are fractions (`0.55`, not `55`). Weights do not have to add to 100. A weight of 0 leaves that metric out.
+
+The TV does not show letter grades. A metric is green at or above its goal, yellow within about 15% of the goal, and red further away. Month-to-date counts and dollars use the same pace-adjusted goal as before. The service, install, and big-ticket slides cover Nick, Kaio, Justin, Mitch, and Bryan only. Justin is marked new and is not colored. Franco and Jon are left out of those slides and out of their team totals.
+
+`Labor Pct` is optional. Header: `tech`, `period_start`, `period_end`, `labor_pct_revenue`, `labor_pct_sales`. Dates are `YYYY-MM-DD`. Percentages are decimals (`0.24`). One row may use `tech` = `TEAM`. The tiles show the percent and `through` the period end. A missing or empty tab hides the tiles. The sheet must not put pay dollars on this tab. Revenue labor uses the v2 bands: green at or below 19%, yellow through 25%, red above 25%. Sales labor uses green at or below 20%, yellow through 30%, red above 30%.
 
 When `coSource` is `actuals`, month-to-date company revenue, sold revenue, and calls booked come from the Actuals tab. The install and service split on the goal slide still comes from jobs.
 

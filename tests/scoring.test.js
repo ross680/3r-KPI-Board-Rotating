@@ -1779,6 +1779,36 @@ describe("automatic flips, memberships, callbacks, and Google reviews", function
     assert.equal(s.leaderSums.rv_mtd, 1);
   });
 
+  it("credits a blank Marketing Pro review from Tech (matched) or the review text", function () {
+    const now = Sc.nyDate(2026, 10, 20, 15, 0, 0);
+    const H = ["Published", "Platform", "Rating", "Author", "Technician", "Technician ID", "Job ID", "Customer", "Customer ID", "Verification", "Job Type", "Completed", "Review Type", "Review", "Review ID", "Tech (matched)", "Match Source", "Confidence", "Match Note"];
+    const s = snap({
+      "ST Techs": [
+        TECH_H,
+        ["Mitchell Cooper", "Plumbing Install", "TRUE", "2020-01-01", "08:00", "M1", ""],
+        ["Kaio Reis", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "K1", ""],
+        ["Franco DosSantos", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "F1", ""]
+      ],
+      "MP Reviews": [
+        H,
+        ["2026-11-04", "Google", 5, "Ann", "", "", "", "", "", "", "", "", "Original", "Great visit.", "R1", "Mitch", "text", "High", ""],
+        ["2026-11-05", "Google", 5, "Bob", "", "", "", "", "", "", "", "", "Original", "Kaio found the leak.", "R2", "", "", "", ""],
+        ["2026-11-06", "Google", 5, "Cara", "", "", "", "", "", "", "", "", "Original", "Fine.", "R3", "Kyle", "text", "High", ""],
+        ["2026-11-07", "Google", 5, "Dan", "", "", "", "", "", "", "", "", "Original", "Fine.", "R4", "Kaio Reis", "job", "Low", ""],
+        ["2026-11-08", "Google", 5, "Eve", "", "", "", "", "", "", "", "", "Original", "Franco fixed the boiler.", "R5", "Franco DosSantos", "job", "Medium", ""]
+      ]
+    }, now);
+    assert.equal(person(s, "Mitchell Cooper").rv.mtd, 1);
+    assert.equal(person(s, "Mitchell Cooper").rvMatched.mtd, 1);
+    assert.equal(person(s, "Kaio Reis").rv.mtd, 1);
+    assert.equal(person(s, "Kaio Reis").rvMatched.mtd, 1);
+    assert.equal(s.reviewMatch.high, 1);
+    assert.equal(s.reviewMatch.namedInText, 1);
+    assert.equal(s.reviewMatch.medium, 1);
+    assert.equal(person(s, "Franco DosSantos").rv.mtd, 1);
+    assert.equal(Object.keys(s.techs).some(function (k) { return k === "kyle"; }), false);
+  });
+
   it("keeps ST Reviews when Marketing Pro has a header and no dated rows", function () {
     const s = snap({
       "ST Techs": [TECH_H, ["Sam Rivera", "Plumbing Service", "TRUE", "2020-01-01", "08:00", "S1", ""]],

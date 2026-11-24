@@ -515,7 +515,7 @@ function reviewSlideHTML(snap){
   const coAvg=coStars&&coStars.n?coStars.s/coStars.n:null;
   const found=(rm.high||0)+(rm.medium||0);
   const gap=mp
-    ? `${rm.tagged||0} of ${total} name a technician. ${untagged} have no technician. The company total includes both, and techs on the hidden list stay off these rows.`
+    ? `${rm.tagged||0} of ${total} name a technician. ${rm.high||0} high and ${rm.medium||0} medium matches were added from Tech (matched). ${rm.namedInText||0} were named in the review text. ${untagged} still have no technician. Hidden techs stay off these rows.`
     : (untagged
       ? (found
         ? `${untagged} of ${total} reviews have no technician. ${rm.high||0} matched a job and are marked. ${rm.medium||0} matched a last name only and are not in the grade. ${rm.namedInText||0} already name a tech in the text.`

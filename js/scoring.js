@@ -1869,6 +1869,58 @@
         }
       });
     }
+    function reviewFirstNameRules() {
+      var minLetters = SETTINGS.RULES.reviewNameMinLength || 3;
+      var groups = {};
+      Object.keys(names.people).forEach(function (id) {
+        var p = names.people[id];
+        var word = p.firstWord || "";
+        if (word.replace(/[^A-Za-z]/g, "").length < minLetters) return;
+        if (!groups[p.first]) groups[p.first] = { word: word, people: [] };
+        groups[p.first].people.push(p);
+      });
+      return Object.keys(groups).map(function (first) {
+        var g = groups[first];
+        return { word: g.word, re: new RegExp("\\b" + escapeRe(g.word) + "\\b", "i"), people: g.people };
+      });
+    }
+    /* Mitch is Mitchell when that full name is already on the roster and unique.
+       Kyle is not turned into Kaio unless a person named Kyle is already in the index. */
+    function canonicalReviewName(raw) {
+      var cleaned = cleanPersonName(raw);
+      var tokens = nameTokens(cleaned);
+      if (!tokens.length) return "";
+      var aliases = { mitch: "mitchell" };
+      var alt = aliases[tokens[0]];
+      if (!alt) return cleaned;
+      var hits = [];
+      Object.keys(names.people).forEach(function (id) {
+        var p = names.people[id];
+        if (p && p.isFull && p.first === alt) hits.push(p);
+      });
+      if (hits.length !== 1) return cleaned;
+      if (tokens.length === 1) return hits[0].full;
+      var rest = tokens.slice(1).join("");
+      var hitRest = nameTokens(hits[0].full).slice(1).join("");
+      return rest === hitRest ? hits[0].full : cleaned;
+    }
+    function knownTechKey(raw) {
+      var name = canonicalReviewName(raw);
+      var parsed = parsePerson(name);
+      if (!parsed) return null;
+      if (parsed.full) {
+        var swapped = personByTokens(names, name);
+        if (swapped && names.people[swapped] && names.people[swapped].isFull) return swapped;
+        if (names.people[parsed.key] && names.people[parsed.key].isFull) return parsed.key;
+        return null;
+      }
+      var hits = [];
+      Object.keys(names.people).forEach(function (id) {
+        var p = names.people[id];
+        if (p && p.isFull && p.first === parsed.first) hits.push(p.key);
+      });
+      return hits.length === 1 ? hits[0] : null;
+    }
     var mpRows = sheetRows(wb, "MP Reviews");
     var mpRes = headerIndex(mpRows, function (r) {
       var cells = (r || []).map(function (c) { return String(c).trim().toLowerCase(); });
@@ -1895,6 +1947,7 @@
         T[k].rvMatched = { mtd: 0, l30: 0, ytd: 0 };
         T[k].rvStars = { mtd: starBox(), l30: starBox(), ytd: starBox() };
       });
+      var mpTextRules = reviewFirstNameRules();
       mpRows.slice(mpRes.i + 1).forEach(function (r) {
         var h = mpRes.h;
         var d = toDate(r[h.published]); if (!d) return;
@@ -1902,12 +1955,37 @@
         if (!reviewThrough || d > reviewThrough) reviewThrough = d;
         var techName = cleanPersonName(r[h.technician] || "");
         var techId = String(r[h["technician id"]] || "").trim();
+        var matchedName = h["tech (matched)"] == null ? "" : cleanPersonName(r[h["tech (matched)"]] || "");
+        var confidence = String(h.confidence == null ? "" : r[h.confidence] || "").trim().toLowerCase();
         var blankTech = !techName && !techId;
-        if (blankTech) { reviewUntagged++; reviewMatch.blank++; }
-        else reviewMatch.tagged++;
         var rating = num(r[h.rating]);
         var text = String(r[h.review] || "").replace(/\s+/g, " ").trim();
         var author = cleanPersonName(r[h.author] || "");
+        var how = "";
+        var tk = nameKey(techId) || (techName ? names.resolve(canonicalReviewName(techName), "MP Reviews") : null);
+        if (!tk && blankTech && matchedName && (confidence === "high" || confidence === "medium")) {
+          tk = knownTechKey(matchedName);
+          if (tk) how = confidence;
+        }
+        if (!tk && blankTech) {
+          var textHits = {};
+          mpTextRules.forEach(function (f) {
+            if (!f.re.test(text)) return;
+            if (SETTINGS.RULES.reviewCreditUniqueFirstName && f.people.length !== 1) {
+              names.note("MP Reviews", f.word, f.people.map(function (p) { return p.full; }));
+              return;
+            }
+            f.people.forEach(function (p) { if (p.key) textHits[p.key] = true; });
+          });
+          var textKeys = Object.keys(textHits);
+          if (textKeys.length === 1) { tk = textKeys[0]; how = "text"; }
+        }
+        if (blankTech && !tk) { reviewUntagged++; reviewMatch.blank++; reviewMatch.unmatched++; }
+        else if (!blankTech) reviewMatch.tagged++;
+        else if (how === "high") reviewMatch.high++;
+        else if (how === "medium") reviewMatch.medium++;
+        else if (how === "text") reviewMatch.namedInText++;
+        var quote = autoReviews.length;
         autoReviews.push({
           by: String(r[h.platform] || "Google"),
           who: techName ? firstName(techName) : "",
@@ -1927,10 +2005,9 @@
         if (inYear) bumpStar(reviewStars.ytd, rating);
         if (inMonth) bumpStar(reviewStars.mtd, rating);
         if (in30) bumpStar(reviewStars.l30, rating);
-        var tk = nameKey(techId) || (techName ? names.resolve(techName, "MP Reviews") : null);
         if (tk && !T[tk]) {
           var known = byStId[String(techId)];
-          var label = (known && known.name) || techName;
+          var label = (known && known.name) || (names.people[tk] && names.people[tk].full) || techName || matchedName;
           if (label) tech(label, "MP Reviews");
         }
         if (!(tk && T[tk])) {
@@ -1938,18 +2015,22 @@
           return;
         }
         reviewMatch.credited++;
+        if (T[tk].full) autoReviews[quote].who = firstName(T[tk].full);
         if (!T[tk].rvM) T[tk].rvM = zeros();
         if (T[tk].rvL30 == null) T[tk].rvL30 = 0;
         if (!T[tk].rvStars) T[tk].rvStars = { mtd: starBox(), l30: starBox(), ytd: starBox() };
+        if (!T[tk].rvMatched) T[tk].rvMatched = { mtd: 0, l30: 0, ytd: 0 };
         var stars = T[tk].rvStars;
         if (inYear) {
           T[tk].rvM[dp.m]++;
           bumpStar(stars.ytd, rating);
           if (inMonth) bumpStar(stars.mtd, rating);
+          if (how) { T[tk].rvMatched.ytd++; if (inMonth) T[tk].rvMatched.mtd++; }
         }
         if (in30) {
           T[tk].rvL30++;
           bumpStar(stars.l30, rating);
+          if (how) T[tk].rvMatched.l30++;
         }
       });
     }

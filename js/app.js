@@ -320,13 +320,25 @@ function laborBits(snap, name){
 function scWhen(card){
   return `${nyShort(card.yStart)}–${nyShort(card.asOf)} · last 4 weeks ${nyShort(card.l4Start)}–${nyShort(card.asOf)}`;
 }
+function scoreFace(name){
+  const techs=(S.snap&&S.snap.techs)||{};
+  const k=Sc.matchTech(techs, name)||"";
+  if(k) return av(k, name, "sc-av");
+  return `<div class="av sc-av">${esc(initials(name||"?"))}</div>`;
+}
+function teamMark(){
+  const src=logoSrc();
+  if(src) return `<div class="sc-logo"><img src="${esc(src)}" alt="3R"></div>`;
+  return `<div class="av sc-av">3R</div>`;
+}
 function serviceBoardHTML(snap){
   const card=snap.scorecard;
   const rows=(card.service||[]).concat([card.team]);
   const metric=(row, key, label, text)=>`<div class="sc-m${row.fresh?"":(row.zones&&row.zones[key]?" z-"+row.zones[key]:"")}"><span>${label}</span><b class="num">${text}</b></div>`;
   const cards=rows.map(r=>{
     const fresh=r.fresh?`<div class="sc-fresh">${esc(r.fresh)}</div>`:"";
-    return `<div class="sc-card"><div class="nm">${esc(r.label)}</div>${fresh}
+    const face=r.group==="team"?teamMark():scoreFace(r.name);
+    return `<div class="sc-card"><div class="sc-head">${face}<div class="sc-id"><div class="nm">${esc(r.label)}</div>${fresh}</div></div>
       ${metric(r,"pace","4-week pace", pct1(r.pace))}
       ${metric(r,"ticket","Paid ticket", r.ticket==null?"—":money(r.ticket,true))}
       ${metric(r,"conv","Conversion", pct1(r.conv))}
@@ -345,7 +357,7 @@ function serviceBoardHTML(snap){
 function installBoardHTML(snap){
   const card=snap.scorecard;
   const metric=(row, key, label, text)=>`<div class="sc-m${row.zones&&row.zones[key]?" z-"+row.zones[key]:""}"><span>${label}</span><b class="num">${text}</b></div>`;
-  const cards=(card.install||[]).map(r=>`<div class="sc-card"><div class="nm">${esc(r.label)}</div>
+  const cards=(card.install||[]).map(r=>`<div class="sc-card"><div class="sc-head">${scoreFace(r.name)}<div class="sc-id"><div class="nm">${esc(r.label)}</div></div></div>
       ${metric(r,"instTicket","Install ticket", r.instTicket==null?"—":money(r.instTicket,true))}
       ${metric(r,"pace","4-week pace", pct1(r.pace))}
       ${metric(r,"cb","Service callbacks", pct1(r.cbPct))}
@@ -353,7 +365,7 @@ function installBoardHTML(snap){
       <div class="sc-context">${r.inst} installs · ${money(r.instRev,true)} · year ${r.jobs} jobs · ${money(r.rev,true)} · last 4 weeks ${r.l4jobs} · ${money(r.l4rev,true)}</div>
     </div>`).join("");
   const team=card.team||{};
-  const teamCard=`<div class="sc-card"><div class="nm">Installers</div>
+  const teamCard=`<div class="sc-card"><div class="sc-head">${teamMark()}<div class="sc-id"><div class="nm">Installers</div></div></div>
       <div class="sc-m"><span>Average install ticket</span><b class="num">${team.installerTicket==null?"—":money(team.installerTicket,true)}</b></div>
       <div class="sc-context">Mitch and Bryan only. Goal $12K.</div>
       ${laborBits(snap, "Team")}

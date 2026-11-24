@@ -65,8 +65,25 @@ const buildSnapshot = (wb, now) => Sc.buildSnapshot(wb, now||Sc.nyNow());
 
 
 /* ===================== rendering helpers ===================== */
-const photoUrl = k => { const id=(S.techs[k]||{}).photo; return !id?"":/^(https?:\/\/|data:image\/)/.test(id)?id:"/_blob/"+id; };
-const av = (k, name, cls) => { const u=photoUrl(k); const _o=S.techs[k]||{}; const z=(String(_o.photoSrc||"").startsWith("drive:")||/drive\.google\.com\/thumbnail/.test(String(_o.photo||"")))?" zoom":""; return `<div class="av ${cls||""}${z}">${u?`<img src="${esc(u)}" alt="" data-i="${esc(initials(name))}" onerror="this.parentNode.textContent=this.dataset.i">`:esc(initials(name))}</div>`; };
+const HEADSHOTS = { nick:"img/techs/nick.webp", kaio:"img/techs/kaio.webp", mitchell:"img/techs/mitch.webp", mitch:"img/techs/mitch.webp", bryan:"img/techs/bryan.webp", david:"img/techs/david.webp", nolan:"img/techs/nolan.webp", jack:"img/techs/jack.webp", justin:"img/techs/justin.webp" };
+function headshotFor(k, name){
+  const t=(S.snap&&S.snap.techs&&S.snap.techs[k])||{};
+  const meta=(S.techs&&S.techs[k])||{};
+  const first=String(Sc.firstName(name||t.full||meta.display||k)||"").toLowerCase();
+  if(HEADSHOTS[first]) return HEADSHOTS[first];
+  const tokens=String([k,name,t.full,meta.display].filter(Boolean).join(" ")).toLowerCase().split(/[^a-z]+/).filter(Boolean);
+  for(let i=0;i<tokens.length;i++) if(HEADSHOTS[tokens[i]]) return HEADSHOTS[tokens[i]];
+  return "";
+}
+const photoUrl = (k, name) => {
+  const local=headshotFor(k, name);
+  if(local) return local;
+  const id=(S.techs[k]||{}).photo;
+  if(!id || /drive\.google\.com/i.test(String(id))) return "";
+  return /^(https?:\/\/|data:image\/)/.test(id)?id:"";
+};
+const faceImg = (url, name, cls) => `<div class="av ${cls||""}"><img src="${esc(url)}" alt="" data-i="${esc(initials(name))}" onerror="this.parentNode.textContent=this.dataset.i"></div>`;
+const av = (k, name, cls) => { const u=photoUrl(k, name); return u?faceImg(u, name, cls):`<div class="av ${cls||""}">${esc(initials(name))}</div>`; };
 function logoSrc(){ return S.cfg.logoId ? "/_blob/"+S.cfg.logoId : ((S.portalLogo&&S.portalLogo.mark) || S.logoData || ""); }
 function logoHTML(line){
   if (!S.cfg.logoId && S.portalLogo && S.portalLogo.mark){
@@ -331,6 +348,8 @@ function scoreFace(name){
   const techs=(S.snap&&S.snap.techs)||{};
   const k=Sc.matchTech(techs, name)||"";
   if(k) return av(k, name, "sc-av");
+  const local=headshotFor("", name);
+  if(local) return faceImg(local, name, "sc-av");
   return `<div class="av sc-av">${esc(initials(name||"?"))}</div>`;
 }
 function teamMark(){
@@ -486,23 +505,17 @@ function confettiHTML(){
 }
 function spotlightAv(item){
   const name=item&&item.name||"";
-  const initialsAttr=esc(initials(name));
-  const img=(url, zoom)=>`<div class="av${zoom?" zoom":""}"><img src="${esc(url)}" alt="" data-i="${initialsAttr}" onerror="this.parentNode.textContent=this.dataset.i"></div>`;
-  if (item&&item.photo) return img(item.photo, /drive\.google\.com\/thumbnail/.test(item.photo));
+  const local=headshotFor("", name);
+  if (local) return faceImg(local, name);
+  const own=item&&item.photo&&!/drive\.google\.com/i.test(item.photo)?item.photo:"";
+  if (own) return faceImg(own, name);
   const techs=(S.snap&&S.snap.techs)||{};
   const full=Sc.key(name);
   if (techs[full]) return av(full, name);
   const first=String(Sc.firstName(name)||"").toLowerCase();
   const hits=Object.keys(techs).filter(id=>techs[id]&&String(Sc.firstName(techs[id].full||"")).toLowerCase()===first);
   if (first && hits.length===1) return av(hits[0], name);
-  try {
-    const meta=Object.assign({}, S.techs);
-    if (S.snap&&S.snap.photoFiles) meta.photos=S.snap.photoFiles;
-    const faces=Sc.welcomeFaces([Sc.firstName(name)], techs, meta);
-    const photo=faces[0]&&faces[0].photo;
-    if (photo && hits.length<=1) return img(photo, /drive\.google\.com\/thumbnail/.test(photo));
-  } catch (e) {}
-  return `<div class="av">${initialsAttr}</div>`;
+  return `<div class="av">${esc(initials(name))}</div>`;
 }
 function celebrateHTML(slide){
   if (!slide || !Array.isArray(slide.items) || !slide.items.length) return "";
@@ -522,9 +535,12 @@ function welcomeHTML(a){
   if (S.snap && S.snap.photoFiles) meta.photos=S.snap.photoFiles;
   const faces=Sc.welcomeFaces(a.names||[], (S.snap&&S.snap.techs)||{}, meta);
   const cards=faces.map(f=>{
-    if (!f.photo) return `<div class="welcome-card"><b>${esc(f.name)}</b></div>`;
-    const src=/^(https?:\/\/|data:image\/)/.test(f.photo)?f.photo:"/_blob/"+f.photo;
-    return `<div class="welcome-card"><div class="av"><img src="${esc(src)}" alt=""></div><b>${esc(f.name)}</b></div>`;
+    const local=headshotFor(f.key, f.name);
+    const raw=local||(f.photo&&!/drive\.google\.com/i.test(f.photo)?f.photo:"");
+    if (!raw) return `<div class="welcome-card"><b>${esc(f.name)}</b></div>`;
+    const src=/^(https?:\/\/|data:image\/|img\/)/.test(raw)?raw:"";
+    if (!src) return `<div class="welcome-card"><b>${esc(f.name)}</b></div>`;
+    return `<div class="welcome-card">${faceImg(src, f.name)}<b>${esc(f.name)}</b></div>`;
   }).join("");
   return `<div class="ann welcome">${a.icon?`<div class="ic">${esc(a.icon)}</div>`:""}<div class="badge">${esc(a.badge||"Welcome")}</div><div class="msg">${esc(a.message)}</div>${a.detail?`<div class="sub">${esc(a.detail)}</div>`:""}<div class="welcome-row">${cards}</div></div>`;
 }
@@ -1208,7 +1224,16 @@ function render(soft){
   else { clearTimeout(slideTimer); renderAdmin(); }
 }
 window.addEventListener("hashchange", ()=>render());
-document.addEventListener("keydown", e=>{ if(route()!=="board") return; if(e.key==="ArrowRight") go(1); if(e.key==="ArrowLeft") go(-1); if(e.key===" "){ e.preventDefault(); S.paused=!S.paused; renderBoard(); } });
+let tvUiTimer=null;
+function showTvControls(){
+  document.body.classList.add("tv-ui");
+  clearTimeout(tvUiTimer);
+  tvUiTimer=setTimeout(()=>document.body.classList.remove("tv-ui"), 4000);
+}
+document.addEventListener("mousemove", showTvControls);
+document.addEventListener("pointerdown", showTvControls);
+document.addEventListener("touchstart", showTvControls, {passive:true});
+document.addEventListener("keydown", e=>{ if(route()!=="board") return; showTvControls(); if(e.key==="ArrowRight") go(1); if(e.key==="ArrowLeft") go(-1); if(e.key===" "){ e.preventDefault(); S.paused=!S.paused; renderBoard(); } });
 $("#boardBtn").onclick=()=>{ location.hash = route()==="admin"?"board":"admin"; };
 
 /* theme */

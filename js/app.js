@@ -380,9 +380,9 @@ function bigTicketHTML(snap){
   const rows=(card.service||[]).concat(card.install||[]);
   const metric=(row, key, label, text)=>`<div class="sc-m${row.fresh?"":(row.zones&&row.zones[key]?" z-"+row.zones[key]:"")}"><span>${label}</span><b class="num">${text}</b></div>`;
   const cards=rows.map(r=>`<div class="sc-card"><div class="nm">${esc(r.label)}${r.fresh?`<small>${esc(r.fresh)}</small>`:""}</div>
-      ${metric(r,"bigRate","$5K+ quote rate", `${pct1(r.bigRate)} · ${r.big} of ${r.svc}`)}
-      ${metric(r,"bigClose","$5K+ close rate", `${pct1(r.bigClose)} · ${r.bigSold} of ${r.big}`)}
-      <div class="sc-m"><span>Open $5K+ quotes</span><b class="num">${r.openN} · ${money(r.openAmt,true)}</b></div>
+      ${metric(r,"bigRate","$5K+ quote rate", `${pct1(r.bigRate)}<small>${r.big} of ${r.svc}</small>`)}
+      ${metric(r,"bigClose","$5K+ close rate", `${pct1(r.bigClose)}<small>${r.bigSold} of ${r.big}</small>`)}
+      <div class="sc-m"><span>Open $5K+ quotes</span><b class="num">${r.openN}<small>${money(r.openAmt,true)}</small></b></div>
     </div>`).join("");
   const team=card.team||{};
   return `<div class="kicker">Largest option on a service call, membership options left out · ${esc(scWhen(card))}</div>

@@ -1885,7 +1885,23 @@
       });
     }
     /* Mitch is Mitchell when that full name is already on the roster and unique.
-       Kyle is not turned into Kaio unless a person named Kyle is already in the index. */
+       Customers misspell Kaio. Those spellings count as Kaio when Kaio is already on the roster. */
+    var KAIO_ALIASES = ["kyle", "kayo", "kaiyo", "kai", "kaeo", "kio", "caio", "kayio"];
+    function kaioAliasRe() { return new RegExp("\\b(?:" + KAIO_ALIASES.join("|") + ")\\b", "i"); }
+    function kaioPerson() {
+      var hits = [];
+      Object.keys(names.people).forEach(function (id) {
+        var p = names.people[id];
+        if (p && p.isFull && p.first === "kaio") hits.push(p);
+      });
+      return hits.length === 1 ? hits[0] : null;
+    }
+    function expandKaioAlias(raw) {
+      var cleaned = cleanPersonName(raw);
+      var kaio = kaioPerson();
+      if (!cleaned || !kaio || !kaioAliasRe().test(cleaned)) return cleaned;
+      return cleaned.replace(kaioAliasRe(), kaio.firstWord);
+    }
     function canonicalReviewName(raw) {
       var cleaned = cleanPersonName(raw);
       var tokens = nameTokens(cleaned);
@@ -1962,7 +1978,7 @@
         var text = String(r[h.review] || "").replace(/\s+/g, " ").trim();
         var author = cleanPersonName(r[h.author] || "");
         var how = "";
-        var tk = nameKey(techId) || (techName ? names.resolve(canonicalReviewName(techName), "MP Reviews") : null);
+        var tk = nameKey(techId) || (techName ? names.resolve(canonicalReviewName(expandKaioAlias(techName)), "MP Reviews") : null);
         if (!tk && blankTech && matchedName && (confidence === "high" || confidence === "medium")) {
           tk = knownTechKey(matchedName);
           if (tk) how = confidence;
@@ -1977,6 +1993,8 @@
             }
             f.people.forEach(function (p) { if (p.key) textHits[p.key] = true; });
           });
+          var kaio = kaioPerson();
+          if (kaio && kaioAliasRe().test(text)) textHits[kaio.key] = true;
           var textKeys = Object.keys(textHits);
           if (textKeys.length === 1) { tk = textKeys[0]; how = "text"; }
         }

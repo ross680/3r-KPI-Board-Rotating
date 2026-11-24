@@ -2529,10 +2529,14 @@
     function pack(person, raw) {
       var paceDays = days;
       var pace = null;
+      var paceGoal = null;
       var started = person.started || "";
       if (started && started > l4) paceDays = 0;
       else if (started && started > yStart) paceDays = ymdSpan(started, end);
-      if (raw.rev > 0 && paceDays > 0) pace = raw.l4rev / (raw.rev / paceDays * 28);
+      if (raw.rev > 0 && paceDays > 0) {
+        paceGoal = raw.rev / paceDays * 28;
+        pace = raw.l4rev / paceGoal;
+      }
       var ticket = raw.paidN ? raw.paidRev / raw.paidN : null;
       var conv = raw.opp ? raw.conv / raw.opp : null;
       var memPct = raw.svc ? raw.mem / raw.svc : null;
@@ -2546,7 +2550,7 @@
         jobs: raw.jobs, rev: Math.round(raw.rev), l4jobs: raw.l4jobs, l4rev: Math.round(raw.l4rev),
         svc: raw.svc, paidN: raw.paidN, inst: raw.inst, instRev: Math.round(raw.instRev),
         mem: raw.mem, big: raw.big, bigSold: raw.bigSold, openN: raw.openN, openAmt: Math.round(raw.openAmt),
-        pace: pace, ticket: ticket, conv: conv, memPct: memPct, zeroPct: zeroPct, cbPct: cbPct,
+        pace: pace, paceGoal: paceGoal, ticket: ticket, conv: conv, memPct: memPct, zeroPct: zeroPct, cbPct: cbPct,
         instTicket: instTicket, bigRate: bigRate, bigClose: bigClose
       };
     }
